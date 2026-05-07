@@ -144,7 +144,7 @@ async function main() {
         name,
         nationality: normalizeNationality(rec["国籍"]),
         residenceStatus: normalizeResidenceStatus(rec["在留資格"]),
-        channel: "LINE",
+        channel: "未設定",
         partnerId,
         driveFolderUrl: s(rec["書類フォルダリンク"]),
         onboarding: {

@@ -204,25 +204,44 @@ export default function EditPersonForm({
     }
   };
 
+  const [uploadingKind, setUploadingKind] = useState<string | null>(null);
+
   const updateDocument = async (kind: string, file: File | null) => {
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert("ファイルは5MB以下にしてください");
+    if (file.size > 20 * 1024 * 1024) {
+      alert("ファイルは 20MB 以下にしてください");
       return;
     }
-    const fileUrl = await readFileAsDataUrl(file);
-    setForm((current) => ({
-      ...current,
-      documents: upsertDocument(current.documents, {
-        kind,
-        label: getDocumentDefinitions(current.residenceStatus).find((document) => document.kind === kind)?.label ?? kind,
-        fileName: file.name,
-        fileUrl,
-        mimeType: file.type,
-        autoJudgeStatus: "accepted",
-        autoJudgeNote: "管理画面から更新",
-      }),
-    }));
+    setUploadingKind(kind);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("kind", kind);
+      const res = await fetch(`/api/personnel/${person.id}/documents/upload`, {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        alert(`Drive アップロード失敗: ${data.error ?? res.statusText}`);
+        return;
+      }
+      setForm((current) => ({
+        ...current,
+        documents: upsertDocument(current.documents, {
+          kind,
+          label:
+            getDocumentDefinitions(current.residenceStatus).find((document) => document.kind === kind)?.label ?? kind,
+          fileName: data.fileName,
+          fileUrl: data.fileUrl,
+          mimeType: data.mimeType,
+          autoJudgeStatus: "accepted",
+          autoJudgeNote: "Drive アップロード",
+        }),
+      }));
+    } finally {
+      setUploadingKind(null);
+    }
   };
 
   const updateWorkExperience = (index: number, key: keyof WorkHistoryEntry, value: string) => {
@@ -634,30 +653,63 @@ export default function EditPersonForm({
                 {visibleDocuments.length > 0 ? (
                   <div className="mt-5 space-y-3">
                     <p className="text-sm font-semibold text-[var(--color-text-dark)]">必要書類</p>
-                    {visibleDocuments.map((document) => (
-                      <div key={document.kind} className="rounded-2xl border border-[var(--color-secondary)] bg-[var(--color-light)] p-4 space-y-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <p className="text-sm font-medium text-[var(--color-text-dark)]">{document.label}</p>
-                            <p className="mt-1 text-xs text-gray-500">
-                              {document.fileName ? `現在のファイル: ${document.fileName}` : "まだ提出されていません"}
-                            </p>
+                    {visibleDocuments.map((document) => {
+                      const driveUrl = document.fileUrl?.startsWith("http") ? document.fileUrl : null;
+                      const fileId = driveUrl ? extractDriveFileId(driveUrl) : null;
+                      const isUploading = uploadingKind === document.kind;
+                      return (
+                        <div
+                          key={document.kind}
+                          className="rounded-2xl border border-[var(--color-secondary)] bg-[var(--color-light)] p-4 space-y-3"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-[var(--color-text-dark)]">{document.label}</p>
+                              <p className="mt-1 text-xs text-gray-500 truncate">
+                                {document.fileName ? `現在のファイル: ${document.fileName}` : "まだ提出されていません"}
+                              </p>
+                              {driveUrl ? (
+                                <a
+                                  href={driveUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] hover:underline"
+                                >
+                                  <span>Drive で開く</span>
+                                  <span aria-hidden>↗</span>
+                                </a>
+                              ) : null}
+                            </div>
+                            <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] border border-[var(--color-secondary)] shrink-0">
+                              {document.autoJudgeStatus === "accepted" ? "確認済み" : "要確認"}
+                            </span>
                           </div>
-                          <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] border border-[var(--color-secondary)]">
-                            {document.autoJudgeStatus === "accepted" ? "確認済み" : "要確認"}
-                          </span>
+                          {fileId ? (
+                            <DocumentPreview fileId={fileId} mimeType={document.mimeType} fileUrl={driveUrl ?? ""} />
+                          ) : null}
+                          <label
+                            className={`inline-flex cursor-pointer items-center rounded-lg px-4 py-2 text-sm font-medium text-white ${
+                              isUploading
+                                ? "bg-gray-400"
+                                : "bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)]"
+                            }`}
+                          >
+                            {isUploading
+                              ? "Drive にアップロード中..."
+                              : document.fileName
+                                ? "ファイルを差し替え"
+                                : "ファイルをアップロード"}
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              className="hidden"
+                              disabled={isUploading}
+                              onChange={(event) => void updateDocument(document.kind, event.target.files?.[0] ?? null)}
+                            />
+                          </label>
                         </div>
-                        <label className="inline-flex cursor-pointer items-center rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]">
-                          ファイルを差し替え
-                          <input
-                            type="file"
-                            accept="image/*,.pdf"
-                            className="hidden"
-                            onChange={(event) => void updateDocument(document.kind, event.target.files?.[0] ?? null)}
-                          />
-                        </label>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>
@@ -836,6 +888,56 @@ function upsertDocument(documents: DocumentInput[], nextDocument: DocumentInput)
   const exists = documents.some((document) => document.kind === nextDocument.kind);
   if (!exists) return [...documents, nextDocument];
   return documents.map((document) => (document.kind === nextDocument.kind ? nextDocument : document));
+}
+
+function extractDriveFileId(url: string): string | null {
+  // 例: https://drive.google.com/file/d/{id}/view, https://drive.google.com/open?id={id}
+  const m1 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m1) return m1[1];
+  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m2) return m2[1];
+  return null;
+}
+
+function DocumentPreview({
+  fileId,
+  mimeType,
+  fileUrl,
+}: {
+  fileId: string;
+  mimeType: string | null;
+  fileUrl: string;
+}) {
+  // 画像: thumbnail (Drive のサムネ) を表示
+  // PDF / その他: iframe で /preview を埋め込み (Drive 側で公開設定 or 共有が必要な場合は "Drive で開く" にフォールバック)
+  const isImage = (mimeType ?? "").startsWith("image/");
+  if (isImage) {
+    const src = `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
+    return (
+      <a
+        href={fileUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block overflow-hidden rounded-lg border border-gray-200 bg-white"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="プレビュー" className="h-40 w-full object-contain" loading="lazy" />
+      </a>
+    );
+  }
+  // PDF/Office 等
+  const src = `https://drive.google.com/file/d/${fileId}/preview`;
+  return (
+    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <iframe
+        src={src}
+        title="ドキュメントプレビュー"
+        className="h-64 w-full"
+        loading="lazy"
+        sandbox="allow-scripts allow-same-origin allow-popups"
+      />
+    </div>
+  );
 }
 
 function Field({

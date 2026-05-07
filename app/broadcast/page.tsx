@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 
 export default async function BroadcastPage() {
   await requireCurrentAccount();
-  const [persons, templates, groups] = await Promise.all([
-    prisma.person.findMany({ orderBy: { name: "asc" } }),
+  const [partners, templates, groups] = await Promise.all([
+    prisma.partner.findMany({ orderBy: { name: "asc" } }),
     // 連絡テンプレートは全アカウント共通
     prisma.messageTemplate.findMany({ orderBy: { name: "asc" } }),
     prisma.group.findMany({ include: { members: true }, orderBy: { name: "asc" } }),
@@ -18,14 +18,20 @@ export default async function BroadcastPage() {
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">パートナー一斉連絡</h1>
         <p className="text-sm text-gray-500 mt-1">
-          共有の連絡テンプレートを使って、候補者や海外パートナーへ一斉連絡します
+          共有の連絡テンプレートを使って、海外パートナーへ一斉連絡します
         </p>
       </div>
       <BroadcastClient
-        persons={persons.map((p) => ({
-          id: p.id, name: p.name, nationality: p.nationality,
-          department: p.department, residenceStatus: p.residenceStatus,
-          channel: p.channel, lineUserId: p.lineUserId, messengerPsid: p.messengerPsid,
+        partners={partners.map((p) => ({
+          id: p.id,
+          name: p.name,
+          country: p.country,
+          channel: p.channel,
+          linkStatus: p.linkStatus,
+          contactName: p.contactName,
+          lineUserId: p.lineUserId,
+          messengerPsid: p.messengerPsid,
+          whatsappId: p.whatsappId,
         }))}
         templates={templates.map((t) => ({ id: t.id, name: t.name, content: t.content }))}
         groups={groups.map((g) => ({ id: g.id, name: g.name, memberCount: g.members.length }))}

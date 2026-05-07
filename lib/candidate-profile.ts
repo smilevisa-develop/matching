@@ -11,6 +11,7 @@ export const RESIDENCE_STATUSES = [
 ];
 
 export const CHANNELS = [
+  { value: "未設定", label: "未設定" },
   { value: "LINE", label: "LINE" },
   { value: "Messenger", label: "Messenger" },
   { value: "mail", label: "メール" },
