@@ -113,8 +113,42 @@ export default function RevenueDashboard({
         </label>
       </header>
 
-      {/* 当月のメトリクス: 内定 / 売上 タコメーター + 案件ファネル */}
-      <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
+      {/* 当月のメトリクス: 案件ファネル (左) + 内定 / 売上 タコメーター (右) */}
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-[var(--color-text-dark)]">案件ファネル</h2>
+            <p className="text-xs text-gray-500">募集 → 推薦 → 面接 → 内定</p>
+          </div>
+          <Funnel
+            stages={[
+              { label: "募集", value: sumDealField(initialDeals, "requiredCount"), color: "#DCE8DF" },
+              { label: "推薦", value: sumDealField(initialDeals, "recommendedCount"), color: "#B5CEC3" },
+              { label: "面接", value: sumDealField(initialDeals, "interviewCount"), color: "#7EAE97" },
+              { label: "内定", value: sumDealField(initialDeals, "offerCount"), color: "#2E5E4E" },
+            ]}
+          />
+          <div className="mt-5 grid grid-cols-2 gap-3 text-xs">
+            <div className="rounded-xl bg-[var(--color-light)] px-3 py-2">
+              <p className="text-gray-500">推薦 → 内定 転換率</p>
+              <p className="mt-1 text-lg font-semibold text-[var(--color-text-dark)]">
+                {ratioPercent(
+                  sumDealField(initialDeals, "offerCount"),
+                  sumDealField(initialDeals, "recommendedCount")
+                )}%
+              </p>
+            </div>
+            <div className="rounded-xl bg-[var(--color-light)] px-3 py-2">
+              <p className="text-gray-500">面接 → 内定 転換率</p>
+              <p className="mt-1 text-lg font-semibold text-[var(--color-text-dark)]">
+                {ratioPercent(
+                  sumDealField(initialDeals, "offerCount"),
+                  sumDealField(initialDeals, "interviewCount")
+                )}%
+              </p>
+            </div>
+          </div>
+        </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="text-base font-semibold text-[var(--color-text-dark)]">{selectedMonth} 達成率</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -127,20 +161,6 @@ export default function RevenueDashboard({
               format={(n) => n.toLocaleString()}
             />
           </div>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-base font-semibold text-[var(--color-text-dark)]">案件ファネル</h2>
-            <p className="text-xs text-gray-500">募集 → 推薦 → 面接 → 内定</p>
-          </div>
-          <Funnel
-            stages={[
-              { label: "募集", value: sumDealField(initialDeals, "requiredCount"), color: "#DCE8DF" },
-              { label: "推薦", value: sumDealField(initialDeals, "recommendedCount"), color: "#B5CEC3" },
-              { label: "面接", value: sumDealField(initialDeals, "interviewCount"), color: "#7EAE97" },
-              { label: "内定", value: sumDealField(initialDeals, "offerCount"), color: "#2E5E4E" },
-            ]}
-          />
         </div>
       </section>
 
@@ -319,31 +339,28 @@ function Tachometer({
 function Funnel({ stages }: { stages: { label: string; value: number; color: string }[] }) {
   const max = Math.max(1, ...stages.map((s) => s.value));
   return (
-    <div className="mt-4 space-y-2">
-      {stages.map((stage) => {
-        const widthPct = Math.max((stage.value / max) * 100, 4);
-        return (
-          <div key={stage.label} className="flex items-center gap-3">
-            <div className="w-12 shrink-0 text-xs font-semibold text-gray-600">{stage.label}</div>
-            <div className="flex flex-1 justify-center">
-              <div
-                className="flex h-8 items-center justify-center rounded-full text-xs font-semibold text-white shadow-sm"
-                style={{
-                  width: `${widthPct}%`,
-                  background: stage.color,
-                  transition: "width 200ms",
-                  minWidth: "44px",
-                  color: stage.color === "#DCE8DF" || stage.color === "#B5CEC3" ? "#1F2937" : "#FFFFFF",
-                }}
-              >
-                {stage.value.toLocaleString()} 名
-              </div>
-            </div>
+    <div className="mt-4 space-y-3">
+      {stages.map((stage) => (
+        <div key={stage.label}>
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>{stage.label}</span>
+            <span>{stage.value}名</span>
           </div>
-        );
-      })}
+          <div className="mt-1 h-5 overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: `${(stage.value / max) * 100}%`, background: stage.color }}
+            />
+          </div>
+        </div>
+      ))}
     </div>
   );
+}
+
+function ratioPercent(numerator: number, denominator: number): string {
+  if (denominator <= 0) return "0.0";
+  return ((numerator / denominator) * 100).toFixed(1);
 }
 
 /* ---------- Bar + Line chart (target as line, actual as bar) ---------- */
