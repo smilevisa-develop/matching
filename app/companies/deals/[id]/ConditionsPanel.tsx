@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import CloseButton from "@/app/components/CloseButton";
 
 export const CONDITION_FIELDS: { key: string; label: string; group: string; multiline?: boolean }[] = [
@@ -72,19 +73,27 @@ const CHAT_GPT_PROMPT = `以下の求人票 PDF / 画像を読み取り、構造
 
 export type ConditionsRecord = Record<string, string | null | undefined>;
 
+export type JobPostingTemplateOption = { id: number; name: string };
+
 export default function ConditionsPanel({
   dealId,
   initialConditions,
-  onCreateJobPosting,
+  templates,
+  defaultJobPostingTitle,
+  onJobPostingCreated,
 }: {
   dealId: number;
   initialConditions: ConditionsRecord;
-  onCreateJobPosting?: () => void;
+  templates: JobPostingTemplateOption[];
+  defaultJobPostingTitle: string;
+  onJobPostingCreated?: () => void;
 }) {
+  const router = useRouter();
   const [form, setForm] = useState<ConditionsRecord>(() => normalize(initialConditions));
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [importMode, setImportMode] = useState<null | "gemini" | "chatgpt">(null);
+  const [importMode, setImportMode] = useState<null | "ai" | "chatgpt">(null);
+  const [creatingJobPosting, setCreatingJobPosting] = useState(false);
 
   const setField = (key: string, value: string) => {
     setForm((cur) => ({ ...cur, [key]: value }));
@@ -143,10 +152,11 @@ export default function ConditionsPanel({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setImportMode("gemini")}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-secondary)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+              onClick={() => setImportMode("ai")}
+              title="AI で書類から自動入力"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-[#A78BFA] via-[#F472B6] to-[#F59E0B] px-4 py-2 text-sm font-semibold text-white shadow-md transition-transform hover:scale-105"
             >
-              <GeminiIcon /> Gemini で取り込み
+              <SparkIcon /> AI で取り込み
             </button>
             <button
               type="button"
@@ -163,15 +173,13 @@ export default function ConditionsPanel({
             >
               {saving ? "保存中..." : "条件を保存"}
             </button>
-            {onCreateJobPosting ? (
-              <button
-                type="button"
-                onClick={onCreateJobPosting}
-                className="rounded-lg border border-[var(--color-primary)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
-              >
-                求人票を作成
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={() => setCreatingJobPosting(true)}
+              className="rounded-lg border border-[var(--color-primary)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+            >
+              この条件で求人票を作成
+            </button>
           </div>
         </div>
 
@@ -210,7 +218,7 @@ export default function ConditionsPanel({
         </div>
       </section>
 
-      {importMode === "gemini" ? (
+      {importMode === "ai" ? (
         <GeminiImportModal onClose={() => setImportMode(null)} onApply={applyExtracted} />
       ) : null}
       {importMode === "chatgpt" ? (
@@ -218,6 +226,21 @@ export default function ConditionsPanel({
           prompt={CHAT_GPT_PROMPT}
           onClose={() => setImportMode(null)}
           onApply={applyExtracted}
+        />
+      ) : null}
+      {creatingJobPosting ? (
+        <CreateJobPostingModal
+          dealId={dealId}
+          conditions={form}
+          dirty={dirty}
+          templates={templates}
+          defaultTitle={defaultJobPostingTitle}
+          onClose={() => setCreatingJobPosting(false)}
+          onCreated={() => {
+            setCreatingJobPosting(false);
+            router.refresh();
+            onJobPostingCreated?.();
+          }}
         />
       ) : null}
     </div>
@@ -242,10 +265,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function GeminiIcon() {
+function SparkIcon() {
+  // 候補者編集の AI 取込みボタンと共通のキラキラアイコン
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M12 2 L14.4 9.6 L22 12 L14.4 14.4 L12 22 L9.6 14.4 L2 12 L9.6 9.6 Z" fill="#4285F4" />
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z" fill="currentColor" stroke="none" />
+      <path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13z" fill="currentColor" stroke="none" />
+      <path d="M5 16l.6 1.6L7.2 18l-1.6.4L5 20l-.6-1.6L2.8 18l1.6-.4L5 16z" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -473,6 +509,172 @@ function ChatGptPasteModal({
         </div>
       ) : (
         <Spinner label="貼り付けたテキストから抽出中..." />
+      )}
+    </Modal>
+  );
+}
+
+/* ----------------- この条件で求人票を作成 ----------------- */
+
+function CreateJobPostingModal({
+  dealId,
+  conditions,
+  dirty,
+  templates,
+  defaultTitle,
+  onClose,
+  onCreated,
+}: {
+  dealId: number;
+  conditions: ConditionsRecord;
+  dirty: boolean;
+  templates: JobPostingTemplateOption[];
+  defaultTitle: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [templateId, setTemplateId] = useState<string>(templates[0]?.id ? String(templates[0].id) : "");
+  const [title, setTitle] = useState<string>(
+    typeof conditions.title === "string" && conditions.title.trim() ? conditions.title.trim() : defaultTitle
+  );
+  const [stage, setStage] = useState<"input" | "creating">("input");
+  const [error, setError] = useState<string | null>(null);
+  const [createdInfo, setCreatedInfo] = useState<{ documentUrl: string | null; driveFolderUrl: string | null } | null>(
+    null
+  );
+
+  const populated = useMemo(
+    () =>
+      Object.values(conditions).filter((v) => typeof v === "string" && (v as string).trim() !== "").length,
+    [conditions]
+  );
+
+  const submit = async () => {
+    if (!templateId) {
+      alert("テンプレートを選択してください");
+      return;
+    }
+    if (populated === 0) {
+      alert("条件が空です。AI 取り込みまたは手動で項目を入力してください");
+      return;
+    }
+    if (dirty) {
+      const ok = confirm("未保存の条件変更があります。保存せずに作成すると、次回開いたとき消えます。続行しますか？");
+      if (!ok) return;
+    }
+    setStage("creating");
+    setError(null);
+    try {
+      // 条件 (string 値のみ) + dealId + templateId + title を POST
+      const payload: Record<string, unknown> = { dealId, templateId: Number(templateId), title };
+      for (const [k, v] of Object.entries(conditions)) {
+        if (typeof v === "string" && v.trim() !== "") payload[k] = v;
+      }
+      const res = await fetch("/api/job-postings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setError(data.error ?? "作成に失敗しました");
+        setStage("input");
+        return;
+      }
+      setCreatedInfo({
+        documentUrl: data.jobPosting?.documentUrl ?? null,
+        driveFolderUrl: data.jobPosting?.driveFolderUrl ?? null,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "error");
+      setStage("input");
+    }
+  };
+
+  return (
+    <Modal title="この条件で求人票を作成" subtitle="条件タブで設定した内容をそのまま使って求人票 Docs を生成します" onClose={onClose}>
+      {error ? (
+        <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
+      ) : null}
+
+      {createdInfo ? (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-[#16A34A]/30 bg-[#F0FDF4] px-4 py-3 text-sm text-[#15803D]">
+            求人票を作成しました
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {createdInfo.documentUrl ? (
+              <a
+                href={createdInfo.documentUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]"
+              >
+                Docs を開く
+              </a>
+            ) : null}
+            {createdInfo.driveFolderUrl ? (
+              <a
+                href={createdInfo.driveFolderUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                保管フォルダ
+              </a>
+            ) : null}
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onCreated}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      ) : stage === "creating" ? (
+        <Spinner label="Google Docs に求人票を生成中..." />
+      ) : (
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            入力済みの条件: <span className="font-semibold">{populated}</span> 項目を反映します。
+          </p>
+          <Field label="求人票テンプレート">
+            <select
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+            >
+              {templates.length === 0 ? <option value="">テンプレートが登録されていません</option> : null}
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="求人票名">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+            />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50">
+              キャンセル
+            </button>
+            <button
+              onClick={() => void submit()}
+              disabled={templates.length === 0}
+              className="rounded-lg bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+            >
+              作成
+            </button>
+          </div>
+        </div>
       )}
     </Modal>
   );

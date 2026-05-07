@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function DealDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireCurrentAccount();
   const { id } = await params;
-  const [deal, persons, jobPostings] = await Promise.all([
+  const [deal, persons, jobPostings, jobPostingTemplates] = await Promise.all([
     prisma.deal.findUnique({
       where: { id: Number(id) },
       include: {
@@ -48,6 +48,10 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
       where: { dealId: Number(id) },
       include: { template: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
+    }),
+    prisma.jobPostingTemplate.findMany({
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true },
     }),
   ]);
 
@@ -97,6 +101,8 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
           <ConditionsPanel
             dealId={deal.id}
             initialConditions={(deal.conditions ?? {}) as ConditionsRecord}
+            templates={jobPostingTemplates}
+            defaultJobPostingTitle={`${deal.company.name} ${deal.title} 求人票`}
           />
         }
         jobPostingContent={
