@@ -14,7 +14,7 @@
  *   売上 (revenue) = その月の invoice.invoiceAmount の合計
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 type DealRow = {
   id: number;
@@ -203,6 +203,7 @@ export default function RevenueDashboard({
       <MonthlyTargetTable
         yearMonths={yearMonths}
         targets={monthlyTargets}
+        actualsByMonth={actualsByMonth}
         onChange={setMonthlyTargets}
       />
     </div>
@@ -454,10 +455,12 @@ function BarLineChart({
 function MonthlyTargetTable({
   yearMonths,
   targets,
+  actualsByMonth,
   onChange,
 }: {
   yearMonths: string[];
   targets: MonthlyTargetEntry[];
+  actualsByMonth: Record<string, { jobOpenings: number; recommendCount: number; offer: number; revenue: number }>;
   onChange: (next: MonthlyTargetEntry[]) => void;
 }) {
   const [saving, setSaving] = useState(false);
@@ -519,10 +522,17 @@ function MonthlyTargetTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirty, rows]);
 
+  const metrics: { key: keyof Omit<MonthlyTargetEntry, "month">; label: string; actualKey: "jobOpenings" | "recommendCount" | "offer" | "revenue"; yen?: boolean }[] = [
+    { key: "jobOpenings", label: "求人数", actualKey: "jobOpenings" },
+    { key: "recommendCount", label: "推薦者数", actualKey: "recommendCount" },
+    { key: "offer", label: "内定者数", actualKey: "offer" },
+    { key: "revenue", label: "売上 (円)", actualKey: "revenue", yen: true },
+  ];
+
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-[var(--color-text-dark)]">月次目標 (編集可)</h2>
+        <h2 className="text-base font-semibold text-[var(--color-text-dark)]">月次目標</h2>
         <div className="flex items-center gap-2">
           {dirty ? <span className="text-[11px] text-[#92400E]">未保存の変更があります</span> : null}
           <button
@@ -536,31 +546,72 @@ function MonthlyTargetTable({
         </div>
       </div>
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[560px] text-sm">
+        <table className="w-full min-w-[1100px] border-collapse text-sm">
           <thead>
-            <tr className="bg-[var(--color-light)] text-left text-xs font-semibold text-gray-600">
-              <th className="px-3 py-2">月</th>
-              <th className="px-3 py-2 text-right">求人数</th>
-              <th className="px-3 py-2 text-right">推薦者数</th>
-              <th className="px-3 py-2 text-right">内定者数</th>
-              <th className="px-3 py-2 text-right">売上 (円)</th>
+            <tr className="bg-[var(--color-primary)] text-xs font-semibold text-white">
+              <th rowSpan={2} className="border border-white/20 px-3 py-2 text-left align-middle">月</th>
+              {metrics.map((m) => (
+                <th key={m.key} colSpan={3} className="border border-white/20 px-3 py-2 text-center">
+                  {m.label}
+                </th>
+              ))}
+            </tr>
+            <tr className="bg-[var(--color-primary)] text-[11px] font-semibold text-white">
+              {metrics.map((m) => (
+                <Fragment key={m.key}>
+                  <th className="border border-white/20 px-2 py-1.5 text-right">目標</th>
+                  <th className="border border-white/20 px-2 py-1.5 text-right">実績</th>
+                  <th className="border border-white/20 px-2 py-1.5 text-right">達成率</th>
+                </Fragment>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.month} className="border-t border-gray-100">
-                <td className="px-3 py-2 font-mono text-[12.5px] text-[var(--color-text-dark)]">{row.month}</td>
-                <NumberCell value={row.jobOpenings} onChange={(v) => updateCell(row.month, "jobOpenings", v)} />
-                <NumberCell value={row.recommendCount} onChange={(v) => updateCell(row.month, "recommendCount", v)} />
-                <NumberCell value={row.offer} onChange={(v) => updateCell(row.month, "offer", v)} />
-                <NumberCell value={row.revenue} onChange={(v) => updateCell(row.month, "revenue", v)} />
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const actual = actualsByMonth[row.month] ?? { jobOpenings: 0, recommendCount: 0, offer: 0, revenue: 0 };
+              return (
+                <tr key={row.month} className="border-t border-gray-100">
+                  <td className="border border-gray-100 px-3 py-2 font-mono text-[12.5px] text-[var(--color-text-dark)]">
+                    {row.month}
+                  </td>
+                  {metrics.map((m) => {
+                    const target = row[m.key];
+                    const act = actual[m.actualKey];
+                    const ratePct = target != null && target > 0 ? (act / target) * 100 : null;
+                    return (
+                      <Fragment key={m.key}>
+                        <NumberCell
+                          value={target}
+                          onChange={(v) => updateCell(row.month, m.key, v)}
+                        />
+                        <td className="border border-gray-100 px-2 py-1 text-right text-[12.5px] text-gray-700 tabular-nums">
+                          {m.yen ? `¥${act.toLocaleString()}` : act.toLocaleString()}
+                        </td>
+                        <td
+                          className={`border border-gray-100 px-2 py-1 text-right text-[12.5px] tabular-nums ${
+                            ratePct == null
+                              ? "text-gray-400"
+                              : ratePct >= 100
+                                ? "text-[#16A34A] font-semibold"
+                                : ratePct >= 70
+                                  ? "text-[var(--color-primary)]"
+                                  : "text-gray-700"
+                          }`}
+                        >
+                          {ratePct == null ? "—" : `${ratePct.toFixed(2)}%`}
+                        </td>
+                      </Fragment>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">
-        セルを編集すると即時に上のグラフ・タコメーターに反映されます。<kbd className="rounded border border-gray-200 px-1.5 py-0.5 text-[10px]">⌘/Ctrl + S</kbd> でも保存できます。
+        目標欄を編集すると即時に上のグラフ・タコメーターに反映されます。
+        <kbd className="rounded border border-gray-200 px-1.5 py-0.5 text-[10px]">⌘/Ctrl + S</kbd> でも保存できます。
       </p>
     </section>
   );
@@ -574,14 +625,14 @@ function NumberCell({
   onChange: (raw: string) => void;
 }) {
   return (
-    <td className="px-3 py-1 text-right">
+    <td className="border border-gray-100 bg-[var(--color-light)]/40 px-2 py-1 text-right">
       <input
         type="number"
         inputMode="numeric"
         min={0}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-right text-sm focus:border-[var(--color-primary)] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
+        className="w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-right text-[12.5px] tabular-nums focus:border-[var(--color-primary)] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
       />
     </td>
   );
