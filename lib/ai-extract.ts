@@ -275,7 +275,7 @@ export async function extractCandidateFromFiles(files: SourceFile[]): Promise<Ex
   return parseJsonPayload(text);
 }
 
-const JOB_POSTING_SCHEMA = `次のJSONスキーマで求人票情報を抽出してください。読み取れない項目は含めない。金額は数字のみ(例: "180000")、期間は文字列のまま(例: "1年")で良い。
+export const JOB_POSTING_SCHEMA = `次のJSONスキーマで求人票情報を抽出してください。読み取れない項目は含めない。金額は数字のみ(例: "180000")、期間は文字列のまま(例: "1年")で良い。
 
 fields:
 - title: 求人票のタイトル(職種+会社名など)
@@ -319,6 +319,40 @@ const JOB_POSTING_SYSTEM_PROMPT = `あなたは日本の求人票から項目を
 構造化された JSON を 1 つだけ返してください。コードブロックや説明は不要。
 
 ${JOB_POSTING_SCHEMA}`;
+
+/**
+ * すでに整形されたテキスト (例: ChatGPT が抽出した文章 / 手元にあるテキスト形式の求人票) を
+ * Gemini に渡して JSON 化する。ファイル不要。
+ */
+export async function extractJobPostingFromText(text: string): Promise<ExtractedJobPosting> {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) throw new Error("GEMINI_API_KEY が未設定です");
+  const trimmed = text?.trim();
+  if (!trimmed) throw new Error("テキストが空です");
+
+  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const client = new GoogleGenAI({ apiKey });
+
+  const parts = [
+    { text: JOB_POSTING_SYSTEM_PROMPT },
+    { text: "以下のテキストから情報を抽出して、指定のスキーマに沿う JSON を一つだけ返してください。" },
+    { text: trimmed },
+  ];
+
+  const response = await callGeminiWithRetry(() =>
+    client.models.generateContent({
+      model,
+      contents: [{ role: "user", parts }],
+      config: {
+        responseMimeType: "application/json",
+        temperature: 0.1,
+      },
+    })
+  );
+
+  const out = response.text?.trim() ?? "";
+  return parseJsonPayloadAs<ExtractedJobPosting>(out);
+}
 
 export async function extractJobPostingFromFiles(files: SourceFile[]): Promise<ExtractedJobPosting> {
   const apiKey = process.env.GEMINI_API_KEY?.trim();

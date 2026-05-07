@@ -4,6 +4,7 @@ import { requireCurrentAccount } from "@/lib/auth";
 import DealDetailClient from "./DealDetailClient";
 import DealTabs from "./DealTabs";
 import JobPostingsPanel from "./JobPostingsPanel";
+import ConditionsPanel, { type ConditionsRecord } from "./ConditionsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,12 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
           />
         }
         conditionContent={
+          <ConditionsPanel
+            dealId={deal.id}
+            initialConditions={(deal.conditions ?? {}) as ConditionsRecord}
+          />
+        }
+        jobPostingContent={
           <JobPostingsPanel
             dealId={deal.id}
             initialPostings={jobPostings.map((posting) => ({

@@ -376,6 +376,10 @@ model Deal {
   declineCount     Int      @default(0) // 内定辞退
   rejectCount      Int      @default(0) // 不合格
   notes        String?
+  /// 求人票の元になる条件 (Json: ExtractedJobPosting と同じキー集合)
+  /// AI 取り込み / ChatGPT 貼り付け / 手動入力のいずれかで埋め、
+  /// ここから 求人票 (JobPosting) を生成する
+  conditions   Json?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 

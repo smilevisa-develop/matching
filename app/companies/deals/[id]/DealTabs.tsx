@@ -5,11 +5,13 @@ import { useState, type ReactNode } from "react";
 export default function DealTabs({
   progressContent,
   conditionContent,
+  jobPostingContent,
 }: {
   progressContent: ReactNode;
   conditionContent: ReactNode;
+  jobPostingContent: ReactNode;
 }) {
-  const [tab, setTab] = useState<"progress" | "condition">("progress");
+  const [tab, setTab] = useState<"progress" | "condition" | "jobPosting">("progress");
 
   return (
     <div className="space-y-4">
@@ -18,11 +20,16 @@ export default function DealTabs({
           進捗
         </TabButton>
         <TabButton active={tab === "condition"} onClick={() => setTab("condition")}>
-          条件 / 求人票
+          条件
+        </TabButton>
+        <TabButton active={tab === "jobPosting"} onClick={() => setTab("jobPosting")}>
+          求人票
         </TabButton>
       </div>
 
-      {tab === "progress" ? progressContent : conditionContent}
+      {tab === "progress" ? progressContent : null}
+      {tab === "condition" ? conditionContent : null}
+      {tab === "jobPosting" ? jobPostingContent : null}
     </div>
   );
 }
@@ -41,9 +48,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
-        active
-          ? "bg-[var(--color-primary)] text-white"
-          : "text-gray-600 hover:bg-gray-50"
+        active ? "bg-[var(--color-primary)] text-white" : "text-gray-600 hover:bg-gray-50"
       }`}
     >
       {children}
