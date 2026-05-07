@@ -62,8 +62,20 @@ export async function POST(req: Request) {
 
     // Step A & B: ページごとのテキスト抽出
     const pages = await extractPdfPages(buffer).catch((err) => {
-      throw new Error(`PDF を解析できません (テキストレイヤー無し / 画像 PDF の可能性): ${err instanceof Error ? err.message : String(err)}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`PDF 読み取りに失敗しました: ${msg}`);
     });
+
+    // テキストが全く取れなかった場合 (スキャン PDF など)
+    const totalText = pages.reduce((sum, p) => sum + (p.text?.length ?? 0), 0);
+    if (totalText === 0) {
+      return Response.json({
+        success: false,
+        error:
+          "PDF からテキストを抽出できませんでした。スキャン PDF (画像のみ) の可能性があります。テキストレイヤー付き PDF に書き出してから再度お試しください。",
+        pages: pages.map((p) => ({ pageNumber: p.pageNumber, rawText: "" })),
+      });
+    }
 
     if (pages.length === 0) {
       return Response.json({
