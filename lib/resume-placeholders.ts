@@ -179,8 +179,10 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
     生年月日: formatDateJapanese(onboarding?.birthDate),
     年齢: calcAge(onboarding?.birthDate),
     現住所: valueOrBlank(onboarding?.address),
+    // テンプレに {{携帯電話}} / {{電話}} どちらが書かれていても電話番号が入るようにする
     携帯電話: valueOrBlank(onboarding?.phoneNumber),
-    電話: "",
+    電話: valueOrBlank(onboarding?.phoneNumber),
+    電話番号: valueOrBlank(onboarding?.phoneNumber),
     メール: valueOrBlank(person.email),
     ビザの種類: valueOrBlank(profile?.visaType) || valueOrBlank(person.residenceStatus),
     在留資格: valueOrBlank(person.residenceStatus),
