@@ -30,6 +30,8 @@ import { extractWorkingHoursSection } from "@/lib/job-sheet/extractors/workingHo
 import { extractHousingSection } from "@/lib/job-sheet/extractors/housing";
 import { extractBenefitsSection } from "@/lib/job-sheet/extractors/benefits";
 import { extractMiscSection } from "@/lib/job-sheet/extractors/misc";
+import { extractFullPage } from "@/lib/job-sheet/extractors/fullPage";
+import { mergeParsedJobSheets } from "@/lib/job-sheet/merge";
 import { emptyParsedJobSheet, type ParsedJobSheet, type SectionChunk } from "@/lib/job-sheet/types";
 import { toJobPostingBody, type JobPostingFieldsBody } from "@/lib/job-sheet/mapper";
 import type { GeminiSectionDebug } from "@/lib/gemini";
@@ -148,6 +150,18 @@ export async function POST(req: Request) {
       } catch (err) {
         const msg = err instanceof Error ? err.message : "不明エラー";
         errors.push(`page ${page.pageNumber}: ${msg}`);
+      }
+
+      // Fallback: ページ全文をもう 1 回 Gemini に投げて、空のフィールドを埋める。
+      // ルールベースの section 分割が失敗 (label 不一致) したケースを救済する。
+      try {
+        const full = await extractFullPage(page.text);
+        debugGemini.push({ pageNumber: page.pageNumber, section: "fullPage", debug: full.debug });
+        const merged = mergeParsedJobSheets(parsed, full.data);
+        Object.assign(parsed, merged);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "不明エラー";
+        errors.push(`page ${page.pageNumber} fullPage: ${msg}`);
       }
 
       // confidence は debug の parsedOk 比率から概算

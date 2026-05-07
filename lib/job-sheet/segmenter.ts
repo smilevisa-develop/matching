@@ -130,11 +130,23 @@ export function segmentPage(rawText: string): SegmentResult {
     }
   }
 
-  const chunks: SectionChunk[] = SECTIONS.map((s) => ({
+  let chunks: SectionChunk[] = SECTIONS.map((s) => ({
     section: s,
     text: buckets.get(s)!.lines.join("\n"),
     labels: Array.from(buckets.get(s)!.labels),
   })).filter((c) => c.text.length > 0);
+
+  // ルールベースで意味あるセクションが取れていない (= 全部 misc に集まっただけ等) の
+  // 場合、全文を全セクションに配って各 extractor に「自分の責務範囲を抜いてくれ」と
+  // 任せる。Gemini はプロンプト側でセクション境界を理解できるので妥当に動く。
+  const meaningful = chunks.filter((c) => c.section !== "misc" && c.text.length > 0);
+  if (meaningful.length === 0 && rawText.trim().length > 0) {
+    chunks = SECTIONS.map((s) => ({
+      section: s,
+      text: rawText,
+      labels: ["__fallback_full_page__"],
+    }));
+  }
 
   return { chunks, unrecognizedLines };
 }
