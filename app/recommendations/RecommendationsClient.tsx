@@ -50,8 +50,10 @@ export default function RecommendationsClient({
         alert(result.error || "Drive への保存に失敗しました");
         return;
       }
+      const usedTemplate = result.usedTemplate ? " (テンプレ使用)" : " (テンプレ未使用)";
+      const errorNote = result.templateError ? `\n⚠️ テンプレ複製失敗: ${result.templateError}\n→ 設定 → 推薦リストテンプレ で URL とサービスアカウントへの共有を確認してください` : "";
       const openFolder = confirm(
-        `企業フォルダに保存しました\nファイル: ${result.fileName}\n\n企業フォルダを開きますか？`
+        `企業フォルダに保存しました${usedTemplate}\nファイル: ${result.fileName}${errorNote}\n\n企業フォルダを開きますか？`
       );
       if (openFolder && result.folderUrl) {
         window.open(result.folderUrl, "_blank");

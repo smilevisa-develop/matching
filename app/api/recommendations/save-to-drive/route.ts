@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
-import { ensureCompanyDriveFolder, parseGoogleDocId, parseGoogleDriveFolderId } from "@/lib/google-docs";
+import { ensureCompanyDriveFolder, parseGoogleFileId } from "@/lib/google-docs";
 import {
   RECOMMENDATION_PROGRESS_OPTIONS,
   sanitizeRecommendationColumns,
@@ -129,12 +129,17 @@ export async function POST(req: Request) {
     let dataStartRow = 1; // 0-indexed row index to start writing data (row index 1 = A2)
     let usedTemplate = false;
     let templateColumnCount = header.length;
+    let templateError: string | null = null;
 
     if (templateUrl) {
       // テンプレを企業フォルダに複製してデータを書き込む
-      const templateFileId = parseGoogleDocId(templateUrl) || parseGoogleDriveFolderId(templateUrl);
+      // Sheets URL (/spreadsheets/d/) / Docs URL / 生 ID いずれにも対応
+      const templateFileId = parseGoogleFileId(templateUrl);
       if (!templateFileId) {
-        return Response.json({ ok: false, error: "推薦リストテンプレ URL を解析できません" }, { status: 400 });
+        return Response.json(
+          { ok: false, error: "推薦リストテンプレ URL を解析できません: " + templateUrl },
+          { status: 400 }
+        );
       }
       try {
         const copied = await drive.files.copy({
@@ -181,8 +186,9 @@ export async function POST(req: Request) {
             });
           }
         }
-      } catch (templateError) {
-        console.warn("recommendations template copy failed, falling back to CSV:", templateError);
+      } catch (err) {
+        console.warn("recommendations template copy failed, falling back to CSV:", err);
+        templateError = err instanceof Error ? err.message : "テンプレ複製失敗";
         usedTemplate = false;
       }
     }
@@ -289,6 +295,7 @@ export async function POST(req: Request) {
       folderUrl: folder.folderUrl,
       usedTemplate,
       columnCount: templateColumnCount,
+      ...(templateError ? { templateError } : {}),
     });
   } catch (error) {
     return Response.json(

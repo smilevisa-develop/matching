@@ -2,6 +2,7 @@ import { google } from "googleapis";
 
 const DOC_URL_RE = /\/document\/d\/([a-zA-Z0-9_-]+)/;
 const DRIVE_FOLDER_RE = /\/folders\/([a-zA-Z0-9_-]+)/;
+const SHEETS_URL_RE = /\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/;
 
 // 候補者・企業のルートフォルダ (env で上書き可能、未設定時はこの既定値を使用)
 const DEFAULT_PERSON_ROOT_FOLDER_URL =
@@ -19,6 +20,22 @@ export function parseGoogleDriveFolderId(urlOrId: string) {
   const value = urlOrId.trim();
   const match = value.match(DRIVE_FOLDER_RE);
   return match?.[1] ?? value;
+}
+
+/**
+ * Google Sheets / Docs / 生 ID のいずれでも fileId を取り出す。
+ * `/spreadsheets/d/<id>` `/document/d/<id>` どちらでも OK。
+ */
+export function parseGoogleFileId(urlOrId: string): string | null {
+  if (!urlOrId) return null;
+  const value = urlOrId.trim();
+  const sheets = value.match(SHEETS_URL_RE);
+  if (sheets) return sheets[1];
+  const doc = value.match(DOC_URL_RE);
+  if (doc) return doc[1];
+  // 既に ID っぽい (英数字と _- のみ) ならそのまま
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(value)) return value;
+  return null;
 }
 
 function getGooglePrivateKey() {
@@ -199,6 +216,10 @@ export async function createResumeDocumentFromTemplate({
     });
   }
 
+  // 残った未マッチ placeholder ({{xxx}}) を一括で空文字に置換 (docs から消す)
+  // 履歴書/求人票テンプレに書いてあったが、データ側に対応キーが無かった残骸を消す。
+  await removeUnmatchedPlaceholders({ docs, documentId });
+
   return {
     documentId,
     documentUrl: copied.data.webViewLink ?? `https://docs.google.com/document/d/${documentId}/edit`,
@@ -206,6 +227,60 @@ export async function createResumeDocumentFromTemplate({
 }
 
 type DocsClient = ReturnType<typeof google.docs>;
+
+/**
+ * 置換後の Doc に残っている {{...}} (=データ側に対応キーが無かった残骸) を
+ * すべて空文字に置換する。
+ * Docs API の replaceAllText は正規表現を直接サポートしないので、
+ * 1) documents.get で全文を取得
+ * 2) /\{\{[^{}]+\}\}/g で残っている placeholder を全部抽出
+ * 3) 一意な placeholder ごとに replaceAllText で空文字置換
+ */
+async function removeUnmatchedPlaceholders({
+  docs,
+  documentId,
+}: {
+  docs: DocsClient;
+  documentId: string;
+}) {
+  try {
+    const doc = await docs.documents.get({ documentId });
+    const collected = new Set<string>();
+    const walk = (elements: unknown[] | null | undefined) => {
+      if (!elements) return;
+      for (const el of elements as Record<string, unknown>[]) {
+        const paragraph = el.paragraph as { elements?: Record<string, unknown>[] } | undefined;
+        if (paragraph?.elements) {
+          for (const run of paragraph.elements) {
+            const tr = run.textRun as { content?: string } | undefined;
+            if (!tr?.content) continue;
+            const matches = tr.content.match(/\{\{[^{}]+\}\}/g);
+            if (matches) for (const m of matches) collected.add(m);
+          }
+        }
+        const table = el.table as { tableRows?: Record<string, unknown>[] } | undefined;
+        if (table?.tableRows) {
+          for (const row of table.tableRows) {
+            const cells = row.tableCells as Record<string, unknown>[] | undefined;
+            if (!cells) continue;
+            for (const cell of cells) walk((cell.content as unknown[]) ?? []);
+          }
+        }
+      }
+    };
+    walk(doc.data.body?.content);
+    if (collected.size === 0) return;
+    const requests = Array.from(collected).map((placeholder) => ({
+      replaceAllText: {
+        containsText: { text: placeholder, matchCase: true },
+        replaceText: "",
+      },
+    }));
+    await docs.documents.batchUpdate({ documentId, requestBody: { requests } });
+  } catch (error) {
+    console.warn("removeUnmatchedPlaceholders failed:", error);
+  }
+}
 
 /**
  * 値が空のときに、テンプレの関連行ごと自動削除するグループ定義。
