@@ -427,12 +427,13 @@ export default function DealDetailClient({
               </div>
               <div className="mt-3 flex-1 space-y-3 overflow-y-auto pr-1">
                 {columnCandidates.map((candidate) => (
-                  <div
+                  <Link
                     key={candidate.id}
+                    href={`/personnel/${candidate.person.id}/edit`}
                     draggable
                     onDragStart={() => setDraggingCandidateId(candidate.id)}
                     onDragEnd={() => setDraggingCandidateId(null)}
-                    className={`rounded-2xl border p-3 transition ${colors.tile}`}
+                    className={`block rounded-2xl border p-3 transition ${colors.tile}`}
                   >
                     <div className="flex items-start gap-3">
                       <PersonAvatar
@@ -454,7 +455,7 @@ export default function DealDetailClient({
                     {candidate.note ? (
                       <p className="mt-3 text-sm leading-6 text-gray-600">{candidate.note}</p>
                     ) : null}
-                  </div>
+                  </Link>
                 ))}
                 {columnCandidates.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-gray-200 px-3 py-6 text-center text-xs text-gray-400">

@@ -35,7 +35,13 @@ export default function SettingsClient({
     recommendationColumns: string[];
     monthlyOfferTarget: number | null;
     monthlyRevenueTarget: number | null;
-    monthlyTargets: { month: string; offer: number | null; revenue: number | null }[];
+    monthlyTargets: {
+      month: string;
+      offer: number | null;
+      revenue: number | null;
+      jobOpenings?: number | null;
+      recommendCount?: number | null;
+    }[];
     recommendationTemplateUrl: string;
   };
   currentAccount: {
@@ -81,11 +87,25 @@ export default function SettingsClient({
       setSavingRecommendationTemplate(false);
     }
   };
-  type MonthlyTargetRow = { month: string; offer: string; revenue: string };
-  const toRow = (t: { month: string; offer: number | null; revenue: number | null }): MonthlyTargetRow => ({
+  type MonthlyTargetRow = {
+    month: string;
+    offer: string;
+    revenue: string;
+    jobOpenings: string;
+    recommendCount: string;
+  };
+  const toRow = (t: {
+    month: string;
+    offer: number | null;
+    revenue: number | null;
+    jobOpenings?: number | null;
+    recommendCount?: number | null;
+  }): MonthlyTargetRow => ({
     month: t.month,
     offer: t.offer != null ? String(t.offer) : "",
     revenue: t.revenue != null ? String(t.revenue) : "",
+    jobOpenings: t.jobOpenings != null ? String(t.jobOpenings) : "",
+    recommendCount: t.recommendCount != null ? String(t.recommendCount) : "",
   });
   const initialRows: MonthlyTargetRow[] =
     initialSettings.monthlyTargets.length > 0
@@ -98,6 +118,8 @@ export default function SettingsClient({
                 initialSettings.monthlyOfferTarget != null ? String(initialSettings.monthlyOfferTarget) : "",
               revenue:
                 initialSettings.monthlyRevenueTarget != null ? String(initialSettings.monthlyRevenueTarget) : "",
+              jobOpenings: "",
+              recommendCount: "",
             },
           ]
         : [];
@@ -117,7 +139,10 @@ export default function SettingsClient({
       const now = new Date();
       defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     }
-    setMonthlyTargetRows((current) => [...current, { month: defaultMonth, offer: "", revenue: "" }]);
+    setMonthlyTargetRows((current) => [
+      ...current,
+      { month: defaultMonth, offer: "", revenue: "", jobOpenings: "", recommendCount: "" },
+    ]);
   };
 
   const updateMonthlyTargetRow = (index: number, patch: Partial<MonthlyTargetRow>) => {
@@ -139,6 +164,9 @@ export default function SettingsClient({
         month: r.month,
         offer: r.offer.trim() === "" ? null : Number(r.offer.replace(/[,\s]/g, "")),
         revenue: r.revenue.trim() === "" ? null : Number(r.revenue.replace(/[,\s]/g, "")),
+        jobOpenings: r.jobOpenings.trim() === "" ? null : Number(r.jobOpenings.replace(/[,\s]/g, "")),
+        recommendCount:
+          r.recommendCount.trim() === "" ? null : Number(r.recommendCount.replace(/[,\s]/g, "")),
       }));
     setSavingMonthlyTarget(true);
     try {
@@ -619,16 +647,18 @@ export default function SettingsClient({
               </p>
             ) : (
               <div className="space-y-2">
-                <div className="hidden grid-cols-[140px_1fr_1fr_40px] gap-2 px-2 text-[11px] font-medium text-gray-500 md:grid">
+                <div className="hidden grid-cols-[140px_repeat(4,1fr)_40px] gap-2 px-2 text-[11px] font-medium text-gray-500 md:grid">
                   <span>月</span>
-                  <span>内定数 目標 (件)</span>
+                  <span>求人数 目標</span>
+                  <span>推薦社数 目標</span>
+                  <span>内定者数 目標</span>
                   <span>売上 目標 (円)</span>
                   <span></span>
                 </div>
                 {monthlyTargetRows.map((row, index) => (
                   <div
                     key={index}
-                    className="grid grid-cols-[1fr_1fr_1fr_36px] gap-2 rounded-xl border border-gray-200 bg-white p-2 md:grid-cols-[140px_1fr_1fr_40px]"
+                    className="grid grid-cols-2 gap-2 rounded-xl border border-gray-200 bg-white p-2 md:grid-cols-[140px_repeat(4,1fr)_40px]"
                   >
                     <input
                       className={INPUT}
@@ -640,9 +670,25 @@ export default function SettingsClient({
                       className={INPUT}
                       type="number"
                       min={0}
+                      value={row.jobOpenings}
+                      onChange={(e) => updateMonthlyTargetRow(index, { jobOpenings: e.target.value })}
+                      placeholder="例: 5"
+                    />
+                    <input
+                      className={INPUT}
+                      type="number"
+                      min={0}
+                      value={row.recommendCount}
+                      onChange={(e) => updateMonthlyTargetRow(index, { recommendCount: e.target.value })}
+                      placeholder="例: 8"
+                    />
+                    <input
+                      className={INPUT}
+                      type="number"
+                      min={0}
                       value={row.offer}
                       onChange={(e) => updateMonthlyTargetRow(index, { offer: e.target.value })}
-                      placeholder="例: 5"
+                      placeholder="例: 3"
                     />
                     <input
                       className={INPUT}

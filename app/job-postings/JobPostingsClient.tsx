@@ -134,10 +134,6 @@ export default function JobPostingsClient({
               </Field>
             </div>
 
-            <div className="rounded-2xl border border-[var(--color-secondary)] bg-[var(--color-light)] px-4 py-3 text-sm text-gray-600">
-              次へ進むと、元の求人票ファイルをアップロードしてAI取込できます。
-            </div>
-
             <div className="flex justify-end">
               <button
                 type="button"

@@ -8,8 +8,14 @@
 
 export type MonthlyTarget = {
   month: string; // YYYY-MM
+  /** 内定者数 */
   offer: number | null;
+  /** 売上 (円) */
   revenue: number | null;
+  /** 求人数 (新規受注した案件件数) */
+  jobOpenings: number | null;
+  /** 推薦社数 (推薦リスト送付した企業数) */
+  recommendCount: number | null;
 };
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -36,6 +42,8 @@ export function sanitizeMonthlyTargets(input: unknown): MonthlyTarget[] {
       month,
       offer: toIntOrNull(rec.offer),
       revenue: toIntOrNull(rec.revenue),
+      jobOpenings: toIntOrNull(rec.jobOpenings),
+      recommendCount: toIntOrNull(rec.recommendCount),
     });
   }
   // 月の昇順 (古い → 新しい)
