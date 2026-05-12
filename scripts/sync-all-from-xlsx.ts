@@ -376,7 +376,11 @@ async function main() {
     const emailIncoming = s(rec["メール"]);
     const driveIncoming = s(rec["応募者フォルダURL"]);
     const personPatch: Record<string, unknown> = {};
-    const newPhoto = pick("photoUrl", person.photoUrl, photoUrlIncoming, OVERWRITE_FORM);
+    // 注意: photoUrl はフォーム由来の raw URL (open?id=...) が <img> で描画できない一方、
+    // backfill-photos で生成した thumbnail?id=... 形式は描画できる。
+    // フォーム値で上書きすると画像が表示されなくなるので、photoUrl は **絶対に上書きしない**
+    // (NULL のときだけ初期値として埋める)
+    const newPhoto = pick("photoUrl", person.photoUrl, photoUrlIncoming, false);
     if (newPhoto !== person.photoUrl) personPatch.photoUrl = newPhoto;
     const newEmail = pick("email", person.email, emailIncoming, OVERWRITE_FORM);
     if (newEmail !== person.email) personPatch.email = newEmail;
