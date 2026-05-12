@@ -10,6 +10,7 @@ import ExtractPanel from "./ExtractPanel";
 import PlacementPanel from "./PlacementPanel";
 import DriveActionsPanel from "./DriveActionsPanel";
 import PhotoPanel from "./PhotoPanel";
+import CreateResumeButton from "./CreateResumeButton";
 
 export const dynamic = "force-dynamic";
 
@@ -165,6 +166,11 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                     retirementReason: person.resumeProfile?.retirementReason ?? null,
                     preferenceNote: person.resumeProfile?.preferenceNote ?? null,
                   }}
+                />
+                <CreateResumeButton
+                  personId={person.id}
+                  personName={person.name}
+                  englishName={person.onboarding?.englishName ?? null}
                 />
                 <CustomQuestionsBuilderButton />
                 <DriveActionsPanel personId={person.id} initialDriveFolderUrl={person.driveFolderUrl ?? null} />
