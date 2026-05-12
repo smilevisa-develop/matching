@@ -26,6 +26,12 @@ export async function POST(req: Request) {
       return Response.json({ ok: false, error: "パートナー名を入力してください" }, { status: 400 });
     }
 
+    const ratingRaw = body.rating;
+    let rating: number | null = null;
+    if (ratingRaw !== null && ratingRaw !== "" && ratingRaw !== undefined) {
+      const n = Math.round(Number(ratingRaw));
+      if (Number.isFinite(n) && n >= 1 && n <= 5) rating = n;
+    }
     const partner = await prisma.partner.create({
       data: {
         name,
@@ -34,6 +40,8 @@ export async function POST(req: Request) {
         linkStatus: String(body.linkStatus ?? "未").trim() || "未",
         contactName: String(body.contactName ?? "").trim() || null,
         notes: String(body.notes ?? "").trim() || null,
+        rating,
+        ratingReason: String(body.ratingReason ?? "").trim() || null,
       },
     });
 

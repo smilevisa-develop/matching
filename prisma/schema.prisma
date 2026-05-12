@@ -84,6 +84,10 @@ model Partner {
   lineUserId    String?  @unique
   messengerPsid String?  @unique
   whatsappId    String?
+  /// 1〜5 の評価 (☆ 5 段階)。null = 未評価
+  rating        Int?
+  /// 評価理由 (フリーテキスト)
+  ratingReason  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
