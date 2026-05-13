@@ -95,6 +95,21 @@ model Partner {
   persons     Person[]
   groupMembers GroupMember[]
   invoices    Invoice[]
+  ratingHistory PartnerRatingHistory[]
+}
+
+model PartnerRatingHistory {
+  id        Int      @id @default(autoincrement())
+  partnerId Int
+  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  /// 1〜5 (null は手動でクリアした時点のレコード)
+  rating    Int?
+  reason    String?
+  /// 記入者 (任意)
+  recordedBy String?
+  createdAt DateTime @default(now())
+
+  @@index([partnerId, createdAt])
 }
 
 model StaffAccount {

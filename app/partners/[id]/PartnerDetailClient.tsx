@@ -52,6 +52,13 @@ export type PartnerDetailData = {
     residenceStatus: string;
     createdAt: string;
   }[];
+  ratingHistory: {
+    id: number;
+    rating: number | null;
+    reason: string | null;
+    recordedBy: string | null;
+    createdAt: string;
+  }[];
 };
 
 export default function PartnerDetailClient({ initial }: { initial: PartnerDetailData }) {
@@ -203,6 +210,9 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
               onChange={(e) => set("ratingReason", e.target.value)}
               placeholder="例: スピード対応 / 候補者の質が高い など"
             />
+            <p className="mt-1 text-[11px] text-gray-400">
+              評価か理由を変えて保存すると、下の「評価の推移」に履歴として残ります
+            </p>
           </Field>
           <Field label="メモ" className="md:col-span-2">
             <textarea
@@ -213,6 +223,57 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
           </Field>
         </div>
       </section>
+
+      {/* 評価の推移 */}
+      {initial.ratingHistory.length > 0 ? (
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-base font-semibold text-[var(--color-text-dark)]">評価の推移</h2>
+            <p className="text-[11px] text-gray-400">直近 {initial.ratingHistory.length} 件</p>
+          </div>
+          <ol className="mt-3 space-y-2">
+            {initial.ratingHistory.map((h, idx) => (
+              <li
+                key={h.id}
+                className={`relative rounded-xl border px-4 py-3 ${
+                  idx === 0
+                    ? "border-[var(--color-primary)]/40 bg-[var(--color-light)]/60"
+                    : "border-gray-100 bg-white"
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <RatingStars value={h.rating} readOnly size={14} />
+                    <span className="text-[11px] text-gray-500">
+                      {h.rating ?? "—"} / 5
+                    </span>
+                    {idx === 0 ? (
+                      <span className="rounded-full bg-[var(--color-primary)] px-2 py-0.5 text-[10px] font-semibold text-white">
+                        最新
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    {new Date(h.createdAt).toLocaleString("ja-JP", {
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                    {h.recordedBy ? ` ・ ${h.recordedBy}` : ""}
+                  </p>
+                </div>
+                {h.reason ? (
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{h.reason}</p>
+                ) : (
+                  <p className="mt-2 text-xs text-gray-400">理由なし</p>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
 
       {/* 連絡先 ID (読み取り専用) */}
       {(initial.lineUserId || initial.messengerPsid || initial.whatsappId) ? (

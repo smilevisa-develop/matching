@@ -58,16 +58,25 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireApiAccount();
+    const account = await requireApiAccount();
     const { id } = await params;
+    const partnerId = Number(id);
     const body = await req.json();
     const name = String(body.name ?? "").trim();
     if (!name) {
       return Response.json({ ok: false, error: "パートナー名を入力してください" }, { status: 400 });
     }
 
+    const newRating = clampRating(body.rating);
+    const newReason = String(body.ratingReason ?? "").trim() || null;
+
+    const before = await prisma.partner.findUnique({
+      where: { id: partnerId },
+      select: { rating: true, ratingReason: true },
+    });
+
     const partner = await prisma.partner.update({
-      where: { id: Number(id) },
+      where: { id: partnerId },
       data: {
         name,
         country: String(body.country ?? "").trim() || null,
@@ -75,10 +84,24 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         linkStatus: String(body.linkStatus ?? "未").trim() || "未",
         contactName: String(body.contactName ?? "").trim() || null,
         notes: String(body.notes ?? "").trim() || null,
-        rating: clampRating(body.rating),
-        ratingReason: String(body.ratingReason ?? "").trim() || null,
+        rating: newRating,
+        ratingReason: newReason,
       },
     });
+
+    // 評価 or 評価理由が変わったときだけ履歴を残す
+    const ratingChanged = (before?.rating ?? null) !== newRating;
+    const reasonChanged = (before?.ratingReason ?? null) !== newReason;
+    if (ratingChanged || reasonChanged) {
+      await prisma.partnerRatingHistory.create({
+        data: {
+          partnerId,
+          rating: newRating,
+          reason: newReason,
+          recordedBy: account.name ?? account.loginId ?? null,
+        },
+      });
+    }
 
     return Response.json({ ok: true, partner });
   } catch (error) {

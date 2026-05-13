@@ -54,6 +54,11 @@ export default async function PartnerDetailPage({
         orderBy: { id: "desc" },
         take: 50,
       },
+      ratingHistory: {
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        select: { id: true, rating: true, reason: true, recordedBy: true, createdAt: true },
+      },
     },
   });
   if (!partner) notFound();
@@ -103,6 +108,13 @@ export default async function PartnerDetailPage({
       nationality: p.nationality,
       residenceStatus: p.residenceStatus,
       createdAt: p.createdAt.toISOString(),
+    })),
+    ratingHistory: partner.ratingHistory.map((h) => ({
+      id: h.id,
+      rating: h.rating,
+      reason: h.reason,
+      recordedBy: h.recordedBy,
+      createdAt: h.createdAt.toISOString(),
     })),
   };
 
