@@ -133,7 +133,13 @@ async function main() {
   if (RESET && !DRY_RUN) {
     const before = await prisma.partner.count();
     await prisma.partner.deleteMany({});
-    console.log(`  RESET: ${before} 件を削除`);
+    // PostgreSQL の連番シーケンスを 1 にリセット (次の INSERT が ID=1 から)
+    try {
+      await prisma.$executeRawUnsafe(`ALTER SEQUENCE "Partner_id_seq" RESTART WITH 1`);
+    } catch (e) {
+      console.warn("  Partner_id_seq のリセットに失敗:", e);
+    }
+    console.log(`  RESET: ${before} 件を削除、Partner_id_seq を 1 にリセット`);
   }
 
   let totalParsed = 0;
