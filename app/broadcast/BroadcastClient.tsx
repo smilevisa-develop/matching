@@ -104,9 +104,10 @@ export default function BroadcastClient({
   };
 
   return (
-    <div className="grid grid-cols-2 items-stretch gap-6">
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 items-stretch gap-6">
       {/* 左: 設定 */}
-      <div className="space-y-5">
+      <div className="flex flex-col gap-5">
         {/* 送信モード */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
           <p className="text-sm font-semibold text-[var(--color-text-dark)] mb-3">送信対象 (パートナー)</p>
@@ -167,46 +168,10 @@ export default function BroadcastClient({
             onChange={(e) => setMessage(e.target.value)}
           />
         </div>
-
-        {/* ボタン */}
-        <div className="flex gap-3">
-          <button
-            onClick={() => handleSend(false)}
-            disabled={sending}
-            className="flex-1 bg-[var(--color-primary)] text-white py-2.5 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
-          >
-            {sending ? "送信中..." : `この内容で配信 (${targetCount}社)`}
-          </button>
-          <button
-            onClick={() => setShowSchedule(!showSchedule)}
-            className="border border-[var(--color-primary)] text-[var(--color-primary)] px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-[var(--color-light)]"
-          >
-            予約
-          </button>
-        </div>
-
-        {showSchedule && (
-          <div className="bg-[var(--color-light)] border border-[var(--color-primary)]/20 rounded-xl p-4 space-y-3">
-            <p className="text-sm font-semibold text-[var(--color-text-dark)]">送信予約</p>
-            <input
-              type="datetime-local"
-              value={scheduleDate}
-              onChange={(e) => setScheduleDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
-            <button
-              onClick={() => handleSend(true)}
-              disabled={sending}
-              className="w-full bg-[var(--color-primary)] text-white py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
-            >
-              予約確定
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* 右: プレビュー */}
-      <div className="flex flex-col bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      {/* 右: プレビュー (左 2 カードと同じ高さに揃え、内側でスクロール) */}
+      <div className="flex h-full flex-col bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
         <p className="text-sm font-semibold text-[var(--color-text-dark)] mb-3">対象プレビュー ({targetCount} 社)</p>
         <div className="flex-1 min-h-0 space-y-1 overflow-y-auto">
           {(mode === "filter" ? filtered : []).map((p) => (
@@ -232,6 +197,47 @@ export default function BroadcastClient({
             <p className="text-sm text-gray-400 text-center py-6">
               {selectedGroup ? `${targetCount} 社が対象` : "グループを選択してください"}
             </p>
+          )}
+        </div>
+      </div>
+      </div>
+
+      {/* グリッド下: ボタン + 予約フォーム (左カラム幅に合わせる) */}
+      <div className="grid grid-cols-2 gap-6">
+        <div className="space-y-5">
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleSend(false)}
+              disabled={sending}
+              className="flex-1 bg-[var(--color-primary)] text-white py-2.5 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+            >
+              {sending ? "送信中..." : `この内容で配信 (${targetCount}社)`}
+            </button>
+            <button
+              onClick={() => setShowSchedule(!showSchedule)}
+              className="border border-[var(--color-primary)] text-[var(--color-primary)] px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-[var(--color-light)]"
+            >
+              予約
+            </button>
+          </div>
+
+          {showSchedule && (
+            <div className="bg-[var(--color-light)] border border-[var(--color-primary)]/20 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-semibold text-[var(--color-text-dark)]">送信予約</p>
+              <input
+                type="datetime-local"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              <button
+                onClick={() => handleSend(true)}
+                disabled={sending}
+                className="w-full bg-[var(--color-primary)] text-white py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+              >
+                予約確定
+              </button>
+            </div>
           )}
         </div>
       </div>
