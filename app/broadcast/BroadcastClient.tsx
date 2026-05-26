@@ -33,7 +33,6 @@ type Template = { id: number; name: string; content: string };
 type Group = { id: number; name: string; memberCount: number };
 
 const ALL = "すべて";
-const COUNTRIES = [ALL, "日本", "ベトナム", "インドネシア", "ミャンマー", "フィリピン", "タイ", "中国", "ネパール", "スリランカ", "カンボジア", "バングラデシュ", "インド", "モンゴル", "韓国"];
 const CHANNELS = [ALL, "LINE", "Messenger", "WhatsApp", "メール", "未設定"];
 const LINK_STATUSES = [ALL, "未", "完了"];
 const RATINGS = [ALL, "★1 以上", "★2 以上", "★3 以上", "★4 以上", "★5"];
@@ -48,7 +47,6 @@ export default function BroadcastClient({
   groups: Group[];
 }) {
   const [mode, setMode] = useState<"filter" | "group">("filter");
-  const [country, setCountry] = useState(ALL);
   const [channel, setChannel] = useState(ALL);
   const [linkStatus, setLinkStatus] = useState(ALL);
   const [relationshipStatus, setRelationshipStatus] = useState(ALL);
@@ -74,7 +72,6 @@ export default function BroadcastClient({
   const filtered = useMemo(
     () =>
       partners.filter((p) => {
-        if (country !== ALL && (p.country ?? "") !== country) return false;
         if (channel !== ALL) {
           const ch = (p.channel ?? "未設定") || "未設定";
           if (ch !== channel) return false;
@@ -91,7 +88,6 @@ export default function BroadcastClient({
       }),
     [
       partners,
-      country,
       channel,
       linkStatus,
       relationshipStatus,
@@ -129,7 +125,6 @@ export default function BroadcastClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
-          country: country === ALL ? null : country,
           channel: channel === ALL ? null : channel,
           linkStatus: linkStatus === ALL ? null : linkStatus,
           relationshipStatus: relationshipStatus === ALL ? null : relationshipStatus,
@@ -193,25 +188,17 @@ export default function BroadcastClient({
 
           {mode === "filter" ? (
             <div className="grid grid-cols-2 gap-3">
-              <Select label="拠点国" value={country} onChange={setCountry} options={COUNTRIES} />
-              <Select
-                label="関係性"
-                value={relationshipStatus}
-                onChange={setRelationshipStatus}
-                options={[ALL, ...RELATIONSHIP_STATUSES]}
-              />
-              <Select label="役割" value={role} onChange={setRole} options={[ALL, ...PARTNER_ROLES]} />
-              <Select
-                label="紹介の範囲"
-                value={introducibleScope}
-                onChange={setIntroducibleScope}
-                options={[ALL, ...INTRODUCIBLE_SCOPES]}
-              />
               <Select
                 label="紹介可能 国籍"
                 value={introNationality}
                 onChange={setIntroNationality}
                 options={[ALL, ...INTRODUCIBLE_NATIONALITIES]}
+              />
+              <Select
+                label="紹介の範囲"
+                value={introducibleScope}
+                onChange={setIntroducibleScope}
+                options={[ALL, ...INTRODUCIBLE_SCOPES]}
               />
               <Select
                 label="紹介可能 分野"
@@ -225,6 +212,13 @@ export default function BroadcastClient({
                 onChange={setIntroResStatus}
                 options={[ALL, ...INTRODUCIBLE_RESIDENCE_STATUSES]}
               />
+              <Select
+                label="関係性"
+                value={relationshipStatus}
+                onChange={setRelationshipStatus}
+                options={[ALL, ...RELATIONSHIP_STATUSES]}
+              />
+              <Select label="役割" value={role} onChange={setRole} options={[ALL, ...PARTNER_ROLES]} />
               <Select label="評価 (最低)" value={minRating} onChange={setMinRating} options={RATINGS} />
               <Select label="連絡手段" value={channel} onChange={setChannel} options={CHANNELS} />
               <Select label="連携状況" value={linkStatus} onChange={setLinkStatus} options={LINK_STATUSES} />
@@ -271,7 +265,7 @@ export default function BroadcastClient({
               <div className="min-w-0">
                 <p className="text-sm font-medium text-[var(--color-text-dark)] truncate">{p.name}</p>
                 <p className="text-xs text-gray-400 truncate">
-                  {p.country ?? "—"} · {p.relationshipStatus ?? "未設定"}
+                  {parseCsv(p.introducibleNationalities).join(", ") || "—"} · {p.relationshipStatus ?? "未設定"}
                   {p.role ? ` · ${p.role}` : ""}
                   {p.rating ? ` · ★${p.rating}` : ""}
                 </p>

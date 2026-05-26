@@ -5,7 +5,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const {
       mode,
-      country,
       channel,
       linkStatus,
       relationshipStatus,
@@ -20,7 +19,6 @@ export async function POST(req: Request) {
       scheduledAt,
     } = body as {
       mode: "filter" | "group";
-      country: string | null;
       channel: string | null;
       linkStatus: string | null;
       relationshipStatus: string | null;
@@ -61,7 +59,6 @@ export async function POST(req: Request) {
       }));
     } else {
       const where: Record<string, unknown> = {};
-      if (country) where.country = country;
       if (channel) {
         if (channel === "未設定") {
           where.OR = [{ channel: null }, { channel: "" }, { channel: "未設定" }];
@@ -96,7 +93,6 @@ export async function POST(req: Request) {
           channel: "LINE/Messenger/WhatsApp",
           targetFilter: JSON.stringify({
             mode,
-            country,
             channel,
             linkStatus,
             relationshipStatus,
@@ -156,7 +152,19 @@ export async function POST(req: Request) {
         title: "一斉配信 (パートナー)",
         body: message,
         channel: "LINE",
-        targetFilter: JSON.stringify({ mode, country, channel, linkStatus, groupId }),
+        targetFilter: JSON.stringify({
+          mode,
+          channel,
+          linkStatus,
+          relationshipStatus,
+          role,
+          introducibleScope,
+          introNationality,
+          introField,
+          introResStatus,
+          minRating,
+          groupId,
+        }),
         status: "done",
         matchedCount: targets.length,
         sentCount,
