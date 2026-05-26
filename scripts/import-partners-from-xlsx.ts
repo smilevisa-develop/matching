@@ -120,8 +120,11 @@ async function main() {
   const sheets = listSheets(FILE);
   console.log(`  シート: ${sheets.join(" / ")}`);
 
-  // 取り込むシートのみフィルタ (「一覧」「(移動前)」「説明」などは除外)
-  const SKIP_PATTERNS = [/移動前/, /説明/, /例\)/, /^マスタ$/i, /^Master$/i];
+  // 取り込み対象から除外するシート
+  //   - 「一覧（移動前）」: 国別シートに分かれているので重複になる
+  //   - 「管理シート」: SNS の登録人数管理。パートナー情報ではない
+  //   - 「セット」: 設定/テンプレ
+  const SKIP_PATTERNS = [/移動前/, /管理シート/, /^セット$/, /説明/, /例\)/];
   const targetSheets = sheets.filter((s) => !SKIP_PATTERNS.some((re) => re.test(s)));
   console.log(`  取り込み対象: ${targetSheets.join(" / ")}`);
 
@@ -136,6 +139,15 @@ async function main() {
   let totalCreated = 0;
 
   for (const sheet of targetSheets) {
+    // 送り出し機関(候補)シートは別構成 (1 行目にヘッダー、ID/会社名・学校名 等)
+    if (/送り出し機関/.test(sheet)) {
+      const n = await importSendingOrganizations(sheet);
+      totalParsed += n.parsed;
+      totalCreated += n.created;
+      console.log(`  [${sheet}] 作成 ${n.created} 件`);
+      continue;
+    }
+
     const rows = rowsOf(FILE, sheet);
     if (rows.length < 3) {
       console.log(`  [${sheet}] スキップ (3 行未満)`);
@@ -145,6 +157,7 @@ async function main() {
     const headers = headersOf(rows[1] as unknown[]);
     const sheetCountry = sheetToCountry(sheet);
     const sheetRole = defaultRoleForSheet(sheet);
+    const isStopped = /取引停止/.test(sheet);
     let sheetCreated = 0;
 
     for (let i = 2; i < rows.length; i++) {
@@ -153,37 +166,52 @@ async function main() {
       if (!name) continue;
 
       const relation = s(rec["関係性"]);
-      const hasPerformance = relation ? relation.includes("実績有り") || relation.includes("有") : false;
+      const stoppedFromRelation = relation ? relation.includes("取引停止") || relation.includes("停止") : false;
+      const stopped = isStopped || stoppedFromRelation;
+      const hasPerformance =
+        !stopped && (relation ? relation.includes("実績有り") || relation.includes("有") : false);
+
+      const rawCountryCell = s(rec["国"]);
+      // シート名から決まる正規 country を優先。
+      // 国列に複数 (改行/カンマ/、/+) や 11 文字以上が入っていれば、
+      // それは「紹介可能な国籍リスト」とみなして introducibleNationalities へ
+      const looksMulti =
+        !!rawCountryCell &&
+        (/[\n、,，+]/.test(rawCountryCell) || rawCountryCell.length > 10);
+      const canonicalCountry = sheetCountry ?? (looksMulti ? null : rawCountryCell);
+      const introNatFromCell = looksMulti ? csvFromString(rawCountryCell) : null;
+      const introNatFromSheet =
+        sheetCountry && sheetCountry !== "日本" ? sheetCountry : null;
 
       const data = {
         name,
-        country: s(rec["国"]) ?? sheetCountry,
+        country: canonicalCountry,
         role: s(rec["役割"]) ?? sheetRole,
         hasPerformance,
         contactName: s(rec["担当者名"]) ?? s(rec["担当者"]),
         email: s(rec["連絡先(メールアドレス)"]) ?? s(rec["メールアドレス"]) ?? s(rec["メール"]),
         snsContact:
-          s(rec["連絡先(SNS)"]) ??
-          s(rec["SNS"]) ??
-          s(rec["連絡先SNS"]) ??
-          s(rec["LINE"]) ??
-          null,
-        features: s(rec["備考(特徴や強みなど)"]) ?? s(rec["備考"]) ?? s(rec["特徴"]),
+          s(rec["連絡先(SNS)"]) ?? s(rec["SNS"]) ?? s(rec["連絡先SNS"]) ?? s(rec["LINE"]) ?? null,
+        features: buildFeatures({
+          base: s(rec["備考(特徴や強みなど)"]) ?? s(rec["備考"]) ?? s(rec["特徴"]),
+          stopped,
+        }),
         feeAmount: s(rec["手数料金額"]) ?? s(rec["手数料"]),
         minFeeAmount: s(rec["最低金額"]),
-        feeShareRatio: s(rec["配分比率"]),
+        feeShareRatio: s(rec["配分比率"]) ? String(s(rec["配分比率"])) : null,
         introducibleScope:
-          sheetCountry === "日本"
+          canonicalCountry === "日本"
             ? "国内"
-            : sheetCountry && sheetCountry !== "日本"
+            : canonicalCountry && canonicalCountry !== "日本"
               ? "国外"
               : null,
-        introducibleNationalities: sheetCountry && sheetCountry !== "日本" ? sheetCountry : null,
+        // 国列の多国籍リスト or シート国 のいずれか
+        introducibleNationalities: introNatFromCell ?? introNatFromSheet,
         introducibleFields: csvFromString(s(rec["分野"]) ?? s(rec["紹介可能分野"])),
         introducibleResidenceStatuses: csvFromString(
           s(rec["在留資格"]) ?? s(rec["紹介可能在留資格"])
         ),
-        linkStatus: "未",
+        linkStatus: stopped ? "停止" : "未",
         channel: null,
         notes: null,
         rating: null,
@@ -196,7 +224,6 @@ async function main() {
         continue;
       }
 
-      // 名前 + 国の組み合わせで既存があれば update、無ければ create
       const existing = await prisma.partner.findFirst({
         where: { name, country: data.country },
         select: { id: true },
@@ -215,6 +242,116 @@ async function main() {
   console.log(
     `\n✅ 完了: パース ${totalParsed} 行 / 新規作成 ${totalCreated} 件${DRY_RUN ? " (DRY-RUN)" : ""}`
   );
+}
+
+function buildFeatures({ base, stopped }: { base: string | null; stopped: boolean }): string | null {
+  const parts: string[] = [];
+  if (stopped) parts.push("[取引停止]");
+  if (base) parts.push(base);
+  return parts.length > 0 ? parts.join("\n") : null;
+}
+
+/**
+ * 「インドネシア送り出し機関（候補）」シート用の特殊取り込み。
+ * ヘッダー構成 (R1):
+ *   番号 / ID / 会社名・学校名 / Address / URL / 担当者 / 電話番号 / メール /
+ *   担当者名(2人目) / Address(2人目) / PHONE(2人目) / メール(2人目)
+ */
+async function importSendingOrganizations(sheet: string): Promise<{ parsed: number; created: number }> {
+  const rows = rowsOf(FILE, sheet);
+  let parsed = 0;
+  let created = 0;
+  if (rows.length < 2) return { parsed, created };
+
+  // 1 行目をヘッダーとして使い、2 行目以降データ
+  // ただし「ID」が空の行はスキップ
+  const header = headersOf(rows[0] as unknown[]);
+  // 列インデックスを名前で引けるよう map 化
+  const colIndex = (key: string) => header.findIndex((h) => h === key);
+  const idIdx = colIndex("ID");
+  const nameIdx = colIndex("会社名・学校名");
+  const addressIdx = colIndex("Address");
+  const urlIdx = colIndex("URL");
+
+  // "担当者" / "担当者名" / "電話番号" / "メール" などは複数登場するので index 配列で持つ
+  const findAllIdx = (key: string) =>
+    header.map((h, i) => (h === key ? i : -1)).filter((i) => i >= 0);
+  const contactNameIdxs = [...findAllIdx("担当者"), ...findAllIdx("担当者名")];
+  const phoneIdxs = [...findAllIdx("電話番号"), ...findAllIdx("PHONE")];
+  const emailIdxs = findAllIdx("メール");
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i] as unknown[];
+    if (!row) continue;
+    const id = s(row[idIdx] as unknown);
+    const name = s(row[nameIdx] as unknown);
+    if (!id && !name) continue;
+    if (!name) continue;
+
+    const contacts: string[] = [];
+    for (const ci of contactNameIdxs) {
+      const v = s(row[ci] as unknown);
+      if (v) contacts.push(v);
+    }
+    const phones: string[] = [];
+    for (const pi of phoneIdxs) {
+      const v = s(row[pi] as unknown);
+      if (v) phones.push(v);
+    }
+    const emails: string[] = [];
+    for (const ei of emailIdxs) {
+      const v = s(row[ei] as unknown);
+      if (v) emails.push(v);
+    }
+
+    const featuresParts: string[] = ["[送り出し機関(候補)]"];
+    if (id) featuresParts.push(`外部 ID: ${id}`);
+    if (row[addressIdx]) featuresParts.push(`住所: ${s(row[addressIdx] as unknown)}`);
+    if (row[urlIdx]) featuresParts.push(`URL: ${s(row[urlIdx] as unknown)}`);
+    if (phones.length > 0) featuresParts.push(`電話: ${phones.join(" / ")}`);
+
+    const data = {
+      name,
+      country: "インドネシア",
+      role: "送り出し機関",
+      hasPerformance: false,
+      contactName: contacts.join(" / ") || null,
+      email: emails.join(" / ") || null,
+      snsContact: null,
+      features: featuresParts.join("\n"),
+      feeAmount: null,
+      minFeeAmount: null,
+      feeShareRatio: null,
+      introducibleScope: "国外",
+      introducibleNationalities: "インドネシア",
+      introducibleFields: null,
+      introducibleResidenceStatuses: null,
+      linkStatus: "未",
+      channel: null,
+      notes: null,
+      rating: null,
+      ratingReason: null,
+    };
+
+    parsed++;
+    if (DRY_RUN) {
+      created++;
+      continue;
+    }
+
+    const existing = await prisma.partner.findFirst({
+      where: { name, country: data.country },
+      select: { id: true },
+    });
+    if (existing) {
+      await prisma.partner.update({ where: { id: existing.id }, data });
+    } else {
+      await prisma.partner.create({ data });
+      created++;
+    }
+  }
+
+  return { parsed, created };
 }
 
 main()
