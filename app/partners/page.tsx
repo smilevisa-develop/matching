@@ -39,6 +39,9 @@ export default async function PartnersPage() {
           linkStatus: p.linkStatus,
           contactName: p.contactName,
           rating: p.rating,
+          role: p.role,
+          hasPerformance: p.hasPerformance,
+          introducibleNationalities: p.introducibleNationalities,
           dealCount: p._count.deals,
           personCount: p._count.persons,
         }))}

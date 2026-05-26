@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CHANNELS } from "@/lib/candidate-profile";
+import { parseCsv } from "@/lib/partner-profile";
 import RatingStars from "./RatingStars";
 
 export type PartnerRow = {
@@ -13,6 +14,9 @@ export type PartnerRow = {
   linkStatus: string;
   contactName: string | null;
   rating: number | null;
+  role: string | null;
+  hasPerformance: boolean;
+  introducibleNationalities: string | null;
   dealCount: number;
   personCount: number;
 };
@@ -23,46 +27,65 @@ export default function SharedPartnersClient({
   initialPartners: PartnerRow[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [scope, setScope] = useState<"all" | "performance" | "no-performance">("all");
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    if (!q) return initialPartners;
     return initialPartners.filter((p) => {
-      const haystack = [p.name, p.country, p.contactName, channelLabel(p.channel)]
+      if (scope === "performance" && !p.hasPerformance) return false;
+      if (scope === "no-performance" && p.hasPerformance) return false;
+      if (!q) return true;
+      const haystack = [
+        p.name,
+        p.country,
+        p.contactName,
+        channelLabel(p.channel),
+        p.role,
+        p.introducibleNationalities,
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [initialPartners, searchTerm]);
+  }, [initialPartners, searchTerm, scope]);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SearchInput
-          value={searchTerm}
-          onChange={setSearchTerm}
-          placeholder="パートナー名・国・担当で検索"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput value={searchTerm} onChange={setSearchTerm} placeholder="名前・国・担当・国籍で検索" />
+          <FilterTab label="すべて" active={scope === "all"} onClick={() => setScope("all")} />
+          <FilterTab
+            label="実績有り"
+            active={scope === "performance"}
+            onClick={() => setScope("performance")}
+          />
+          <FilterTab
+            label="実績無し"
+            active={scope === "no-performance"}
+            onClick={() => setScope("no-performance")}
+          />
+        </div>
         <span className="text-xs text-gray-500">
-          {searchTerm
+          {searchTerm || scope !== "all"
             ? `${filtered.length} / ${initialPartners.length} 件`
             : `${initialPartners.length} 件`}
         </span>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table className="w-full min-w-[960px] text-sm">
           <thead>
             <tr className="bg-[var(--color-light)] text-[var(--color-text-dark)]">
               <th className="px-4 py-3 text-left font-semibold w-16">ID</th>
               <th className="px-4 py-3 text-left font-semibold">パートナー名</th>
-              <th className="px-4 py-3 text-left font-semibold w-32">国</th>
-              <th className="px-4 py-3 text-left font-semibold w-28">連絡手段</th>
-              <th className="px-4 py-3 text-left font-semibold w-28">紐づけ</th>
+              <th className="px-4 py-3 text-left font-semibold w-24">国</th>
+              <th className="px-4 py-3 text-left font-semibold w-24">役割</th>
+              <th className="px-4 py-3 text-left font-semibold w-24">関係性</th>
+              <th className="px-4 py-3 text-left font-semibold">紹介可能国籍</th>
               <th className="px-4 py-3 text-left font-semibold w-32">評価</th>
-              <th className="px-4 py-3 text-right font-semibold w-20">案件</th>
-              <th className="px-4 py-3 text-right font-semibold w-20">候補者</th>
+              <th className="px-4 py-3 text-right font-semibold w-24">実績 (案件)</th>
             </tr>
           </thead>
           <tbody>
@@ -77,9 +100,7 @@ export default function SharedPartnersClient({
                   <Link href={`/partners/${p.id}`} className="block px-4 py-3">
                     {p.name}
                     {p.contactName ? (
-                      <span className="ml-2 text-[11px] font-normal text-gray-400">
-                        ({p.contactName})
-                      </span>
+                      <span className="ml-2 text-[11px] font-normal text-gray-400">({p.contactName})</span>
                     ) : null}
                   </Link>
                 </td>
@@ -90,20 +111,36 @@ export default function SharedPartnersClient({
                 </td>
                 <td className="p-0 text-gray-600">
                   <Link href={`/partners/${p.id}`} className="block px-4 py-3">
-                    {channelLabel(p.channel) ?? "-"}
+                    {p.role ?? "-"}
                   </Link>
                 </td>
                 <td className="p-0">
                   <Link href={`/partners/${p.id}`} className="block px-4 py-3">
                     <span
                       className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                        p.linkStatus === "完了"
+                        p.hasPerformance
                           ? "bg-[#DCFCE7] text-[#166534]"
                           : "bg-[#FEF3C7] text-[#92400E]"
                       }`}
                     >
-                      {p.linkStatus}
+                      {p.hasPerformance ? "実績有り" : "実績無し"}
                     </span>
+                  </Link>
+                </td>
+                <td className="p-0">
+                  <Link href={`/partners/${p.id}`} className="flex flex-wrap items-center gap-1 px-4 py-3">
+                    {parseCsv(p.introducibleNationalities).length === 0 ? (
+                      <span className="text-xs text-gray-300">未設定</span>
+                    ) : (
+                      parseCsv(p.introducibleNationalities).slice(0, 5).map((n) => (
+                        <span
+                          key={n}
+                          className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700"
+                        >
+                          {n}
+                        </span>
+                      ))
+                    )}
                   </Link>
                 </td>
                 <td className="p-0">
@@ -118,11 +155,9 @@ export default function SharedPartnersClient({
                 <td className="p-0 text-right text-gray-600">
                   <Link href={`/partners/${p.id}`} className="block px-4 py-3">
                     {p.dealCount} 件
-                  </Link>
-                </td>
-                <td className="p-0 text-right text-gray-600">
-                  <Link href={`/partners/${p.id}`} className="block px-4 py-3">
-                    {p.personCount} 名
+                    {p.personCount > 0 ? (
+                      <span className="ml-1 text-[10px] text-gray-400">/ 候補者 {p.personCount}</span>
+                    ) : null}
                   </Link>
                 </td>
               </tr>
@@ -130,8 +165,8 @@ export default function SharedPartnersClient({
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
-                  {searchTerm
-                    ? `「${searchTerm}」に一致するパートナーが見つかりません`
+                  {searchTerm || scope !== "all"
+                    ? "条件に一致するパートナーが見つかりません"
                     : "まだパートナー情報が登録されていません"}
                 </td>
               </tr>
@@ -148,6 +183,22 @@ function channelLabel(value: string | null) {
   return CHANNELS.find((c) => c.value === value)?.label ?? value;
 }
 
+function FilterTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+        active
+          ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
+          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function SearchInput({
   value,
   onChange,
@@ -158,7 +209,7 @@ function SearchInput({
   placeholder?: string;
 }) {
   return (
-    <div className="relative flex-1 min-w-[200px] max-w-xs">
+    <div className="relative w-[240px]">
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
         <svg
           width="14"

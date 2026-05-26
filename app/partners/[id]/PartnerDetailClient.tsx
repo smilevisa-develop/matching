@@ -4,6 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { CHANNELS } from "@/lib/candidate-profile";
+import {
+  INTRODUCIBLE_FIELDS,
+  INTRODUCIBLE_NATIONALITIES,
+  INTRODUCIBLE_RESIDENCE_STATUSES,
+  INTRODUCIBLE_SCOPES,
+  PARTNER_ROLES,
+  parseCsv,
+  toCsv,
+} from "@/lib/partner-profile";
 import RatingStars from "../RatingStars";
 
 export type PartnerDetailData = {
@@ -16,6 +25,18 @@ export type PartnerDetailData = {
   notes: string | null;
   rating: number | null;
   ratingReason: string | null;
+  role: string | null;
+  hasPerformance: boolean;
+  email: string | null;
+  snsContact: string | null;
+  features: string | null;
+  introducibleNationalities: string | null;
+  introducibleScope: string | null;
+  introducibleFields: string | null;
+  introducibleResidenceStatuses: string | null;
+  feeAmount: string | null;
+  minFeeAmount: string | null;
+  feeShareRatio: string | null;
   lineUserId: string | null;
   messengerPsid: string | null;
   whatsappId: string | null;
@@ -72,6 +93,18 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
     notes: initial.notes ?? "",
     rating: initial.rating ?? 0,
     ratingReason: initial.ratingReason ?? "",
+    role: initial.role ?? "",
+    hasPerformance: initial.hasPerformance,
+    email: initial.email ?? "",
+    snsContact: initial.snsContact ?? "",
+    features: initial.features ?? "",
+    introducibleNationalities: parseCsv(initial.introducibleNationalities),
+    introducibleScope: initial.introducibleScope ?? "",
+    introducibleFields: parseCsv(initial.introducibleFields),
+    introducibleResidenceStatuses: parseCsv(initial.introducibleResidenceStatuses),
+    feeAmount: initial.feeAmount ?? "",
+    minFeeAmount: initial.minFeeAmount ?? "",
+    feeShareRatio: initial.feeShareRatio ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -92,7 +125,13 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
       const res = await fetch(`/api/partners/${initial.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, rating: form.rating || null }),
+        body: JSON.stringify({
+          ...form,
+          rating: form.rating || null,
+          introducibleNationalities: toCsv(form.introducibleNationalities),
+          introducibleFields: toCsv(form.introducibleFields),
+          introducibleResidenceStatuses: toCsv(form.introducibleResidenceStatuses),
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -167,12 +206,50 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
+        {/* 基本情報 */}
+        <Group title="基本情報">
           <Field label="パートナー名 *">
             <input className={INPUT} value={form.name} onChange={(e) => set("name", e.target.value)} />
           </Field>
           <Field label="国">
             <input className={INPUT} value={form.country} onChange={(e) => set("country", e.target.value)} />
+          </Field>
+          <Field label="役割">
+            <select className={INPUT} value={form.role} onChange={(e) => set("role", e.target.value)}>
+              <option value="">未設定</option>
+              {PARTNER_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="関係性">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.hasPerformance}
+                onChange={(e) => set("hasPerformance", e.target.checked)}
+              />
+              <span>実績有り (これまでに紹介実績がある)</span>
+            </label>
+          </Field>
+          <Field label="担当者名">
+            <input
+              className={INPUT}
+              value={form.contactName}
+              onChange={(e) => set("contactName", e.target.value)}
+            />
+          </Field>
+        </Group>
+
+        {/* 連絡 */}
+        <Group title="連絡">
+          <Field label="メール">
+            <input className={INPUT} value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="example@example.com" />
+          </Field>
+          <Field label="SNS 連絡先">
+            <input className={INPUT} value={form.snsContact} onChange={(e) => set("snsContact", e.target.value)} placeholder="LINE / Facebook URL など" />
           </Field>
           <Field label="主な連絡手段">
             <select className={INPUT} value={form.channel} onChange={(e) => set("channel", e.target.value)}>
@@ -184,22 +261,15 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
             </select>
           </Field>
           <Field label="連絡先紐づけ">
-            <select
-              className={INPUT}
-              value={form.linkStatus}
-              onChange={(e) => set("linkStatus", e.target.value)}
-            >
+            <select className={INPUT} value={form.linkStatus} onChange={(e) => set("linkStatus", e.target.value)}>
               <option value="未">未</option>
               <option value="完了">完了</option>
             </select>
           </Field>
-          <Field label="担当者名">
-            <input
-              className={INPUT}
-              value={form.contactName}
-              onChange={(e) => set("contactName", e.target.value)}
-            />
-          </Field>
+        </Group>
+
+        {/* 評価 */}
+        <Group title="評価">
           <Field label="評価 (1〜5)">
             <RatingStars value={form.rating} onChange={(v) => set("rating", v)} />
           </Field>
@@ -214,6 +284,83 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
               評価か理由を変えて保存すると、下の「評価の推移」に履歴として残ります
             </p>
           </Field>
+        </Group>
+
+        {/* 紹介可能 */}
+        <Group title="紹介可能">
+          <Field label="紹介の範囲">
+            <select
+              className={INPUT}
+              value={form.introducibleScope}
+              onChange={(e) => set("introducibleScope", e.target.value)}
+            >
+              <option value="">未設定</option>
+              {INTRODUCIBLE_SCOPES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="紹介可能な国籍" className="md:col-span-2">
+            <CheckboxGroup
+              options={INTRODUCIBLE_NATIONALITIES as readonly string[]}
+              values={form.introducibleNationalities}
+              onChange={(next) => set("introducibleNationalities", next)}
+            />
+          </Field>
+          <Field label="紹介可能な分野" className="md:col-span-2">
+            <CheckboxGroup
+              options={INTRODUCIBLE_FIELDS as readonly string[]}
+              values={form.introducibleFields}
+              onChange={(next) => set("introducibleFields", next)}
+            />
+          </Field>
+          <Field label="紹介可能な在留資格" className="md:col-span-2">
+            <CheckboxGroup
+              options={INTRODUCIBLE_RESIDENCE_STATUSES as readonly string[]}
+              values={form.introducibleResidenceStatuses}
+              onChange={(next) => set("introducibleResidenceStatuses", next)}
+            />
+          </Field>
+        </Group>
+
+        {/* 手数料 */}
+        <Group title="手数料">
+          <Field label="手数料 (目安)">
+            <input
+              className={INPUT}
+              value={form.feeAmount}
+              onChange={(e) => set("feeAmount", e.target.value)}
+              placeholder="例: 介護WL3万円 / 5万円 / 海外無料、国内有料"
+            />
+          </Field>
+          <Field label="最低金額">
+            <input
+              className={INPUT}
+              value={form.minFeeAmount}
+              onChange={(e) => set("minFeeAmount", e.target.value)}
+            />
+          </Field>
+          <Field label="配分比率">
+            <input
+              className={INPUT}
+              value={form.feeShareRatio}
+              onChange={(e) => set("feeShareRatio", e.target.value)}
+            />
+          </Field>
+        </Group>
+
+        {/* メモ */}
+        <Group title="メモ・特徴">
+          <Field label="特徴・強み" className="md:col-span-2">
+            <textarea
+              className={`${INPUT} min-h-20`}
+              value={form.features}
+              onChange={(e) => set("features", e.target.value)}
+              placeholder="例: 技能実習終了後、特定技能の人材紹介"
+            />
+          </Field>
           <Field label="メモ" className="md:col-span-2">
             <textarea
               className={`${INPUT} min-h-24`}
@@ -221,7 +368,7 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
               onChange={(e) => set("notes", e.target.value)}
             />
           </Field>
-        </div>
+        </Group>
       </section>
 
       {/* 評価の推移 */}
@@ -436,6 +583,51 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
           </>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-5">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">{title}</h3>
+      <div className="mt-2 grid gap-4 md:grid-cols-2">{children}</div>
+    </div>
+  );
+}
+
+function CheckboxGroup({
+  options,
+  values,
+  onChange,
+}: {
+  options: readonly string[];
+  values: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const toggle = (opt: string) => {
+    if (values.includes(opt)) onChange(values.filter((v) => v !== opt));
+    else onChange([...values, opt]);
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => {
+        const active = values.includes(opt);
+        return (
+          <button
+            type="button"
+            key={opt}
+            onClick={() => toggle(opt)}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+              active
+                ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
+                : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {opt}
+          </button>
+        );
+      })}
     </div>
   );
 }

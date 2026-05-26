@@ -10,6 +10,58 @@ function clampRating(v: unknown): number | null {
   return rounded;
 }
 
+function cleanString(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t === "" ? null : t;
+}
+
+function cleanBool(v: unknown): boolean {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "string") return v === "true" || v === "1" || v === "実績有り";
+  return Boolean(v);
+}
+
+function csvFromAny(v: unknown): string | null {
+  if (Array.isArray(v)) {
+    const arr = v.map((x) => String(x).trim()).filter(Boolean);
+    return arr.length === 0 ? null : [...new Set(arr)].join(",");
+  }
+  if (typeof v === "string") {
+    const arr = v
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return arr.length === 0 ? null : [...new Set(arr)].join(",");
+  }
+  return null;
+}
+
+function buildPartnerData(body: Record<string, unknown>) {
+  return {
+    name: String(body.name ?? "").trim(),
+    country: cleanString(body.country),
+    channel: cleanString(body.channel),
+    linkStatus: cleanString(body.linkStatus) ?? "未",
+    contactName: cleanString(body.contactName),
+    notes: cleanString(body.notes),
+    rating: clampRating(body.rating),
+    ratingReason: cleanString(body.ratingReason),
+    role: cleanString(body.role),
+    hasPerformance: cleanBool(body.hasPerformance),
+    email: cleanString(body.email),
+    snsContact: cleanString(body.snsContact),
+    features: cleanString(body.features),
+    introducibleNationalities: csvFromAny(body.introducibleNationalities),
+    introducibleScope: cleanString(body.introducibleScope),
+    introducibleFields: csvFromAny(body.introducibleFields),
+    introducibleResidenceStatuses: csvFromAny(body.introducibleResidenceStatuses),
+    feeAmount: cleanString(body.feeAmount),
+    minFeeAmount: cleanString(body.minFeeAmount),
+    feeShareRatio: cleanString(body.feeShareRatio),
+  };
+}
+
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireApiAccount();
@@ -62,42 +114,26 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const { id } = await params;
     const partnerId = Number(id);
     const body = await req.json();
-    const name = String(body.name ?? "").trim();
-    if (!name) {
+    const data = buildPartnerData(body);
+    if (!data.name) {
       return Response.json({ ok: false, error: "パートナー名を入力してください" }, { status: 400 });
     }
-
-    const newRating = clampRating(body.rating);
-    const newReason = String(body.ratingReason ?? "").trim() || null;
 
     const before = await prisma.partner.findUnique({
       where: { id: partnerId },
       select: { rating: true, ratingReason: true },
     });
 
-    const partner = await prisma.partner.update({
-      where: { id: partnerId },
-      data: {
-        name,
-        country: String(body.country ?? "").trim() || null,
-        channel: String(body.channel ?? "").trim() || null,
-        linkStatus: String(body.linkStatus ?? "未").trim() || "未",
-        contactName: String(body.contactName ?? "").trim() || null,
-        notes: String(body.notes ?? "").trim() || null,
-        rating: newRating,
-        ratingReason: newReason,
-      },
-    });
+    const partner = await prisma.partner.update({ where: { id: partnerId }, data });
 
-    // 評価 or 評価理由が変わったときだけ履歴を残す
-    const ratingChanged = (before?.rating ?? null) !== newRating;
-    const reasonChanged = (before?.ratingReason ?? null) !== newReason;
+    const ratingChanged = (before?.rating ?? null) !== data.rating;
+    const reasonChanged = (before?.ratingReason ?? null) !== data.ratingReason;
     if (ratingChanged || reasonChanged) {
       await prisma.partnerRatingHistory.create({
         data: {
           partnerId,
-          rating: newRating,
-          reason: newReason,
+          rating: data.rating,
+          reason: data.ratingReason,
           recordedBy: account.name ?? account.loginId ?? null,
         },
       });

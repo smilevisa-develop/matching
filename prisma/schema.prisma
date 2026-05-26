@@ -88,6 +88,37 @@ model Partner {
   rating        Int?
   /// 評価理由 (フリーテキスト)
   ratingReason  String?
+
+  // --- スプシ「アライアンス先」由来のフィールド ---
+  /// 役割: 求人 / 求職 / 求人・求職 / 学校 など
+  role          String?
+  /// 関係性 (実績有り/無し)
+  hasPerformance Boolean  @default(false)
+  /// メール
+  email         String?
+  /// SNS 連絡先 (URL or ID)
+  snsContact    String?
+  /// 特徴・強み (備考列)
+  features      String?
+
+  // --- 紹介可能 (checkbox 選択, CSV 保存) ---
+  /// 紹介可能な国籍 (CSV: "ベトナム,インドネシア,...")
+  introducibleNationalities      String?
+  /// 国内 / 国外 / 両方
+  introducibleScope              String?
+  /// 紹介可能な分野 (CSV: "介護,外食,建設,...")
+  introducibleFields             String?
+  /// 紹介可能な在留資格 (CSV: "技能実習,特定技能1号,...")
+  introducibleResidenceStatuses  String?
+
+  // --- 手数料 ---
+  /// 目安の紹介手数料 (free text)
+  feeAmount      String?
+  /// 最低金額
+  minFeeAmount   String?
+  /// 配分比率
+  feeShareRatio  String?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
