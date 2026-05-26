@@ -9,6 +9,7 @@ import {
   INTRODUCIBLE_RESIDENCE_STATUSES,
   INTRODUCIBLE_SCOPES,
   PARTNER_ROLES,
+  RELATIONSHIP_STATUSES,
   toCsv,
 } from "@/lib/partner-profile";
 import RatingStars from "../RatingStars";
@@ -28,7 +29,7 @@ export default function NewPartnerPage() {
     rating: 0,
     ratingReason: "",
     role: "",
-    hasPerformance: false,
+    relationshipStatus: "",
     email: "",
     snsContact: "",
     features: "",
@@ -115,14 +116,18 @@ export default function NewPartnerPage() {
               </select>
             </Field>
             <Field label="関係性">
-              <label className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.hasPerformance}
-                  onChange={(e) => set("hasPerformance", e.target.checked)}
-                />
-                <span>実績有り</span>
-              </label>
+              <select
+                className={INPUT}
+                value={form.relationshipStatus}
+                onChange={(e) => set("relationshipStatus", e.target.value)}
+              >
+                <option value="">未設定</option>
+                {RELATIONSHIP_STATUSES.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="担当者名">
               <input

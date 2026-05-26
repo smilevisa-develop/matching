@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CHANNELS } from "@/lib/candidate-profile";
-import { parseCsv } from "@/lib/partner-profile";
+import { RELATIONSHIP_STATUSES, parseCsv } from "@/lib/partner-profile";
 import RatingStars from "./RatingStars";
 
 export type PartnerRow = {
@@ -16,6 +16,7 @@ export type PartnerRow = {
   rating: number | null;
   role: string | null;
   hasPerformance: boolean;
+  relationshipStatus: string | null;
   introducibleNationalities: string | null;
   dealCount: number;
   personCount: number;
@@ -27,13 +28,12 @@ export default function SharedPartnersClient({
   initialPartners: PartnerRow[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [scope, setScope] = useState<"all" | "performance" | "no-performance">("all");
+  const [relFilter, setRelFilter] = useState<string>("all");
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return initialPartners.filter((p) => {
-      if (scope === "performance" && !p.hasPerformance) return false;
-      if (scope === "no-performance" && p.hasPerformance) return false;
+      if (relFilter !== "all" && (p.relationshipStatus ?? "") !== relFilter) return false;
       if (!q) return true;
       const haystack = [
         p.name,
@@ -41,6 +41,7 @@ export default function SharedPartnersClient({
         p.contactName,
         channelLabel(p.channel),
         p.role,
+        p.relationshipStatus,
         p.introducibleNationalities,
       ]
         .filter(Boolean)
@@ -48,27 +49,30 @@ export default function SharedPartnersClient({
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [initialPartners, searchTerm, scope]);
+  }, [initialPartners, searchTerm, relFilter]);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput value={searchTerm} onChange={setSearchTerm} placeholder="名前・国・担当・国籍で検索" />
-          <FilterTab label="すべて" active={scope === "all"} onClick={() => setScope("all")} />
+          <FilterTab label="すべて" active={relFilter === "all"} onClick={() => setRelFilter("all")} />
+          {RELATIONSHIP_STATUSES.map((r) => (
+            <FilterTab
+              key={r}
+              label={r}
+              active={relFilter === r}
+              onClick={() => setRelFilter(r)}
+            />
+          ))}
           <FilterTab
-            label="実績有り"
-            active={scope === "performance"}
-            onClick={() => setScope("performance")}
-          />
-          <FilterTab
-            label="実績無し"
-            active={scope === "no-performance"}
-            onClick={() => setScope("no-performance")}
+            label="未設定"
+            active={relFilter === ""}
+            onClick={() => setRelFilter("")}
           />
         </div>
         <span className="text-xs text-gray-500">
-          {searchTerm || scope !== "all"
+          {searchTerm || relFilter !== "all"
             ? `${filtered.length} / ${initialPartners.length} 件`
             : `${initialPartners.length} 件`}
         </span>
@@ -116,15 +120,7 @@ export default function SharedPartnersClient({
                 </td>
                 <td className="p-0">
                   <Link href={`/partners/${p.id}`} className="block px-4 py-3">
-                    <span
-                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                        p.hasPerformance
-                          ? "bg-[#DCFCE7] text-[#166534]"
-                          : "bg-[#FEF3C7] text-[#92400E]"
-                      }`}
-                    >
-                      {p.hasPerformance ? "実績有り" : "実績無し"}
-                    </span>
+                    <RelationshipBadge status={p.relationshipStatus} />
                   </Link>
                 </td>
                 <td className="p-0">
@@ -165,7 +161,7 @@ export default function SharedPartnersClient({
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
-                  {searchTerm || scope !== "all"
+                  {searchTerm || relFilter !== "all"
                     ? "条件に一致するパートナーが見つかりません"
                     : "まだパートナー情報が登録されていません"}
                 </td>
@@ -175,6 +171,26 @@ export default function SharedPartnersClient({
         </table>
       </div>
     </div>
+  );
+}
+
+function RelationshipBadge({ status }: { status: string | null }) {
+  if (!status) return <span className="text-xs text-gray-300">未設定</span>;
+  // 色分け: 優良=深緑, 実績有り=緑, 実績無し=オレンジ, 通常=グレー, それ以外=グレー
+  const style =
+    status === "優良"
+      ? "bg-[#2E5E4E] text-white"
+      : status === "実績有り"
+        ? "bg-[#DCFCE7] text-[#166534]"
+        : status === "実績無し"
+          ? "bg-[#FEF3C7] text-[#92400E]"
+          : status === "通常"
+            ? "bg-gray-100 text-gray-700"
+            : "bg-gray-100 text-gray-600";
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${style}`}>
+      {status}
+    </span>
   );
 }
 

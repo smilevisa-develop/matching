@@ -10,6 +10,7 @@ import {
   INTRODUCIBLE_RESIDENCE_STATUSES,
   INTRODUCIBLE_SCOPES,
   PARTNER_ROLES,
+  RELATIONSHIP_STATUSES,
   parseCsv,
   toCsv,
 } from "@/lib/partner-profile";
@@ -27,6 +28,7 @@ export type PartnerDetailData = {
   ratingReason: string | null;
   role: string | null;
   hasPerformance: boolean;
+  relationshipStatus: string | null;
   email: string | null;
   snsContact: string | null;
   features: string | null;
@@ -94,7 +96,7 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
     rating: initial.rating ?? 0,
     ratingReason: initial.ratingReason ?? "",
     role: initial.role ?? "",
-    hasPerformance: initial.hasPerformance,
+    relationshipStatus: initial.relationshipStatus ?? "",
     email: initial.email ?? "",
     snsContact: initial.snsContact ?? "",
     features: initial.features ?? "",
@@ -225,14 +227,18 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
             </select>
           </Field>
           <Field label="関係性">
-            <label className="inline-flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.hasPerformance}
-                onChange={(e) => set("hasPerformance", e.target.checked)}
-              />
-              <span>実績有り (これまでに紹介実績がある)</span>
-            </label>
+            <select
+              className={INPUT}
+              value={form.relationshipStatus}
+              onChange={(e) => set("relationshipStatus", e.target.value)}
+            >
+              <option value="">未設定</option>
+              {RELATIONSHIP_STATUSES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="担当者名">
             <input

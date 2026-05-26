@@ -61,6 +61,11 @@ export async function POST(req: Request) {
       return Response.json({ ok: false, error: "パートナー名を入力してください" }, { status: 400 });
     }
 
+    const relationshipStatus = cleanString(body.relationshipStatus);
+    const hasPerformance =
+      body.hasPerformance !== undefined
+        ? cleanBool(body.hasPerformance)
+        : relationshipStatus === "実績有り" || relationshipStatus === "優良";
     const partner = await prisma.partner.create({
       data: {
         name,
@@ -72,7 +77,8 @@ export async function POST(req: Request) {
         rating: clampRating(body.rating),
         ratingReason: cleanString(body.ratingReason),
         role: cleanString(body.role),
-        hasPerformance: cleanBool(body.hasPerformance),
+        hasPerformance,
+        relationshipStatus,
         email: cleanString(body.email),
         snsContact: cleanString(body.snsContact),
         features: cleanString(body.features),

@@ -75,6 +75,7 @@ export default async function PartnerDetailPage({
     ratingReason: partner.ratingReason,
     role: partner.role,
     hasPerformance: partner.hasPerformance,
+    relationshipStatus: partner.relationshipStatus,
     email: partner.email,
     snsContact: partner.snsContact,
     features: partner.features,

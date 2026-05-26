@@ -41,6 +41,7 @@ export default async function PartnersPage() {
           rating: p.rating,
           role: p.role,
           hasPerformance: p.hasPerformance,
+          relationshipStatus: p.relationshipStatus,
           introducibleNationalities: p.introducibleNationalities,
           dealCount: p._count.deals,
           personCount: p._count.persons,

@@ -15,6 +15,15 @@ export const PARTNER_ROLES = [
 ] as const;
 export type PartnerRole = (typeof PARTNER_ROLES)[number];
 
+/** 関係性 (品質ラベル) — 単一選択ドロップダウン */
+export const RELATIONSHIP_STATUSES = [
+  "実績有り",
+  "実績無し",
+  "優良",
+  "通常",
+] as const;
+export type RelationshipStatus = (typeof RELATIONSHIP_STATUSES)[number];
+
 export const INTRODUCIBLE_NATIONALITIES = [
   "ベトナム",
   "インドネシア",

@@ -38,6 +38,13 @@ function csvFromAny(v: unknown): string | null {
 }
 
 function buildPartnerData(body: Record<string, unknown>) {
+  const relationshipStatus = cleanString(body.relationshipStatus);
+  // hasPerformance は relationshipStatus === "実績有り" or "優良" から自動派生
+  // (body に hasPerformance も来ていればそちらを優先)
+  const hasPerformance =
+    body.hasPerformance !== undefined
+      ? cleanBool(body.hasPerformance)
+      : relationshipStatus === "実績有り" || relationshipStatus === "優良";
   return {
     name: String(body.name ?? "").trim(),
     country: cleanString(body.country),
@@ -48,7 +55,8 @@ function buildPartnerData(body: Record<string, unknown>) {
     rating: clampRating(body.rating),
     ratingReason: cleanString(body.ratingReason),
     role: cleanString(body.role),
-    hasPerformance: cleanBool(body.hasPerformance),
+    hasPerformance,
+    relationshipStatus,
     email: cleanString(body.email),
     snsContact: cleanString(body.snsContact),
     features: cleanString(body.features),

@@ -178,7 +178,17 @@ async function main() {
         skippedStopped++;
         continue;
       }
-      const hasPerformance = relation ? relation.includes("実績有り") || relation.includes("有") : false;
+      // 関係性ラベルを正規化 (実績有り / 実績無し / 優良 / 通常)
+      const relationshipStatus = (() => {
+        if (!relation) return null;
+        if (relation.includes("優良")) return "優良";
+        if (relation.includes("通常")) return "通常";
+        if (relation.includes("実績有り") || /^有$/.test(relation)) return "実績有り";
+        if (relation.includes("実績無し") || relation.includes("実績なし") || /^無$/.test(relation)) return "実績無し";
+        return relation; // 自由文字列で保存
+      })();
+      const hasPerformance =
+        relationshipStatus === "実績有り" || relationshipStatus === "優良";
 
       const rawCountryCell = s(rec["国"]);
       // シート名から決まる正規 country を優先。
@@ -197,6 +207,7 @@ async function main() {
         country: canonicalCountry,
         role: s(rec["役割"]) ?? sheetRole,
         hasPerformance,
+        relationshipStatus,
         contactName: s(rec["担当者名"]) ?? s(rec["担当者"]),
         email: s(rec["連絡先(メールアドレス)"]) ?? s(rec["メールアドレス"]) ?? s(rec["メール"]),
         snsContact:
@@ -316,6 +327,7 @@ async function importSendingOrganizations(sheet: string): Promise<{ parsed: numb
       country: "インドネシア",
       role: "送り出し機関",
       hasPerformance: false,
+      relationshipStatus: null,
       contactName: contacts.join(" / ") || null,
       email: emails.join(" / ") || null,
       snsContact: null,

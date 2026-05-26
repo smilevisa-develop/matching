@@ -92,8 +92,10 @@ model Partner {
   // --- スプシ「アライアンス先」由来のフィールド ---
   /// 役割: 求人 / 求職 / 求人・求職 / 学校 など
   role          String?
-  /// 関係性 (実績有り/無し)
+  /// 関係性 (実績有り/無し) — 後方互換用。relationshipStatus 由来の derived 値
   hasPerformance Boolean  @default(false)
+  /// 関係性ラベル (実績有り / 実績無し / 有料 / 無料 / その他自由文字列)
+  relationshipStatus String?
   /// メール
   email         String?
   /// SNS 連絡先 (URL or ID)
