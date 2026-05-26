@@ -5,29 +5,23 @@ export async function POST(req: Request) {
     const body = await req.json();
     const {
       mode,
-      channel,
-      linkStatus,
       relationshipStatus,
       role,
       introducibleScope,
       introNationality,
       introField,
       introResStatus,
-      minRating,
       groupId,
       message,
       scheduledAt,
     } = body as {
       mode: "filter" | "group";
-      channel: string | null;
-      linkStatus: string | null;
       relationshipStatus: string | null;
       role: string | null;
       introducibleScope: string | null;
       introNationality: string | null;
       introField: string | null;
       introResStatus: string | null;
-      minRating: number | null;
       groupId: number | null;
       message: string;
       scheduledAt: string | null;
@@ -59,14 +53,6 @@ export async function POST(req: Request) {
       }));
     } else {
       const where: Record<string, unknown> = {};
-      if (channel) {
-        if (channel === "未設定") {
-          where.OR = [{ channel: null }, { channel: "" }, { channel: "未設定" }];
-        } else {
-          where.channel = channel;
-        }
-      }
-      if (linkStatus) where.linkStatus = linkStatus;
       if (relationshipStatus) where.relationshipStatus = relationshipStatus;
       if (role) where.role = role;
       if (introducibleScope) where.introducibleScope = introducibleScope;
@@ -74,7 +60,6 @@ export async function POST(req: Request) {
       if (introNationality) where.introducibleNationalities = { contains: introNationality };
       if (introField) where.introducibleFields = { contains: introField };
       if (introResStatus) where.introducibleResidenceStatuses = { contains: introResStatus };
-      if (typeof minRating === "number" && minRating >= 1) where.rating = { gte: minRating };
       const partners = await prisma.partner.findMany({ where });
       targets = partners.map((p) => ({
         id: p.id,
@@ -93,15 +78,12 @@ export async function POST(req: Request) {
           channel: "LINE/Messenger/WhatsApp",
           targetFilter: JSON.stringify({
             mode,
-            channel,
-            linkStatus,
             relationshipStatus,
             role,
             introducibleScope,
             introNationality,
             introField,
             introResStatus,
-            minRating,
             groupId,
           }),
           status: "scheduled",
@@ -154,15 +136,12 @@ export async function POST(req: Request) {
         channel: "LINE",
         targetFilter: JSON.stringify({
           mode,
-          channel,
-          linkStatus,
           relationshipStatus,
           role,
           introducibleScope,
           introNationality,
           introField,
           introResStatus,
-          minRating,
           groupId,
         }),
         status: "done",

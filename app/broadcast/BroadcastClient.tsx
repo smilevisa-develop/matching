@@ -33,9 +33,6 @@ type Template = { id: number; name: string; content: string };
 type Group = { id: number; name: string; memberCount: number };
 
 const ALL = "すべて";
-const CHANNELS = [ALL, "LINE", "Messenger", "WhatsApp", "メール", "未設定"];
-const LINK_STATUSES = [ALL, "未", "完了"];
-const RATINGS = [ALL, "★1 以上", "★2 以上", "★3 以上", "★4 以上", "★5"];
 
 export default function BroadcastClient({
   partners,
@@ -47,15 +44,12 @@ export default function BroadcastClient({
   groups: Group[];
 }) {
   const [mode, setMode] = useState<"filter" | "group">("filter");
-  const [channel, setChannel] = useState(ALL);
-  const [linkStatus, setLinkStatus] = useState(ALL);
   const [relationshipStatus, setRelationshipStatus] = useState(ALL);
   const [role, setRole] = useState(ALL);
   const [introducibleScope, setIntroducibleScope] = useState(ALL);
   const [introNationality, setIntroNationality] = useState(ALL);
   const [introField, setIntroField] = useState(ALL);
   const [introResStatus, setIntroResStatus] = useState(ALL);
-  const [minRating, setMinRating] = useState(ALL);
   const [selectedGroup, setSelectedGroup] = useState("");
   const [message, setMessage] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -63,40 +57,25 @@ export default function BroadcastClient({
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
 
-  const minRatingNum = (() => {
-    if (minRating === ALL) return null;
-    const m = minRating.match(/(\d)/);
-    return m ? Number(m[1]) : null;
-  })();
-
   const filtered = useMemo(
     () =>
       partners.filter((p) => {
-        if (channel !== ALL) {
-          const ch = (p.channel ?? "未設定") || "未設定";
-          if (ch !== channel) return false;
-        }
-        if (linkStatus !== ALL && p.linkStatus !== linkStatus) return false;
         if (relationshipStatus !== ALL && (p.relationshipStatus ?? "") !== relationshipStatus) return false;
         if (role !== ALL && (p.role ?? "") !== role) return false;
         if (introducibleScope !== ALL && (p.introducibleScope ?? "") !== introducibleScope) return false;
         if (introNationality !== ALL && !parseCsv(p.introducibleNationalities).includes(introNationality)) return false;
         if (introField !== ALL && !parseCsv(p.introducibleFields).includes(introField)) return false;
         if (introResStatus !== ALL && !parseCsv(p.introducibleResidenceStatuses).includes(introResStatus)) return false;
-        if (minRatingNum !== null && (p.rating ?? 0) < minRatingNum) return false;
         return true;
       }),
     [
       partners,
-      channel,
-      linkStatus,
       relationshipStatus,
       role,
       introducibleScope,
       introNationality,
       introField,
       introResStatus,
-      minRatingNum,
     ]
   );
 
@@ -125,15 +104,12 @@ export default function BroadcastClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
-          channel: channel === ALL ? null : channel,
-          linkStatus: linkStatus === ALL ? null : linkStatus,
           relationshipStatus: relationshipStatus === ALL ? null : relationshipStatus,
           role: role === ALL ? null : role,
           introducibleScope: introducibleScope === ALL ? null : introducibleScope,
           introNationality: introNationality === ALL ? null : introNationality,
           introField: introField === ALL ? null : introField,
           introResStatus: introResStatus === ALL ? null : introResStatus,
-          minRating: minRatingNum,
           groupId: selectedGroup ? Number(selectedGroup) : null,
           message,
           scheduledAt: scheduled ? scheduleDate : null,
@@ -219,9 +195,6 @@ export default function BroadcastClient({
                 options={[ALL, ...RELATIONSHIP_STATUSES]}
               />
               <Select label="役割" value={role} onChange={setRole} options={[ALL, ...PARTNER_ROLES]} />
-              <Select label="評価 (最低)" value={minRating} onChange={setMinRating} options={RATINGS} />
-              <Select label="連絡手段" value={channel} onChange={setChannel} options={CHANNELS} />
-              <Select label="連携状況" value={linkStatus} onChange={setLinkStatus} options={LINK_STATUSES} />
             </div>
           ) : (
             <Select
