@@ -253,8 +253,13 @@ export default function BroadcastClient({
         </div>
       </div>
 
-      {/* 右: プレビュー (左 2 カードと同じ高さに揃え、内側でスクロール) */}
-      <div className="flex h-full flex-col bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      {/* 右: プレビュー
+          - 外側 wrapper を relative + min-h-0 にして「自分の中身では行高さに影響しない」状態に
+          - 中の card は absolute inset-0 で wrapper のサイズちょうど = 左カラムと同じ高さに固定
+          - リスト本体は flex-1 min-h-0 overflow-y-auto でカード内スクロール
+       */}
+      <div className="relative min-h-0">
+        <div className="absolute inset-0 flex flex-col bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
         <p className="text-sm font-semibold text-[var(--color-text-dark)] mb-3">対象プレビュー ({targetCount} 社)</p>
         <div className="flex-1 min-h-0 space-y-1 overflow-y-auto">
           {(mode === "filter" ? filtered : []).map((p) => (
@@ -283,6 +288,7 @@ export default function BroadcastClient({
               {selectedGroup ? `${targetCount} 社が対象` : "グループを選択してください"}
             </p>
           )}
+        </div>
         </div>
       </div>
       </div>
