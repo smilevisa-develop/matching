@@ -86,7 +86,7 @@ export default function SharedPartnersClient({
               <th className="px-4 py-3 text-left font-semibold">パートナー名</th>
               <th className="px-4 py-3 text-left font-semibold w-24">拠点国</th>
               <th className="px-4 py-3 text-left font-semibold w-24">役割</th>
-              <th className="px-4 py-3 text-left font-semibold w-24">関係性</th>
+              <th className="px-4 py-3 text-left font-semibold w-28 whitespace-nowrap">関係性</th>
               <th className="px-4 py-3 text-left font-semibold">紹介可能国籍</th>
               <th className="px-4 py-3 text-left font-semibold w-32">評価</th>
               <th className="px-4 py-3 text-right font-semibold w-24">実績 (案件)</th>
@@ -188,7 +188,7 @@ function RelationshipBadge({ status }: { status: string | null }) {
             ? "bg-gray-100 text-gray-700"
             : "bg-gray-100 text-gray-600";
   return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${style}`}>
+    <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${style}`}>
       {status}
     </span>
   );

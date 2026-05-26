@@ -104,7 +104,7 @@ export default function BroadcastClient({
   };
 
   return (
-    <div className="grid grid-cols-2 items-start gap-6">
+    <div className="grid grid-cols-2 items-stretch gap-6">
       {/* 左: 設定 */}
       <div className="space-y-5">
         {/* 送信モード */}
@@ -206,9 +206,9 @@ export default function BroadcastClient({
       </div>
 
       {/* 右: プレビュー */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <div className="flex flex-col bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
         <p className="text-sm font-semibold text-[var(--color-text-dark)] mb-3">対象プレビュー ({targetCount} 社)</p>
-        <div className="space-y-1 max-h-96 overflow-y-auto">
+        <div className="flex-1 min-h-0 space-y-1 overflow-y-auto">
           {(mode === "filter" ? filtered : []).map((p) => (
             <div key={p.id} className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-gray-50">
               <div className="w-7 h-7 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center text-xs font-bold shrink-0">
