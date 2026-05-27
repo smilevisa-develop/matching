@@ -266,11 +266,13 @@ function buildIndexedPlaceholders(
     const n = i + 1;
     const w = works[i];
     const hasData = Boolean(w.label || w.date || w.endDate);
+    const company = w.label.trim();
     map[`入社${n}`] = formatYearMonth(w.date);
     map[`退社${n}`] = formatYearMonth(w.endDate);
-    map[`会社名${n}`] = w.label;
-    // 退社ラベルは常に「退社」 (reason 内容で上書きしない)
-    map[`退社${n}ラベル`] = hasData ? "退社" : "";
+    // 入社行: "{会社名} 入社" (会社名が空なら空文字)
+    map[`会社名${n}`] = company ? `${company} 入社` : hasData ? "入社" : "";
+    // 退社行: "{会社名} 退社" (会社名が空なら "退社" 単体)
+    map[`退社${n}ラベル`] = company ? `${company} 退社` : hasData ? "退社" : "";
     // 退職理由は別 placeholder で参照可能
     map[`退職理由${n}`] = w.result;
   }
