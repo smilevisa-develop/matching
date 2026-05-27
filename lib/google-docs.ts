@@ -298,7 +298,24 @@ export const RESUME_MAX_CERTS = 4;
 
 function buildResumeEmptyRowGroups(): { guard: string; rowMarkers: string[] }[] {
   const groups: { guard: string; rowMarkers: string[] }[] = [
-    { guard: "大学名", rowMarkers: ["大学名", "入学_大学", "卒業_大学"] },
+    {
+      guard: "大学名",
+      // 大学名 / 学校名2 / 入学_大学 / 卒業_大学 / 入学2 / 卒業2 + 学歴1 セパレータ
+      rowMarkers: [
+        "大学名",
+        "学校名2",
+        "入学_大学",
+        "卒業_大学",
+        "入学2",
+        "卒業2",
+        "_学歴1_区切り",
+      ],
+    },
+    {
+      // その他学歴 (学校名3 / 入学3 / 卒業3 + 学歴2 セパレータ)
+      guard: "学校名3",
+      rowMarkers: ["学校名3", "入学3", "卒業3", "_学歴2_区切り"],
+    },
     // 免許も name 空なら 1 行ごと削除
     { guard: "免許", rowMarkers: ["免許", "免許年"] },
     // 日本語検定も値が空なら専用行を削除
