@@ -372,7 +372,18 @@ async function main() {
       });
     }
 
-    const photoUrlIncoming = s(rec["顔写真"]);
+    // フォームの 顔写真 URL は raw `drive.google.com/open?id=XXX` 形式が多く、
+    // <img> で描画できないので、ファイル ID を抽出して `thumbnail?id=XXX&sz=w400` に正規化する
+    const photoUrlRaw = s(rec["顔写真"]);
+    const photoUrlIncoming = (() => {
+      if (!photoUrlRaw) return null;
+      if (photoUrlRaw.includes("thumbnail?id=")) return photoUrlRaw;
+      const m1 = photoUrlRaw.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      const m2 = photoUrlRaw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      const id = m1?.[1] ?? m2?.[1];
+      if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w400`;
+      return photoUrlRaw;
+    })();
     const emailIncoming = s(rec["メール"]);
     const driveIncoming = s(rec["応募者フォルダURL"]);
     const personPatch: Record<string, unknown> = {};
