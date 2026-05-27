@@ -197,10 +197,13 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
   }
   while (certs.length < MAX_CERTS) certs.push({ date: "", label: "" });
 
-  // 日本就労ビザ (在留資格 + 有効期限)
+  // 日本就労ビザ: 在留資格が就労可能なものかどうかで「あり」/「なし」
   const visaTypeLabel = valueOrBlank(profile?.visaType) || valueOrBlank(person.residenceStatus);
   const visaExpiry = formatYearMonth(profile?.visaExpiryDate);
-  const visaWorkText = [visaTypeLabel, visaExpiry ? `(${visaExpiry}まで)` : ""].filter(Boolean).join(" ");
+  // 留学生 / 空欄 / 未設定 / 不明 → 「なし」、それ以外 (技能実習/特定技能/技人国/特定活動) → 「あり」
+  const NON_WORK_VISA = ["留学生", "", "未設定", "不明", "なし"];
+  const isWorkVisa = !!visaTypeLabel && !NON_WORK_VISA.includes(visaTypeLabel);
+  const visaWorkAriNashi = isWorkVisa ? "あり" : "なし";
 
   return {
     作成日: formatDateJapanese(new Date().toISOString()),
@@ -219,9 +222,11 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
     ビザの種類: visaTypeLabel,
     在留資格: valueOrBlank(person.residenceStatus),
     在留資格の有効期限: formatYearMonth(profile?.visaExpiryDate),
-    // 「日本就労ビザ」プレースホルダ (テンプレ側ラベル「日本就労ビザ」用)
-    日本就労ビザ: visaWorkText,
-    就労ビザ: visaWorkText,
+    // 「日本就労ビザ」: 就労可能ビザの有無 (あり / なし)
+    日本就労ビザ: visaWorkAriNashi,
+    就労ビザ: visaWorkAriNashi,
+    // 互換用: 期限など詳細が必要なテンプレ用
+    日本就労ビザ詳細: [visaTypeLabel, visaExpiry ? `(${visaExpiry}まで)` : ""].filter(Boolean).join(" "),
     // 日本語検定 (独立 placeholder としても残す)
     日本語検定: valueOrBlank(profile?.japaneseLevel),
     日本語検定取得日: formatYearMonth(profile?.japaneseLevelDate),
