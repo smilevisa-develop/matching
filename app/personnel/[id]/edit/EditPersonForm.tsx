@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   calculateAge,
   CHANNELS,
@@ -124,6 +124,7 @@ export default function EditPersonForm({
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<(typeof SECTION_ITEMS)[number]["id"]>("basic");
   const [submitting, setSubmitting] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [form, setForm] = useState({
@@ -182,7 +183,34 @@ export default function EditPersonForm({
 
   const setValue = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
+    setDirty(true);
   };
+
+  // 未保存のままページ離脱時に警告
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  // ⌘/Ctrl + S で保存ショートカット
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) {
+        if (!dirty || submitting) return;
+        e.preventDefault();
+        // 一番近い form を submit
+        const forms = document.querySelectorAll("form");
+        forms.forEach((f) => f.requestSubmit?.());
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [dirty, submitting]);
 
   const handlePhotoChange = async (file: File | null) => {
     if (!file) return;
@@ -239,6 +267,7 @@ export default function EditPersonForm({
           autoJudgeNote: "Drive アップロード",
         }),
       }));
+      setDirty(true);
     } finally {
       setUploadingKind(null);
     }
@@ -251,6 +280,7 @@ export default function EditPersonForm({
         currentIndex === index ? { ...entry, [key]: value } : entry
       ),
     }));
+    setDirty(true);
   };
 
   const addWorkExperience = () => {
@@ -261,6 +291,7 @@ export default function EditPersonForm({
         { companyName: "", startDate: "", endDate: "", reason: "" },
       ],
     }));
+    setDirty(true);
   };
 
   const removeWorkExperience = (index: number) => {
@@ -268,6 +299,7 @@ export default function EditPersonForm({
       ...current,
       workExperiences: current.workExperiences.filter((_, currentIndex) => currentIndex !== index),
     }));
+    setDirty(true);
   };
 
   const updateOtherQualification = (index: number, key: keyof OtherQualificationEntry, value: string) => {
@@ -277,6 +309,7 @@ export default function EditPersonForm({
         currentIndex === index ? { ...entry, [key]: value } : entry
       ),
     }));
+    setDirty(true);
   };
 
   const addOtherQualification = () => {
@@ -284,6 +317,7 @@ export default function EditPersonForm({
       ...current,
       otherQualifications: [...current.otherQualifications, { name: "", expiryDate: "" }],
     }));
+    setDirty(true);
   };
 
   const removeOtherQualification = (index: number) => {
@@ -291,6 +325,7 @@ export default function EditPersonForm({
       ...current,
       otherQualifications: current.otherQualifications.filter((_, currentIndex) => currentIndex !== index),
     }));
+    setDirty(true);
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -329,6 +364,7 @@ export default function EditPersonForm({
         alert(`更新失敗: ${result.error}`);
         return;
       }
+      setDirty(false);
       router.push("/personnel");
       router.refresh();
     } catch {
@@ -762,6 +798,25 @@ export default function EditPersonForm({
           {deleting ? "削除中..." : "削除"}
         </button>
       </div>
+
+      {/* 未保存の変更があるときに画面下から浮上してくる固定保存バー */}
+      {dirty && (activeSection === "basic" || activeSection === "visa") ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4 sm:pb-6">
+          <div className="pointer-events-auto flex w-full max-w-3xl items-center justify-between gap-3 rounded-full border border-[var(--color-primary)]/30 bg-white/95 px-5 py-3 shadow-2xl ring-1 ring-black/5 backdrop-blur transition-all">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-[#F59E0B]" />
+              <span className="font-medium text-[var(--color-text-dark)]">未保存の変更があります</span>
+            </div>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-full bg-[var(--color-primary)] px-6 py-2 text-sm font-semibold text-white shadow-md hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+            >
+              {submitting ? "保存中..." : "保存する"}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </form>
   );
 }
