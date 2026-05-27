@@ -333,6 +333,11 @@ model ResumeProfile {
   universityName  String?
   universityStartDate String?
   universityEndDate String?
+  /// 事前質問 (面接前ヒアリング) の自由回答群。
+  /// 形式: { questionKey: answer } の Json オブジェクト。
+  /// 履歴書に出る項目 (志望動機/自己紹介/来日目的/現在の仕事/退職理由) は
+  /// 専用カラムに直接入る。それ以外はここに格納する。
+  interviewAnswers Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

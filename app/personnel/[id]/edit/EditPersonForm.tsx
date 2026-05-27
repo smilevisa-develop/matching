@@ -13,6 +13,7 @@ import {
   RESIDENCE_STATUSES,
   type WorkHistoryEntry,
 } from "@/lib/candidate-profile";
+import { INTERVIEW_SECTIONS } from "@/lib/interview-questions";
 
 type Person = {
   id: number;
@@ -58,6 +59,7 @@ type Person = {
     universityEndDate: string | null;
     workExperiences: unknown;
     certifications?: unknown;
+    interviewAnswers?: unknown;
   } | null;
   documents: {
     kind: string;
@@ -91,6 +93,16 @@ const SECTION_ITEMS = [
 ] as const;
 
 type OtherQualificationEntry = { name: string; expiryDate: string };
+
+function normalizeInterviewAnswers(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string") out[k] = v;
+    else if (v !== null && v !== undefined) out[k] = String(v);
+  }
+  return out;
+}
 
 function normalizeOtherQualifications(raw: unknown, fallbackName?: string | null, fallbackExpiry?: string | null): OtherQualificationEntry[] {
   const list: OtherQualificationEntry[] = [];
@@ -174,7 +186,18 @@ export default function EditPersonForm({
     visaSpecificNote: person.resumeProfile?.traineeExperience ?? "",
     email: person.email ?? "",
     documents: buildInitialDocuments(person.documents, person.residenceStatus),
+    interviewAnswers: normalizeInterviewAnswers(
+      (person.resumeProfile as unknown as { interviewAnswers?: unknown } | null)?.interviewAnswers
+    ),
   });
+
+  const updateInterviewAnswer = (key: string, value: string) => {
+    setForm((current) => ({
+      ...current,
+      interviewAnswers: { ...current.interviewAnswers, [key]: value },
+    }));
+    setDirty(true);
+  };
 
   const age = useMemo(() => calculateAge(form.birthDate), [form.birthDate]);
   const visibleDocuments = useMemo(
@@ -365,6 +388,7 @@ export default function EditPersonForm({
           // 在留資格固有メモは traineeExperience に保存 (互換維持)
           traineeExperience: form.visaSpecificNote || null,
           documents: visibleDocuments,
+          interviewAnswers: form.interviewAnswers,
         }),
       });
       const result = await response.json();
@@ -478,22 +502,71 @@ export default function EditPersonForm({
             <Field label="子供">
               <input className={INPUT} value={form.childrenCount} onChange={(event) => setValue("childrenCount", event.target.value)} placeholder="0" />
             </Field>
-            <Field label="志望動機" className="md:col-span-2">
-              <textarea className={`${INPUT} min-h-24`} value={form.motivation} onChange={(event) => setValue("motivation", event.target.value)} />
-            </Field>
-            <Field label="自己紹介" className="md:col-span-2">
-              <textarea className={`${INPUT} min-h-24`} value={form.selfIntroduction} onChange={(event) => setValue("selfIntroduction", event.target.value)} />
-            </Field>
-            <Field label="来日目的" className="md:col-span-2">
-              <textarea className={`${INPUT} min-h-24`} value={form.japanPurpose} onChange={(event) => setValue("japanPurpose", event.target.value)} />
-            </Field>
-            <Field label="現在の仕事" className="md:col-span-2">
-              <textarea className={`${INPUT} min-h-24`} value={form.currentJob} onChange={(event) => setValue("currentJob", event.target.value)} />
-            </Field>
-            <Field label="退職理由" className="md:col-span-2">
-              <textarea className={`${INPUT} min-h-24`} value={form.retirementReason} onChange={(event) => setValue("retirementReason", event.target.value)} />
-            </Field>
+            {/* 志望動機/自己紹介/来日目的/現在の仕事/退職理由 は下の「事前質問」セクションに統合 */}
           </div>
+
+          {/* 事前質問 (面接前ヒアリング) — 配偶者・子供以降の島セクション */}
+          {INTERVIEW_SECTIONS.map((section, sectionIdx) => (
+            <div key={sectionIdx} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <p className="text-base font-semibold text-[var(--color-text-dark)]">
+                {section.title}
+              </p>
+              {section.description ? (
+                <p className="mt-1 text-xs text-gray-500">{section.description}</p>
+              ) : null}
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {section.questions.map((q) => {
+                  const value = q.existingField
+                    ? (form[q.existingField] as string)
+                    : form.interviewAnswers[q.jsonKey ?? q.key] ?? "";
+                  const onChange = (next: string) => {
+                    if (q.existingField) {
+                      setValue(q.existingField, next as never);
+                    } else {
+                      updateInterviewAnswer(q.jsonKey ?? q.key, next);
+                    }
+                  };
+                  return (
+                    <Field
+                      key={q.key}
+                      label={q.question}
+                      className={q.type === "textarea" ? "md:col-span-2" : ""}
+                    >
+                      {q.type === "textarea" ? (
+                        <textarea
+                          className={`${INPUT} min-h-20`}
+                          value={value}
+                          onChange={(e) => onChange(e.target.value)}
+                          placeholder={q.hint}
+                        />
+                      ) : q.type === "select" && q.options ? (
+                        <select
+                          className={INPUT}
+                          value={value}
+                          onChange={(e) => onChange(e.target.value)}
+                        >
+                          <option value="">未設定</option>
+                          {q.options.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className={INPUT}
+                          value={value}
+                          onChange={(e) => onChange(e.target.value)}
+                          placeholder={q.hint}
+                        />
+                      )}
+                      {q.hint && q.type !== "text" && q.type !== "select" ? null : null}
+                    </Field>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
 
           <div className="rounded-2xl border border-gray-200 bg-[var(--color-light)] p-5">
             <p className="text-sm font-semibold text-[var(--color-text-dark)]">連絡手段</p>

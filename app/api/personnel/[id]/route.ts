@@ -164,6 +164,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
               .filter((q: { name: string; expiryDate: string }) => q.name || q.expiryDate)
           : undefined,
         traineeExperience: body.traineeExperience || null,
+        // string 値のみ受け入れて Json として保存
+        interviewAnswers:
+          body.interviewAnswers && typeof body.interviewAnswers === "object"
+            ? Object.fromEntries(
+                Object.entries(body.interviewAnswers as Record<string, unknown>)
+                  .filter(([, v]) => v !== null && v !== undefined)
+                  .map(([k, v]) => [k, typeof v === "string" ? v : String(v)])
+              )
+            : undefined,
         highSchoolName: body.highSchoolName || null,
         highSchoolStartDate: body.highSchoolStartDate || null,
         highSchoolEndDate: body.highSchoolEndDate || null,
@@ -202,6 +211,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
               .filter((q: { name: string; expiryDate: string }) => q.name || q.expiryDate)
           : undefined,
         traineeExperience: body.traineeExperience || null,
+        // string 値のみ受け入れて Json として保存
+        interviewAnswers:
+          body.interviewAnswers && typeof body.interviewAnswers === "object"
+            ? Object.fromEntries(
+                Object.entries(body.interviewAnswers as Record<string, unknown>)
+                  .filter(([, v]) => v !== null && v !== undefined)
+                  .map(([k, v]) => [k, typeof v === "string" ? v : String(v)])
+              )
+            : undefined,
         highSchoolName: body.highSchoolName || null,
         highSchoolStartDate: body.highSchoolStartDate || null,
         highSchoolEndDate: body.highSchoolEndDate || null,
