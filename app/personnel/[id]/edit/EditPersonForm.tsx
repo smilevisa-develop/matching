@@ -493,9 +493,6 @@ export default function EditPersonForm({
             <Field label="退職理由" className="md:col-span-2">
               <textarea className={`${INPUT} min-h-24`} value={form.retirementReason} onChange={(event) => setValue("retirementReason", event.target.value)} />
             </Field>
-            <Field label="本人希望記入欄" className="md:col-span-2">
-              <textarea className={`${INPUT} min-h-24`} value={form.preferenceNote} onChange={(event) => setValue("preferenceNote", event.target.value)} />
-            </Field>
           </div>
 
           <div className="rounded-2xl border border-gray-200 bg-[var(--color-light)] p-5">
