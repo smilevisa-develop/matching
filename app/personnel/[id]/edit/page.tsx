@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import EditPersonForm from "./EditPersonForm";
 import {
   CustomQuestionsProvider,
-  CustomQuestionsBuilderButton,
   CustomQuestionsList,
 } from "./CustomQuestionsPanel";
 import ExtractPanel from "./ExtractPanel";
@@ -190,7 +189,6 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                         : {},
                   }}
                 />
-                <CustomQuestionsBuilderButton />
                 <DriveActionsPanel personId={person.id} initialDriveFolderUrl={person.driveFolderUrl ?? null} />
               </>
             }

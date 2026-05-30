@@ -89,7 +89,7 @@ export default function CreateResumeButton({
         type="button"
         onClick={() => setOpen(true)}
         title="この候補者の履歴書を Docs で作成"
-        className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--color-secondary)] bg-white text-[var(--color-primary)] shadow-sm transition-transform hover:scale-110 hover:bg-[var(--color-light)]"
+        className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-primary)] transition-transform hover:scale-110 hover:bg-[var(--color-light)]"
       >
         <ResumeIcon />
       </button>
