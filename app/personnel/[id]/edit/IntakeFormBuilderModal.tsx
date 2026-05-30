@@ -153,11 +153,7 @@ export default function IntakeFormBuilderModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <div>
-            <h3 className="text-base font-semibold text-[var(--color-text-dark)]">入力フォーム作成</h3>
-            <p className="mt-0.5 text-xs text-gray-500">{personName} に送る入力フォームを組み立てます</p>
-          </div>
+        <div className="flex items-center justify-end border-b border-gray-200 px-6 py-3">
           <CloseButton onClick={onClose} />
         </div>
 
