@@ -560,7 +560,9 @@ export default function EditPersonForm({
                           placeholder={q.hint}
                         />
                       )}
-                      {q.hint && q.type !== "text" && q.type !== "select" ? null : null}
+                      {q.adminNote ? (
+                        <p className="mt-1 text-[10px] text-gray-400">{q.adminNote}</p>
+                      ) : null}
                     </Field>
                   );
                 })}

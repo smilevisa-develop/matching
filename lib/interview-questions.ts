@@ -13,8 +13,10 @@ export type InterviewQuestion = {
   key: string;
   /** 質問文 */
   question: string;
-  /** 補足/プレースホルダ */
+  /** 補足/プレースホルダ (候補者にも表示される) */
   hint?: string;
+  /** 管理者向けメモ (候補者には表示されない。例: 履歴書テンプレ反映先) */
+  adminNote?: string;
   /** 入力タイプ */
   type?: "text" | "textarea" | "select";
   /** select 用の選択肢 */
@@ -45,21 +47,21 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         question: "なぜ日本で働きたいですか？",
         type: "textarea",
         existingField: "japanPurpose",
-        hint: "履歴書テンプレ {{来日目的}} に反映",
+        adminNote: "履歴書テンプレ {{来日目的}} に反映",
       },
       {
         key: "motivation",
         question: "なぜこの職種を選びましたか？/ なぜ弊社の求人に応募したいと思いましたか？",
         type: "textarea",
         existingField: "motivation",
-        hint: "履歴書テンプレ {{志望動機}} に反映",
+        adminNote: "履歴書テンプレ {{志望動機}} に反映",
       },
       {
         key: "retirementReason",
         question: "なぜ今の会社を辞めたいですか？（もう退職しましたか？）",
         type: "textarea",
         existingField: "retirementReason",
-        hint: "履歴書テンプレ {{退職理由}} に反映",
+        adminNote: "履歴書テンプレ {{退職理由}} に反映",
       },
       {
         key: "desiredWorkYears",
@@ -96,7 +98,7 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         question: "現在のお仕事は何ですか？仕事内容を教えてください。",
         type: "textarea",
         existingField: "currentJob",
-        hint: "履歴書テンプレ {{現在の仕事}} に反映",
+        adminNote: "履歴書テンプレ {{現在の仕事}} に反映",
       },
       {
         key: "sameJobExperience",
@@ -221,7 +223,7 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         question: "簡単に自己紹介をしてください。",
         type: "textarea",
         existingField: "selfIntroduction",
-        hint: "履歴書テンプレ {{自己紹介}} に反映",
+        adminNote: "履歴書テンプレ {{自己紹介}} に反映",
       },
       {
         key: "strengths",
