@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import IconTooltip from "./IconTooltip";
 
 export default function DriveActionsPanel({
   personId,
@@ -37,26 +38,28 @@ export default function DriveActionsPanel({
   // 編集 (鉛筆) アイコンは削除。設定済みなら開くだけ、未設定ならクリックで設定
   if (driveFolderUrl) {
     return (
-      <a
-        href={driveFolderUrl}
-        target="_blank"
-        rel="noreferrer"
-        title="保管場所を開く"
-        className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-primary)] transition-transform hover:scale-110 hover:bg-[var(--color-light)]"
-      >
-        <FolderIcon />
-      </a>
+      <IconTooltip label="Drive 保管場所">
+        <a
+          href={driveFolderUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-primary)] transition-transform hover:scale-110 hover:bg-[var(--color-light)]"
+        >
+          <FolderIcon />
+        </a>
+      </IconTooltip>
     );
   }
   return (
-    <button
-      type="button"
-      onClick={() => void setUrlOnce()}
-      title="保管場所 未設定 (クリックで設定)"
-      className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-gray-400 transition-transform hover:scale-110 hover:text-[var(--color-primary)]"
-    >
-      <FolderIcon />
-    </button>
+    <IconTooltip label="Drive 保管場所 (未設定)">
+      <button
+        type="button"
+        onClick={() => void setUrlOnce()}
+        className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-gray-400 transition-transform hover:scale-110 hover:text-[var(--color-primary)]"
+      >
+        <FolderIcon />
+      </button>
+    </IconTooltip>
   );
 }
 

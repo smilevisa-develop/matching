@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import IntakeFormBuilderModal from "./IntakeFormBuilderModal";
+import IconTooltip from "./IconTooltip";
 
 type Answers = {
   motivation: string;
@@ -24,14 +25,15 @@ export default function IntakeLinkButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title="入力フォーム作成 / URL を発行"
-        className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-primary)] transition-transform hover:scale-110 hover:bg-[var(--color-light)]"
-      >
-        <FormIcon />
-      </button>
+      <IconTooltip label="入力フォーム作成">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-primary)] transition-transform hover:scale-110 hover:bg-[var(--color-light)]"
+        >
+          <FormIcon />
+        </button>
+      </IconTooltip>
       {open ? (
         <IntakeFormBuilderModal
           personId={personId}

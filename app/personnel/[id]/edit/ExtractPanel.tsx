@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import CloseButton from "@/app/components/CloseButton";
+import IconTooltip from "./IconTooltip";
 
 type IncomingFile = {
   id: string;
@@ -99,14 +100,15 @@ export default function ExtractPanel({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setModalOpen(true)}
-        title="AI で書類から自動入力"
-        className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#A78BFA] via-[#F472B6] to-[#F59E0B] text-white shadow-md transition-transform hover:scale-110"
-      >
-        <SparkIcon />
-      </button>
+      <IconTooltip label="AI 取込み">
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#A78BFA] via-[#F472B6] to-[#F59E0B] text-white shadow-md transition-transform hover:scale-110"
+        >
+          <SparkIcon />
+        </button>
+      </IconTooltip>
 
       {modalOpen ? (
         <ExtractModal

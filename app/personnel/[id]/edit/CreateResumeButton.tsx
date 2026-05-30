@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import CloseButton from "@/app/components/CloseButton";
+import IconTooltip from "./IconTooltip";
 
 type Template = {
   id: number;
@@ -85,14 +86,15 @@ export default function CreateResumeButton({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title="この候補者の履歴書を Docs で作成"
-        className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-primary)] transition-transform hover:scale-110 hover:bg-[var(--color-light)]"
-      >
-        <ResumeIcon />
-      </button>
+      <IconTooltip label="履歴書作成">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-primary)] transition-transform hover:scale-110 hover:bg-[var(--color-light)]"
+        >
+          <ResumeIcon />
+        </button>
+      </IconTooltip>
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
