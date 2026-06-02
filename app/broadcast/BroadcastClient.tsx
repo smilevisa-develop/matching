@@ -154,6 +154,7 @@ export default function BroadcastClient({
           groupId: selectedGroup ? Number(selectedGroup) : null,
           message,
           scheduledAt: scheduled ? scheduleDate : null,
+          templateId: selectedTemplate ? Number(selectedTemplate) : null,
         }),
       });
       const data = await res.json();
@@ -161,7 +162,7 @@ export default function BroadcastClient({
         alert(
           scheduled
             ? `予約完了: ${data.scheduledAt} に ${data.targetCount} 件へ送信予定`
-            : `送信完了: ${data.sentCount} 件成功 (LINE ${data.sentLine ?? 0} / Messenger ${data.sentMessenger ?? 0}) / ${data.failedCount} 件失敗`
+            : `送信完了: ${data.sentCount} 件成功 (LINE ${data.sentLine ?? 0} / WhatsApp ${data.sentWhatsapp ?? 0} / Messenger ${data.sentMessenger ?? 0}) / ${data.failedCount} 件失敗`
         );
         setShowSchedule(false);
       } else {

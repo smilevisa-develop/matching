@@ -20,9 +20,22 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const account = await requireApiAccount();
-    const { name, content } = await req.json();
+    const {
+      name,
+      content,
+      whatsappTemplateName,
+      whatsappTemplateLang,
+      whatsappTemplateParams,
+    } = await req.json();
     const template = await prisma.messageTemplate.create({
-      data: { accountId: account.id, name, content },
+      data: {
+        accountId: account.id,
+        name,
+        content,
+        whatsappTemplateName: whatsappTemplateName || null,
+        whatsappTemplateLang: whatsappTemplateLang || null,
+        whatsappTemplateParams: whatsappTemplateParams || null,
+      },
     });
     return Response.json({ ok: true, template });
   } catch (e) {

@@ -251,6 +251,18 @@ model MessengerProfile {
   updatedAt       DateTime @updatedAt
 }
 
+model WhatsappProfile {
+  id              Int      @id @default(autoincrement())
+  /// 国コード込みの WhatsApp 電話番号 (例: 81901234567)。WhatsApp Cloud API では これが宛先 ID
+  waId            String   @unique
+  profileName     String?
+  lastMessageText String?
+  lastWebhookType String?
+  lastSeenAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model Message {
   id         Int       @id @default(autoincrement())
   personId   Int?
@@ -268,7 +280,18 @@ model MessageTemplate {
   accountId Int
   account   StaffAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   name      String
+  /// LINE / Messenger / 24h 内 WhatsApp 用の本文 ({{変数}} 含む)
   content   String
+
+  // ── WhatsApp 承認済みテンプレートメッセージとして送る場合 ──
+  /// Meta WhatsApp Business Manager で承認された テンプレ名 (例: partner_broadcast_v1)
+  whatsappTemplateName String?
+  /// テンプレートの言語コード (例: ja, en, vi)
+  whatsappTemplateLang String?
+  /// 本文 {{1}} {{2}} ... に渡す変数キーを順番で CSV 指定
+  /// 例: "パートナー名,急ぎ案件一覧" → WhatsApp テンプレ本文の {{1}} = パートナー名展開後, {{2}} = 急ぎ案件一覧展開後
+  whatsappTemplateParams String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

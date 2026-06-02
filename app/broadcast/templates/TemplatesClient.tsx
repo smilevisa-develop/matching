@@ -3,15 +3,34 @@
 import { useRef, useState } from "react";
 import { BROADCAST_VARIABLES } from "@/lib/broadcast-variables";
 
-type Template = { id: number; name: string; content: string };
+type Template = {
+  id: number;
+  name: string;
+  content: string;
+  whatsappTemplateName: string | null;
+  whatsappTemplateLang: string | null;
+  whatsappTemplateParams: string | null;
+};
 
 export default function TemplatesClient({ templates: initial }: { templates: Template[] }) {
   const [templates, setTemplates] = useState(initial);
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
+  const [whatsappTemplateName, setWaName] = useState("");
+  const [whatsappTemplateLang, setWaLang] = useState("");
+  const [whatsappTemplateParams, setWaParams] = useState("");
+  const [showWa, setShowWa] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const buildBody = () => ({
+    name,
+    content,
+    whatsappTemplateName: whatsappTemplateName.trim() || null,
+    whatsappTemplateLang: whatsappTemplateLang.trim() || null,
+    whatsappTemplateParams: whatsappTemplateParams.trim() || null,
+  });
 
   const save = async () => {
     if (!name.trim() || !content.trim()) { alert("名前とメッセージを入力してください"); return; }
@@ -21,7 +40,7 @@ export default function TemplatesClient({ templates: initial }: { templates: Tem
         const res = await fetch(`/api/templates/${editId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, content }),
+          body: JSON.stringify(buildBody()),
         });
         const data = await res.json();
         if (data.ok) { setTemplates((prev) => prev.map((t) => t.id === editId ? data.template : t)); reset(); }
@@ -29,7 +48,7 @@ export default function TemplatesClient({ templates: initial }: { templates: Tem
         const res = await fetch("/api/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, content }),
+          body: JSON.stringify(buildBody()),
         });
         const data = await res.json();
         if (data.ok) { setTemplates((prev) => [data.template, ...prev]); reset(); }
@@ -44,8 +63,24 @@ export default function TemplatesClient({ templates: initial }: { templates: Tem
     if (data.ok) setTemplates((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const startEdit = (t: Template) => { setEditId(t.id); setName(t.name); setContent(t.content); };
-  const reset = () => { setEditId(null); setName(""); setContent(""); };
+  const startEdit = (t: Template) => {
+    setEditId(t.id);
+    setName(t.name);
+    setContent(t.content);
+    setWaName(t.whatsappTemplateName ?? "");
+    setWaLang(t.whatsappTemplateLang ?? "");
+    setWaParams(t.whatsappTemplateParams ?? "");
+    setShowWa(Boolean(t.whatsappTemplateName));
+  };
+  const reset = () => {
+    setEditId(null);
+    setName("");
+    setContent("");
+    setWaName("");
+    setWaLang("");
+    setWaParams("");
+    setShowWa(false);
+  };
 
   /** カーソル位置に変数を挿入 */
   const insertVariable = (variable: string) => {
@@ -116,6 +151,62 @@ export default function TemplatesClient({ templates: initial }: { templates: Tem
           ))}
         </div>
 
+        {/* WhatsApp 承認テンプレ設定 (折りたたみ) */}
+        <div className="rounded-lg border border-gray-200">
+          <button
+            type="button"
+            onClick={() => setShowWa((v) => !v)}
+            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-semibold text-[var(--color-text-dark)] hover:bg-gray-50"
+          >
+            <span>
+              WhatsApp 承認テンプレ {whatsappTemplateName ? `(${whatsappTemplateName})` : "未設定"}
+            </span>
+            <span className="text-gray-400">{showWa ? "▾" : "▸"}</span>
+          </button>
+          {showWa ? (
+            <div className="space-y-3 border-t border-gray-100 px-3 py-3">
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                Meta WhatsApp Business Manager で承認されたテンプレ名を入れると、
+                24h ウィンドウ外でも合法的に push 配信できます。未設定のときは
+                上のメッセージ本文を free-form (24h 内のみ届く) で送ります。
+              </p>
+              <div>
+                <label className="block text-[10px] font-medium text-gray-500 mb-1">テンプレ名 (Meta で承認済みのもの)</label>
+                <input
+                  className={INPUT}
+                  value={whatsappTemplateName}
+                  onChange={(e) => setWaName(e.target.value)}
+                  placeholder="partner_broadcast_v1"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">言語コード</label>
+                  <input
+                    className={INPUT}
+                    value={whatsappTemplateLang}
+                    onChange={(e) => setWaLang(e.target.value)}
+                    placeholder="ja / en / vi"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1">本文パラメータ ({"{{1}}, {{2}}..."} の順, CSV)</label>
+                  <input
+                    className={INPUT}
+                    value={whatsappTemplateParams}
+                    onChange={(e) => setWaParams(e.target.value)}
+                    placeholder="パートナー名,急ぎ案件一覧"
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-400 leading-snug">
+                例: テンプレ本文が「{"{{1}}"} 様、急ぎ案件 {"{{2}}"}」なら<br />
+                パラメータ欄は <code>パートナー名,急ぎ案件一覧</code>
+              </p>
+            </div>
+          ) : null}
+        </div>
+
         <div className="flex gap-2">
           <button onClick={save} disabled={saving}
             className="bg-[var(--color-primary)] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50">
@@ -128,9 +219,16 @@ export default function TemplatesClient({ templates: initial }: { templates: Tem
       <div className="max-h-[calc(100vh-12rem)] space-y-3 overflow-y-auto pr-2">
         {templates.map((t) => (
           <div key={t.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-            <div className="flex items-start justify-between">
-              <p className="font-medium text-[var(--color-text-dark)] text-sm">{t.name}</p>
-              <div className="flex gap-3 text-xs">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-medium text-[var(--color-text-dark)] text-sm">{t.name}</p>
+                {t.whatsappTemplateName ? (
+                  <span className="mt-1 inline-block rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#15803D]">
+                    WhatsApp テンプレ: {t.whatsappTemplateName}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 gap-3 text-xs">
                 <button onClick={() => startEdit(t)} className="text-[var(--color-primary)] hover:underline">編集</button>
                 <button onClick={() => del(t.id)} className="text-red-400 hover:underline">削除</button>
               </div>

@@ -38,6 +38,7 @@ export async function POST(req: Request) {
       groupId,
       message,
       scheduledAt,
+      templateId,
     } = body as {
       mode: "filter" | "group";
       relationshipStatus: string | null;
@@ -46,15 +47,35 @@ export async function POST(req: Request) {
       groupId: number | null;
       message: string;
       scheduledAt: string | null;
+      /** MessageTemplate.id を渡すと、WhatsApp ではそのテンプレ承認名で送信できる */
+      templateId?: number | null;
     };
     const lineToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
     const fbPageToken = process.env.FB_PAGE_ACCESS_TOKEN;
-    if (!lineToken && !fbPageToken) {
+    const waToken = process.env.WA_ACCESS_TOKEN;
+    const waPhoneNumberId = process.env.WA_PHONE_NUMBER_ID;
+    if (!lineToken && !fbPageToken && !waToken) {
       return Response.json(
-        { ok: false, error: "LINE_CHANNEL_ACCESS_TOKEN または FB_PAGE_ACCESS_TOKEN が未設定です" },
+        { ok: false, error: "LINE / FB / WhatsApp いずれの送信トークンも未設定です" },
         { status: 500 }
       );
     }
+
+    // 選択テンプレ (WhatsApp テンプレ名がある場合のみ意味を持つ)
+    const tmpl = templateId
+      ? await prisma.messageTemplate.findUnique({ where: { id: templateId } })
+      : null;
+    const waTemplate =
+      tmpl?.whatsappTemplateName && tmpl?.whatsappTemplateLang
+        ? {
+            name: tmpl.whatsappTemplateName,
+            lang: tmpl.whatsappTemplateLang,
+            paramKeys: (tmpl.whatsappTemplateParams ?? "")
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+          }
+        : null;
 
     // 対象パートナー取得
     type Target = {
@@ -138,13 +159,29 @@ export async function POST(req: Request) {
       return Response.json({ ok: true, targetCount: targets.length, scheduledAt });
     }
 
-    // 即時送信: LINE があれば LINE、なければ Messenger を試す
+    // 即時送信: LINE → WhatsApp → Messenger の順で試す
     let sentCount = 0;
     let sentLine = 0;
+    let sentWhatsapp = 0;
     let sentMessenger = 0;
     let failedCount = 0;
     let skippedCount = 0;
     const failures: { name: string; channel: string; error: string }[] = [];
+
+    /** ヘルパー: 1 受信者ぶんの WhatsApp テンプレ用パラメータを組み立てる */
+    const buildWaTemplateParams = (t: Target): string[] => {
+      if (!waTemplate) return [];
+      const partner: PartnerForBroadcast = {
+        name: t.name,
+        contactName: t.contactName,
+        country: t.country,
+        introducibleFields: t.introducibleFields,
+      };
+      // 変数キー (例: "急ぎ案件一覧") を {{xxx}} 文字列にラップして expandTemplate で 1 個ずつ展開
+      return waTemplate.paramKeys.map((key) =>
+        expandTemplate(`{{${key}}}`, { partner, openDeals, urgentDeals })
+      );
+    };
 
     /** LINE で送る */
     const sendLine = async (to: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> => {
@@ -153,6 +190,65 @@ export async function POST(req: Request) {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${lineToken}` },
         body: JSON.stringify({ to, messages: [{ type: "text", text }] }),
+      });
+      if (res.ok) return { ok: true };
+      return { ok: false, error: await res.text() };
+    };
+
+    /**
+     * WhatsApp Cloud API で送る。
+     * - テンプレ (waTemplate) が指定されていれば承認済みテンプレで送る (24h 縛りなし)
+     * - 無ければ free-form text (24h 内のみ届く)
+     */
+    const sendWhatsapp = async (
+      waId: string,
+      text: string,
+      templateParams: string[]
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (!waToken || !waPhoneNumberId) {
+        return { ok: false, error: "WA_ACCESS_TOKEN / WA_PHONE_NUMBER_ID 未設定" };
+      }
+      const url = `https://graph.facebook.com/v22.0/${encodeURIComponent(
+        waPhoneNumberId
+      )}/messages`;
+      let payload: Record<string, unknown>;
+      if (waTemplate) {
+        payload = {
+          messaging_product: "whatsapp",
+          to: waId,
+          type: "template",
+          template: {
+            name: waTemplate.name,
+            language: { code: waTemplate.lang },
+            components:
+              templateParams.length > 0
+                ? [
+                    {
+                      type: "body",
+                      parameters: templateParams.map((p) => ({
+                        type: "text",
+                        text: p,
+                      })),
+                    },
+                  ]
+                : [],
+          },
+        };
+      } else {
+        payload = {
+          messaging_product: "whatsapp",
+          to: waId,
+          type: "text",
+          text: { body: text },
+        };
+      }
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${waToken}`,
+        },
+        body: JSON.stringify(payload),
       });
       if (res.ok) return { ok: true };
       return { ok: false, error: await res.text() };
@@ -194,7 +290,21 @@ export async function POST(req: Request) {
         continue;
       }
 
-      // LINE が無ければ Messenger
+      // LINE が無ければ WhatsApp
+      if (t.whatsappId) {
+        const params = buildWaTemplateParams(t);
+        const r = await sendWhatsapp(t.whatsappId, personalizedMessage, params);
+        if (r.ok) {
+          sentCount++;
+          sentWhatsapp++;
+        } else {
+          failedCount++;
+          failures.push({ name: t.name, channel: "WhatsApp", error: r.error });
+        }
+        continue;
+      }
+
+      // WhatsApp も無ければ Messenger
       if (t.messengerPsid) {
         const r = await sendMessenger(t.messengerPsid, personalizedMessage);
         if (r.ok) {
@@ -204,13 +314,6 @@ export async function POST(req: Request) {
           failedCount++;
           failures.push({ name: t.name, channel: "Messenger", error: r.error });
         }
-        continue;
-      }
-
-      // WhatsApp は今のところ未対応
-      if (t.whatsappId) {
-        skippedCount++;
-        failures.push({ name: t.name, channel: "WhatsApp", error: "WhatsApp は未対応" });
         continue;
       }
 
@@ -243,6 +346,7 @@ export async function POST(req: Request) {
       ok: true,
       sentCount,
       sentLine,
+      sentWhatsapp,
       sentMessenger,
       failedCount,
       skippedCount,

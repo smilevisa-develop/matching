@@ -5,11 +5,23 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   try {
     await requireApiAccount();
     const { id } = await params;
-    const { name, content } = await req.json();
+    const {
+      name,
+      content,
+      whatsappTemplateName,
+      whatsappTemplateLang,
+      whatsappTemplateParams,
+    } = await req.json();
     // メッセージテンプレートは全アカウントで共有
     const template = await prisma.messageTemplate.update({
       where: { id: Number(id) },
-      data: { name, content },
+      data: {
+        name,
+        content,
+        whatsappTemplateName: whatsappTemplateName || null,
+        whatsappTemplateLang: whatsappTemplateLang || null,
+        whatsappTemplateParams: whatsappTemplateParams || null,
+      },
     });
     return Response.json({ ok: true, template });
   } catch (e) {
