@@ -18,7 +18,9 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/api/whatsapp/webhook") ||
     // 候補者向け公開フォーム (intake) は token 認証で動作するため未ログイン可
     pathname.startsWith("/intake/") ||
-    pathname.startsWith("/api/intake/")
+    pathname.startsWith("/api/intake/") ||
+    // 法的文書ページ (Meta App Review 要件) は完全公開
+    pathname.startsWith("/legal/")
   ) {
     return NextResponse.next();
   }

@@ -9,11 +9,18 @@ export default async function ChatPage() {
   await requireCurrentAccount();
   await reconcileMessagePersonLinks();
 
-  const persons = await prisma.person.findMany({
+  const partners = await prisma.partner.findMany({
+    where: {
+      OR: [
+        { lineUserId: { not: null } },
+        { messengerPsid: { not: null } },
+      ],
+    },
     orderBy: { name: "asc" },
   });
 
   const messages = await prisma.message.findMany({
+    where: { partnerId: { not: null } },
     orderBy: { sentAt: "asc" },
     take: 500,
   });
@@ -25,15 +32,24 @@ export default async function ChatPage() {
 
   return (
     <ChatClient
-      persons={persons.map((p) => ({
-        id: p.id, name: p.name, channel: p.channel,
-        photoUrl: p.photoUrl,
-        lineUserId: p.lineUserId, messengerPsid: p.messengerPsid,
+      partners={partners.map((p) => ({
+        id: p.id,
+        name: p.name,
+        country: p.country,
+        channel: p.channel,
+        contactName: p.contactName,
+        lineUserId: p.lineUserId,
+        messengerPsid: p.messengerPsid,
+        whatsappId: p.whatsappId,
       }))}
       initialMessages={messages.map((m) => ({
-        id: m.id, personId: m.personId, channel: m.channel,
-        direction: m.direction, content: m.content,
-        sentAt: m.sentAt.toISOString(), readAt: m.readAt?.toISOString() ?? null,
+        id: m.id,
+        partnerId: m.partnerId,
+        channel: m.channel,
+        direction: m.direction,
+        content: m.content,
+        sentAt: m.sentAt.toISOString(),
+        readAt: m.readAt?.toISOString() ?? null,
       }))}
       templates={templates.map((t) => ({ id: t.id, name: t.name, content: t.content }))}
     />

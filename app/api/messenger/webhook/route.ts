@@ -117,6 +117,23 @@ export async function POST(req: Request) {
           lastSeenAt: seenAt,
         },
       });
+
+      // 本文があれば Message として記録 (Partner 優先 → Person フォールバック)
+      if (text) {
+        const partner = await prisma.partner.findFirst({ where: { messengerPsid: psid } });
+        const person = partner ? null : await prisma.person.findFirst({ where: { messengerPsid: psid } });
+        await prisma.message.create({
+          data: {
+            partnerId: partner?.id ?? null,
+            personId: person?.id ?? null,
+            channel: "Messenger",
+            direction: "inbound",
+            content: text,
+            externalId: psid,
+            sentAt: seenAt,
+          },
+        });
+      }
       upserts++;
     }
   }

@@ -8,11 +8,12 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
   if (searchParams.get("summary") === "true") {
+    // Partner / Person 両方の未読を合算
     const unreadInboundCount = await prisma.message.count({
       where: {
         direction: "inbound",
         readAt: null,
-        personId: { not: null },
+        OR: [{ personId: { not: null } }, { partnerId: { not: null } }],
       },
     });
 
@@ -29,12 +30,16 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   try {
     await reconcileMessagePersonLinks();
-    const { personId } = await req.json();
-    const normalizedPersonId = Number(personId);
+    const body = await req.json();
+    const personId = body?.personId !== undefined ? Number(body.personId) : null;
+    const partnerId = body?.partnerId !== undefined ? Number(body.partnerId) : null;
 
-    if (!Number.isInteger(normalizedPersonId) || normalizedPersonId <= 0) {
+    if (
+      (!personId || !Number.isInteger(personId) || personId <= 0) &&
+      (!partnerId || !Number.isInteger(partnerId) || partnerId <= 0)
+    ) {
       return Response.json(
-        { ok: false, error: "personId は正しい数値で指定してください" },
+        { ok: false, error: "personId か partnerId のどちらかを指定してください" },
         { status: 400 }
       );
     }
@@ -43,13 +48,12 @@ export async function PATCH(req: Request) {
 
     const result = await prisma.message.updateMany({
       where: {
-        personId: normalizedPersonId,
+        ...(personId ? { personId } : {}),
+        ...(partnerId ? { partnerId } : {}),
         direction: "inbound",
         readAt: null,
       },
-      data: {
-        readAt: now,
-      },
+      data: { readAt: now },
     });
 
     return Response.json({

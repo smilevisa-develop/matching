@@ -44,11 +44,13 @@ export async function POST(req: Request) {
         },
       });
 
-      // メッセージを Message テーブルに保存
+      // メッセージを Message テーブルに保存 (Partner 優先 → Person フォールバック)
       if (messageText) {
-        const person = await prisma.person.findFirst({ where: { lineUserId } });
+        const partner = await prisma.partner.findFirst({ where: { lineUserId } });
+        const person = partner ? null : await prisma.person.findFirst({ where: { lineUserId } });
         await prisma.message.create({
           data: {
+            partnerId: partner?.id ?? null,
             personId: person?.id ?? null,
             channel: "LINE",
             direction: "inbound",

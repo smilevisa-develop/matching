@@ -10,9 +10,11 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const isAuth = pathname.startsWith("/login");
   // 候補者向け公開フォーム (intake) は token 認証で動作するためサイドバーも認証チェックも不要
   const isIntake = pathname.startsWith("/intake");
+  // 法的文書ページ (Meta App Review 要件) は完全公開
+  const isLegal = pathname.startsWith("/legal");
 
   useEffect(() => {
-    if (isPortal || isAuth || isIntake) return;
+    if (isPortal || isAuth || isIntake || isLegal) return;
 
     const checkSession = async () => {
       try {
@@ -27,9 +29,9 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     };
 
     void checkSession();
-  }, [isAuth, isPortal, isIntake]);
+  }, [isAuth, isPortal, isIntake, isLegal]);
 
-  if (isPortal || isAuth || isIntake) {
+  if (isPortal || isAuth || isIntake || isLegal) {
     return (
       <body className={`min-h-full ${isAuth ? "bg-[var(--color-text-dark)] text-white" : "bg-[var(--color-light)] text-[var(--color-text-dark)]"}`}>
         {children}

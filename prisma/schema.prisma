@@ -134,6 +134,7 @@ model Partner {
   groupMembers GroupMember[]
   invoices    Invoice[]
   ratingHistory PartnerRatingHistory[]
+  messages    Message[]
 }
 
 model PartnerRatingHistory {
@@ -267,6 +268,9 @@ model Message {
   id         Int       @id @default(autoincrement())
   personId   Int?
   person     Person?   @relation(fields: [personId], references: [id], onDelete: SetNull)
+  /// パートナー宛/送信元メッセージ用 (person と排他、両方 null の場合は未紐づけ)
+  partnerId  Int?
+  partner    Partner?  @relation(fields: [partnerId], references: [id], onDelete: SetNull)
   channel    String
   direction  String
   content    String
