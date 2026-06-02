@@ -75,25 +75,23 @@ export type PartnerForBroadcast = {
   introducibleFields: string | null; // CSV
 };
 
-/** Deal 1 件を箇条書き行にフォーマット (分野 / 勤務地 / 基本給 / 締切) */
+/** Deal 1 件を 1 行にフォーマット: 案件ID / 分野 / 勤務地 / 基本給 / 〆締切 */
 function formatDealLine(d: DealForBroadcast): string {
-  const meta: string[] = [];
-  if (d.field) meta.push(`分野: ${d.field}`);
-  if (d.workLocation) meta.push(`勤務地: ${d.workLocation}`);
-  if (d.basicSalary) meta.push(`基本給: ${d.basicSalary}`);
+  const parts: string[] = [`#${d.id}`];
+  if (d.field) parts.push(`分野: ${d.field}`);
+  if (d.workLocation) parts.push(`勤務地: ${d.workLocation}`);
+  if (d.basicSalary) parts.push(`基本給: ${d.basicSalary}`);
   if (d.deadline) {
     const dl = new Date(d.deadline);
-    meta.push(`〆${dl.getFullYear()}/${dl.getMonth() + 1}/${dl.getDate()}`);
+    parts.push(`〆${dl.getFullYear()}/${dl.getMonth() + 1}/${dl.getDate()}`);
   }
-  const tag = d.status === "至急募集" ? "【至急】" : "";
-  const head = `・${tag}${d.title} (${d.companyName})`;
-  if (meta.length === 0) return head;
-  return `${head}\n   ${meta.join(" / ")}`;
+  return parts.join(" / ");
 }
 
 function formatDealList(deals: DealForBroadcast[]): string {
   if (deals.length === 0) return "(該当する案件はありません)";
-  return deals.map(formatDealLine).join("\n");
+  // 各案件の間に空行を入れて見やすく
+  return deals.map(formatDealLine).join("\n\n");
 }
 
 /**
