@@ -15,7 +15,7 @@ export default async function BroadcastPage() {
     prisma.deal.findMany({
       where: { status: { in: [...OPEN_DEAL_STATUSES] } },
       include: { company: { select: { name: true } } },
-      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      orderBy: { id: "asc" },
     }),
   ]);
 

@@ -16,7 +16,7 @@ async function loadDealSnapshot(): Promise<{
   const deals = await prisma.deal.findMany({
     where: { status: { in: [...OPEN_DEAL_STATUSES] } },
     include: { company: { select: { name: true } } },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    orderBy: { id: "asc" },
   });
   const mapped = deals.map(dealToBroadcast);
   return {
