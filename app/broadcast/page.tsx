@@ -1,17 +1,28 @@
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
 import BroadcastClient from "./BroadcastClient";
+import { OPEN_DEAL_STATUSES, dealToBroadcast } from "@/lib/broadcast-variables";
 
 export const dynamic = "force-dynamic";
 
 export default async function BroadcastPage() {
   await requireCurrentAccount();
-  const [partners, templates, groups] = await Promise.all([
+  const [partners, templates, groups, openDealsRaw] = await Promise.all([
     prisma.partner.findMany({ orderBy: { name: "asc" } }),
     // 連絡テンプレートは全アカウント共通
     prisma.messageTemplate.findMany({ orderBy: { name: "asc" } }),
     prisma.group.findMany({ include: { members: true }, orderBy: { name: "asc" } }),
+    prisma.deal.findMany({
+      where: { status: { in: [...OPEN_DEAL_STATUSES] } },
+      include: { company: { select: { name: true } } },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    }),
   ]);
+
+  const openDeals = openDealsRaw.map(dealToBroadcast).map((d) => ({
+    ...d,
+    deadline: d.deadline ? d.deadline.toISOString() : null,
+  }));
 
   return (
     <div className="p-8 space-y-6">
@@ -42,6 +53,7 @@ export default async function BroadcastPage() {
         }))}
         templates={templates.map((t) => ({ id: t.id, name: t.name, content: t.content }))}
         groups={groups.map((g) => ({ id: g.id, name: g.name, memberCount: g.members.length }))}
+        openDeals={openDeals}
       />
     </div>
   );

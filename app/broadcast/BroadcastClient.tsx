@@ -1,12 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   INTRODUCIBLE_FIELDS,
   INTRODUCIBLE_NATIONALITIES,
   RELATIONSHIP_STATUSES,
   parseCsv,
 } from "@/lib/partner-profile";
+import {
+  BROADCAST_VARIABLES,
+  URGENT_DEAL_STATUSES,
+  expandTemplate,
+  PREVIEW_PARTNER,
+  type DealForBroadcast,
+  type PartnerForBroadcast,
+} from "@/lib/broadcast-variables";
+
+type DealJson = Omit<DealForBroadcast, "deadline"> & { deadline: string | null };
 
 type Partner = {
   id: number;
@@ -35,11 +45,26 @@ export default function BroadcastClient({
   partners,
   templates,
   groups,
+  openDeals: openDealsRaw,
 }: {
   partners: Partner[];
   templates: Template[];
   groups: Group[];
+  openDeals: DealJson[];
 }) {
+  const openDeals: DealForBroadcast[] = useMemo(
+    () =>
+      openDealsRaw.map((d) => ({
+        ...d,
+        deadline: d.deadline ? new Date(d.deadline) : null,
+      })),
+    [openDealsRaw]
+  );
+  const urgentDeals = useMemo(
+    () => openDeals.filter((d) => (URGENT_DEAL_STATUSES as readonly string[]).includes(d.status)),
+    [openDeals]
+  );
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mode, setMode] = useState<"filter" | "group">("filter");
   const [relationshipStatus, setRelationshipStatus] = useState(ALL);
   const [introNationality, setIntroNationality] = useState(ALL);
@@ -70,6 +95,42 @@ export default function BroadcastClient({
     if (t) setMessage(t.content);
     setSelectedTemplate(id);
   };
+
+  /** カーソル位置に変数を挿入 */
+  const insertVariable = (variable: string) => {
+    const el = textareaRef.current;
+    if (!el) {
+      setMessage((m) => m + variable);
+      return;
+    }
+    const start = el.selectionStart ?? message.length;
+    const end = el.selectionEnd ?? message.length;
+    const next = message.slice(0, start) + variable + message.slice(end);
+    setMessage(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + variable.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  /** プレビュー: 1 件目のパートナーで変数展開 (なければダミー) */
+  const previewMessage = useMemo(() => {
+    if (!message.trim()) return "";
+    const samplePartner: PartnerForBroadcast =
+      mode === "filter" && filtered.length > 0
+        ? {
+            name: filtered[0].name,
+            contactName: filtered[0].contactName,
+            country: filtered[0].country,
+            introducibleFields: filtered[0].introducibleFields,
+          }
+        : PREVIEW_PARTNER;
+    return expandTemplate(message, { partner: samplePartner, openDeals, urgentDeals });
+  }, [message, mode, filtered, openDeals, urgentDeals]);
+
+  const previewPartnerName =
+    mode === "filter" && filtered.length > 0 ? filtered[0].name : "サンプル";
 
   const handleSend = async (scheduled = false) => {
     if (!message.trim()) {
@@ -176,7 +237,12 @@ export default function BroadcastClient({
 
         {/* メッセージ */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-          <p className="text-sm font-semibold text-[var(--color-text-dark)] mb-3">メッセージ</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-[var(--color-text-dark)]">メッセージ</p>
+            <p className="text-[10px] text-gray-400">
+              急ぎ案件 {urgentDeals.length} 件 / 募集中 {openDeals.length} 件
+            </p>
+          </div>
           <Select
             label="テンプレート"
             value={selectedTemplate}
@@ -185,12 +251,46 @@ export default function BroadcastClient({
             labels={["テンプレートを選択", ...templates.map((t) => t.name)]}
           />
           <textarea
-            className="w-full mt-3 border border-gray-300 rounded-lg px-3 py-2 text-sm h-28 resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
-            placeholder="配信するメッセージを入力..."
+            ref={textareaRef}
+            className="w-full mt-3 border border-gray-300 rounded-lg px-3 py-2 text-sm h-32 resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
+            placeholder={"{{パートナー名}} 様\n\n現在の急ぎ案件です:\n{{急ぎ案件一覧}}"}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
           />
+          {/* 変数挿入チップ */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {BROADCAST_VARIABLES.map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                onClick={() => insertVariable(v.label)}
+                title={v.description}
+                className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                  v.category === "案件"
+                    ? "border-[#FCA5A5] bg-[#FEF2F2] text-[#B91C1C] hover:bg-[#FEE2E2]"
+                    : "border-gray-300 bg-white text-gray-600 hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+                }`}
+              >
+                + {v.label}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* 展開プレビュー */}
+        {message.trim() ? (
+          <div className="bg-[#FAF9F5] rounded-xl border border-gray-200 p-5 shadow-sm">
+            <div className="flex items-baseline justify-between mb-2">
+              <p className="text-sm font-semibold text-[var(--color-text-dark)]">展開プレビュー</p>
+              <p className="text-[11px] text-gray-500">
+                {previewPartnerName} 宛のサンプル
+              </p>
+            </div>
+            <pre className="whitespace-pre-wrap text-[13px] text-[var(--color-text-dark)] font-sans">
+              {previewMessage}
+            </pre>
+          </div>
+        ) : null}
       </div>
 
       {/* 右: プレビュー

@@ -266,11 +266,13 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
               ))}
             </select>
           </Field>
-          <Field label="連絡先紐づけ">
-            <select className={INPUT} value={form.linkStatus} onChange={(e) => set("linkStatus", e.target.value)}>
-              <option value="未">未</option>
-              <option value="完了">完了</option>
-            </select>
+          <Field label="連絡先紐づけ" className="md:col-span-2">
+            <LinkStatusDisplay
+              linkStatus={form.linkStatus}
+              lineUserId={initial.lineUserId}
+              messengerPsid={initial.messengerPsid}
+              whatsappId={initial.whatsappId}
+            />
           </Field>
         </Group>
 
@@ -434,33 +436,6 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
         </section>
       ) : null}
 
-      {/* 連絡先 ID (読み取り専用) */}
-      {(initial.lineUserId || initial.messengerPsid || initial.whatsappId) ? (
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-base font-semibold text-[var(--color-text-dark)]">連絡先 ID</h2>
-          <dl className="mt-3 grid gap-2 text-sm md:grid-cols-3">
-            {initial.lineUserId ? (
-              <div>
-                <dt className="text-xs text-gray-500">LINE ID</dt>
-                <dd className="font-mono text-[12.5px] text-[var(--color-text-dark)] truncate">{initial.lineUserId}</dd>
-              </div>
-            ) : null}
-            {initial.messengerPsid ? (
-              <div>
-                <dt className="text-xs text-gray-500">Messenger PSID</dt>
-                <dd className="font-mono text-[12.5px] text-[var(--color-text-dark)] truncate">{initial.messengerPsid}</dd>
-              </div>
-            ) : null}
-            {initial.whatsappId ? (
-              <div>
-                <dt className="text-xs text-gray-500">WhatsApp</dt>
-                <dd className="font-mono text-[12.5px] text-[var(--color-text-dark)] truncate">{initial.whatsappId}</dd>
-              </div>
-            ) : null}
-          </dl>
-        </section>
-      ) : null}
-
       {/* 実績サマリー */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-base font-semibold text-[var(--color-text-dark)]">過去の実績</h2>
@@ -595,6 +570,63 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
           </>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+function LinkStatusDisplay({
+  linkStatus,
+  lineUserId,
+  messengerPsid,
+  whatsappId,
+}: {
+  linkStatus: string;
+  lineUserId: string | null;
+  messengerPsid: string | null;
+  whatsappId: string | null;
+}) {
+  const ids: { label: string; value: string }[] = [];
+  if (lineUserId) ids.push({ label: "LINE", value: lineUserId });
+  if (messengerPsid) ids.push({ label: "Messenger", value: messengerPsid });
+  if (whatsappId) ids.push({ label: "WhatsApp", value: whatsappId });
+  const isLinked = ids.length > 0 || linkStatus === "完了";
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+            isLinked
+              ? "bg-[#DCFCE7] text-[#15803D]"
+              : "bg-gray-100 text-gray-500"
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              isLinked ? "bg-[#15803D]" : "bg-gray-400"
+            }`}
+          />
+          {isLinked ? "完了" : "未"}
+        </span>
+        {!isLinked ? (
+          <Link href="/partners/link" className="text-[11px] text-[var(--color-primary)] hover:underline">
+            連絡先紐づけページへ →
+          </Link>
+        ) : null}
+      </div>
+      {ids.length > 0 ? (
+        <dl className="grid gap-2 text-sm md:grid-cols-3">
+          {ids.map((id) => (
+            <div key={id.label} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <dt className="text-[10px] uppercase tracking-wider text-gray-500">{id.label}</dt>
+              <dd className="mt-0.5 font-mono text-[12.5px] text-[var(--color-text-dark)] truncate">{id.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="text-[11px] text-gray-400">
+          LINE / Messenger / WhatsApp の ID はまだ紐づけられていません。
+        </p>
+      )}
     </div>
   );
 }

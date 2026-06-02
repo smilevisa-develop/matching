@@ -1,4 +1,31 @@
 import { prisma } from "@/lib/prisma";
+import {
+  expandTemplate,
+  dealToBroadcast,
+  OPEN_DEAL_STATUSES,
+  URGENT_DEAL_STATUSES,
+  type DealForBroadcast,
+  type PartnerForBroadcast,
+} from "@/lib/broadcast-variables";
+
+/** 配信時の案件スナップショットを 1 回だけ取得 */
+async function loadDealSnapshot(): Promise<{
+  openDeals: DealForBroadcast[];
+  urgentDeals: DealForBroadcast[];
+}> {
+  const deals = await prisma.deal.findMany({
+    where: { status: { in: [...OPEN_DEAL_STATUSES] } },
+    include: { company: { select: { name: true } } },
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+  });
+  const mapped = deals.map(dealToBroadcast);
+  return {
+    openDeals: mapped,
+    urgentDeals: mapped.filter((d) =>
+      (URGENT_DEAL_STATUSES as readonly string[]).includes(d.status),
+    ),
+  };
+}
 
 export async function POST(req: Request) {
   try {
@@ -27,6 +54,9 @@ export async function POST(req: Request) {
     type Target = {
       id: number;
       name: string;
+      contactName: string | null;
+      country: string | null;
+      introducibleFields: string | null;
       lineUserId: string | null;
       messengerPsid: string | null;
       whatsappId: string | null;
@@ -41,6 +71,9 @@ export async function POST(req: Request) {
       targets = (group?.members ?? []).map((m) => ({
         id: m.partner.id,
         name: m.partner.name,
+        contactName: m.partner.contactName,
+        country: m.partner.country,
+        introducibleFields: m.partner.introducibleFields,
         lineUserId: m.partner.lineUserId,
         messengerPsid: m.partner.messengerPsid,
         whatsappId: m.partner.whatsappId,
@@ -55,11 +88,26 @@ export async function POST(req: Request) {
       targets = partners.map((p) => ({
         id: p.id,
         name: p.name,
+        contactName: p.contactName,
+        country: p.country,
+        introducibleFields: p.introducibleFields,
         lineUserId: p.lineUserId,
         messengerPsid: p.messengerPsid,
         whatsappId: p.whatsappId,
       }));
     }
+
+    // 変数展開のため案件スナップショットを 1 回ロード
+    const { openDeals, urgentDeals } = await loadDealSnapshot();
+    const renderFor = (t: Target): string => {
+      const partner: PartnerForBroadcast = {
+        name: t.name,
+        contactName: t.contactName,
+        country: t.country,
+        introducibleFields: t.introducibleFields,
+      };
+      return expandTemplate(message, { partner, openDeals, urgentDeals });
+    };
 
     if (scheduledAt) {
       await prisma.messageLog.create({
@@ -103,10 +151,11 @@ export async function POST(req: Request) {
         continue;
       }
 
+      const personalizedMessage = renderFor(t);
       const res = await fetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ to, messages: [{ type: "text", text: message }] }),
+        body: JSON.stringify({ to, messages: [{ type: "text", text: personalizedMessage }] }),
       });
 
       if (res.ok) {
