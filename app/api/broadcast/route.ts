@@ -442,6 +442,7 @@ export async function POST(req: Request) {
       sentEmail,
       failedCount,
       skippedCount,
+      failures,
     });
   } catch (e) {
     return Response.json({ ok: false, error: e instanceof Error ? e.message : "error" }, { status: 500 });

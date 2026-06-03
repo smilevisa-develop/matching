@@ -216,11 +216,21 @@ export default function BroadcastClient({
       });
       const data = await res.json();
       if (data.ok) {
-        alert(
-          scheduled
-            ? `予約完了: ${data.scheduledAt} に ${data.targetCount} 件へ送信予定`
-            : `送信完了: ${data.sentCount} 件成功 (LINEグループ ${data.sentLineGroup ?? 0} / LINE個人 ${data.sentLine ?? 0} / WhatsApp ${data.sentWhatsapp ?? 0} / Messenger ${data.sentMessenger ?? 0} / メール ${data.sentEmail ?? 0}) / ${data.failedCount} 件失敗`
-        );
+        const summary = scheduled
+          ? `予約完了: ${data.scheduledAt} に ${data.targetCount} 件へ送信予定`
+          : `送信完了: ${data.sentCount} 件成功 (LINEグループ ${data.sentLineGroup ?? 0} / LINE個人 ${data.sentLine ?? 0} / WhatsApp ${data.sentWhatsapp ?? 0} / Messenger ${data.sentMessenger ?? 0} / メール ${data.sentEmail ?? 0}) / ${data.failedCount} 件失敗`;
+        // 失敗の詳細があれば一緒に表示 (デバッグ用)
+        const failureDetails: { name: string; channel: string; error: string }[] = data.failures ?? [];
+        if (failureDetails.length > 0) {
+          const lines = failureDetails
+            .slice(0, 10)
+            .map((f) => `・${f.name} (${f.channel}): ${f.error.slice(0, 120)}`)
+            .join("\n");
+          const more = failureDetails.length > 10 ? `\n... 他 ${failureDetails.length - 10} 件` : "";
+          alert(`${summary}\n\n失敗詳細:\n${lines}${more}`);
+        } else {
+          alert(summary);
+        }
         setShowSchedule(false);
       } else {
         alert(`送信失敗: ${data.error}`);
