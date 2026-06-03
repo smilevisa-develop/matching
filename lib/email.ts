@@ -5,13 +5,15 @@
  * 返信は SMTP_USER (送信元) の受信箱に直接届く。
  *
  * 環境変数:
- *   SMTP_HOST  = smtp.gmail.com
- *   SMTP_PORT  = 587  (TLS / STARTTLS)
- *   SMTP_USER  = recruit@croslan.co.jp
- *   SMTP_PASS  = (Google アプリパスワード 16 文字)
- *   SMTP_FROM  = SMILE MATCHING <recruit@croslan.co.jp>
- *
- * SMTP_FROM を別アドレスにしても、SMTP_USER の受信箱に届けば返信を確認可能。
+ *   SMTP_HOST     = smtp.gmail.com
+ *   SMTP_PORT     = 587  (TLS / STARTTLS)
+ *   SMTP_USER     = 認証アカウント (例: kodai.tsuchida@smilevisa.jp)
+ *   SMTP_PASS     = (Google アプリパスワード 16 文字)
+ *   SMTP_FROM     = 表示用差出人 (例: SMILE MATCHING <info@smilevisa.jp>)
+ *                   ※ SMTP_USER と同じか、その Send-as に追加済みのアドレスでないと
+ *                   Gmail が From を書き換えるので注意
+ *   SMTP_REPLY_TO = 返信先 (例: info@smilevisa.jp)
+ *                   省略時は SMTP_FROM の宛先に返信が届く
  */
 import nodemailer, { type Transporter } from "nodemailer";
 
@@ -68,6 +70,8 @@ export async function sendEmail(opts: {
     return { ok: false, error: "SMTP_FROM または SMTP_USER が必要です" };
   }
 
+  const replyTo = opts.replyTo ?? process.env.SMTP_REPLY_TO ?? undefined;
+
   try {
     const info = await transporter.sendMail({
       from,
@@ -75,7 +79,7 @@ export async function sendEmail(opts: {
       subject: opts.subject,
       text: opts.text,
       html: opts.html,
-      replyTo: opts.replyTo,
+      replyTo,
     });
     return { ok: true, id: info.messageId };
   } catch (e) {
