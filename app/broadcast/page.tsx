@@ -8,7 +8,16 @@ export const dynamic = "force-dynamic";
 export default async function BroadcastPage() {
   await requireCurrentAccount();
   const [partners, templates, groups, openDealsRaw] = await Promise.all([
-    prisma.partner.findMany({ orderBy: { name: "asc" } }),
+    prisma.partner.findMany({
+      orderBy: { name: "asc" },
+      include: {
+        lineGroups: {
+          where: { isActive: true },
+          select: { groupId: true, groupName: true },
+          take: 1,
+        },
+      },
+    }),
     // 連絡テンプレートは全アカウント共通
     prisma.messageTemplate.findMany({ orderBy: { name: "asc" } }),
     prisma.group.findMany({ include: { members: true }, orderBy: { name: "asc" } }),
@@ -41,6 +50,8 @@ export default async function BroadcastPage() {
           linkStatus: p.linkStatus,
           contactName: p.contactName,
           lineUserId: p.lineUserId,
+          lineGroupName: p.lineGroups[0]?.groupName ?? null,
+          lineGroupId: p.lineGroups[0]?.groupId ?? null,
           messengerPsid: p.messengerPsid,
           whatsappId: p.whatsappId,
           relationshipStatus: p.relationshipStatus,

@@ -44,6 +44,13 @@ export async function POST(req: Request) {
 
     const partner = await prisma.partner.findUnique({
       where: { id: Number(partnerId) },
+      include: {
+        lineGroups: {
+          where: { isActive: true },
+          orderBy: { lastSeenAt: "desc" },
+          take: 1,
+        },
+      },
     });
     if (!partner) {
       return Response.json(
@@ -51,6 +58,7 @@ export async function POST(req: Request) {
         { status: 404 }
       );
     }
+    const linkedGroup = partner.lineGroups[0] ?? null;
 
     // {{変数}} の展開
     let expandedMessage = message as string;
@@ -65,8 +73,9 @@ export async function POST(req: Request) {
       expandedMessage = expandTemplate(expandedMessage, { partner: ctx, openDeals, urgentDeals });
     }
 
-    // LINE 優先 → Messenger フォールバック
-    if (partner.lineUserId) {
+    // 1️⃣ LINE グループ優先 → 2️⃣ 個人 LINE → 3️⃣ Messenger
+    const lineSendTo = linkedGroup?.groupId ?? partner.lineUserId ?? null;
+    if (lineSendTo) {
       const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
       if (!token) {
         return Response.json(
@@ -81,7 +90,7 @@ export async function POST(req: Request) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          to: partner.lineUserId,
+          to: lineSendTo,
           messages: [{ type: "text", text: expandedMessage }],
         }),
       });
@@ -91,16 +100,17 @@ export async function POST(req: Request) {
           { status: 500 }
         );
       }
+      const channel = linkedGroup ? "LINE-Group" : "LINE";
       await prisma.message.create({
         data: {
           partnerId: partner.id,
-          channel: "LINE",
+          channel,
           direction: "outbound",
           content: expandedMessage,
-          externalId: partner.lineUserId,
+          externalId: lineSendTo,
         },
       });
-      return Response.json({ ok: true, channel: "LINE", content: expandedMessage });
+      return Response.json({ ok: true, channel, content: expandedMessage });
     }
 
     if (partner.messengerPsid) {

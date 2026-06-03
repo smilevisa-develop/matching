@@ -7,13 +7,32 @@ import { useEffect, useMemo, useRef, useState } from "react";
 type PartnerOption = { id: number; name: string };
 type LineEntry = { lineUserId: string; displayName: string | null; lastMessageText: string | null; lastSeenAt: string };
 type MessengerEntry = { psid: string; lastMessageText: string | null; lastSeenAt: string };
+type UnlinkedGroupEntry = {
+  id: number;
+  groupId: string;
+  groupName: string | null;
+  memberCount: number | null;
+  lastMessageText: string | null;
+  lastSeenAt: string;
+};
+type LinkedGroupEntry = {
+  id: number;
+  groupId: string;
+  groupName: string | null;
+  memberCount: number | null;
+  partnerName: string | null;
+};
 
 export default function LinkPageClient({
   partners,
+  unlinkedLineGroups,
+  linkedLineGroups,
   unlinkedLine,
   unlinkedMessenger,
 }: {
   partners: PartnerOption[];
+  unlinkedLineGroups: UnlinkedGroupEntry[];
+  linkedLineGroups: LinkedGroupEntry[];
   unlinkedLine: LineEntry[];
   unlinkedMessenger: MessengerEntry[];
 }) {
@@ -34,10 +53,90 @@ export default function LinkPageClient({
     router.refresh();
   };
 
+  const linkGroup = async (lineGroupDbId: number, partnerId: number | null) => {
+    const target = unlinkedLineGroups.find((g) => g.id === lineGroupDbId)
+      ?? linkedLineGroups.find((g) => g.id === lineGroupDbId);
+    if (!target) return;
+    const res = await fetch(`/api/line/groups/${encodeURIComponent(target.groupId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ partnerId }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(`紐づけ失敗: ${data.error ?? "unknown"}`);
+      return;
+    }
+    alert(partnerId ? "紐づけ完了" : "紐づけ解除しました");
+    router.refresh();
+  };
+
   return (
     <div className="space-y-8">
+      {/* === LINE グループ === */}
       <Section
-        title="LINE"
+        title="LINE グループ"
+        sub="パートナー会社単位のグループチャット。1 つ紐づけると会社全員に届く。"
+        badgeColor="bg-[#DCFCE7] text-[#166534] border-[#BBF7D0]"
+        count={unlinkedLineGroups.length}
+      >
+        {unlinkedLineGroups.map((entry) => (
+          <GroupRow
+            key={entry.id}
+            label={entry.groupName ?? "(名称不明グループ)"}
+            id={entry.groupId}
+            memberCount={entry.memberCount}
+            lastMessage={entry.lastMessageText}
+            lastSeen={entry.lastSeenAt}
+            partners={partners}
+            onLink={(partnerId) => linkGroup(entry.id, partnerId)}
+          />
+        ))}
+        {unlinkedLineGroups.length === 0 ? (
+          <Empty text="未紐づけの LINE グループはありません (Bot がグループに招待されると自動で表示)" />
+        ) : null}
+      </Section>
+
+      {linkedLineGroups.length > 0 ? (
+        <Section
+          title="紐づけ済み LINE グループ"
+          sub="解除すると配信対象から外れます"
+          badgeColor="bg-gray-100 text-gray-600 border-gray-200"
+          count={linkedLineGroups.length}
+        >
+          {linkedLineGroups.map((g) => (
+            <div
+              key={g.id}
+              className="flex items-center gap-4 px-4 py-3"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[var(--color-text-dark)] truncate">
+                  {g.groupName ?? "(名称不明)"}
+                  {g.memberCount ? (
+                    <span className="ml-2 text-[11px] text-gray-400">{g.memberCount} 名</span>
+                  ) : null}
+                </p>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  → <span className="font-medium text-[var(--color-text-dark)]">{g.partnerName}</span>
+                </p>
+                <p className="mt-0.5 font-mono text-[10px] text-gray-400 truncate">{g.groupId}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => linkGroup(g.id, null)}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+              >
+                紐づけ解除
+              </button>
+            </div>
+          ))}
+        </Section>
+      ) : null}
+
+      {/* === 個人 LINE === */}
+      <Section
+        title="個人 LINE (1:1)"
+        sub="グループ未対応のパートナー用 (会社にグループが無い場合の代替)"
         badgeColor="bg-[#DCFCE7] text-[#166534] border-[#BBF7D0]"
         count={unlinkedLine.length}
       >
@@ -55,8 +154,10 @@ export default function LinkPageClient({
         {unlinkedLine.length === 0 ? <Empty text="未紐づけの LINE ユーザーはいません" /> : null}
       </Section>
 
+      {/* === Messenger === */}
       <Section
         title="Messenger"
+        sub=""
         badgeColor="bg-[#DBEAFE] text-[#1D4ED8] border-[#BFDBFE]"
         count={unlinkedMessenger.length}
       >
@@ -75,7 +176,11 @@ export default function LinkPageClient({
       </Section>
 
       <p className="text-xs text-gray-500">
-        紐づけたいパートナーが一覧に無い場合は <Link href="/partners" className="text-[var(--color-primary)] hover:underline">パートナーリスト</Link> で先に登録してください。
+        紐づけたいパートナーが一覧に無い場合は{" "}
+        <Link href="/partners" className="text-[var(--color-primary)] hover:underline">
+          パートナーリスト
+        </Link>{" "}
+        で先に登録してください。
       </p>
     </div>
   );
@@ -83,11 +188,13 @@ export default function LinkPageClient({
 
 function Section({
   title,
+  sub,
   badgeColor,
   count,
   children,
 }: {
   title: string;
+  sub?: string;
   badgeColor: string;
   count: number;
   children: React.ReactNode;
@@ -98,9 +205,60 @@ function Section({
         <span className={`rounded-full border px-3 py-1 text-sm font-semibold ${badgeColor}`}>{title}</span>
         <span className="text-sm text-gray-500">{count} 件</span>
       </div>
+      {sub ? <p className="mb-2 text-xs text-gray-400">{sub}</p> : null}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm divide-y divide-gray-100">
         {children}
       </div>
+    </div>
+  );
+}
+
+function GroupRow({
+  label,
+  id,
+  memberCount,
+  lastMessage,
+  lastSeen,
+  partners,
+  onLink,
+}: {
+  label: string;
+  id: string;
+  memberCount: number | null;
+  lastMessage: string | null;
+  lastSeen: string;
+  partners: PartnerOption[];
+  onLink: (partnerId: number) => void;
+}) {
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  return (
+    <div className="flex items-center gap-4 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-[var(--color-text-dark)] truncate">
+          {label}
+          {memberCount ? (
+            <span className="ml-2 text-[11px] text-gray-400">{memberCount} 名</span>
+          ) : null}
+        </p>
+        <p className="font-mono text-[10px] text-gray-400 truncate">{id}</p>
+        <p className="mt-0.5 text-xs text-gray-400 truncate">
+          最新: {lastMessage ?? "（メッセージなし）"} · {new Date(lastSeen).toLocaleString("ja-JP")}
+        </p>
+      </div>
+      <PartnerCombobox partners={partners} value={selectedId} onChange={setSelectedId} />
+      <button
+        type="button"
+        onClick={() => {
+          if (!selectedId) {
+            alert("パートナーを選択してください");
+            return;
+          }
+          onLink(selectedId);
+        }}
+        className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-primary-hover)]"
+      >
+        紐づけ
+      </button>
     </div>
   );
 }
@@ -129,15 +287,10 @@ function ProfileRow({
         ) : null}
         <p className="font-mono text-xs text-gray-500 truncate">{id}</p>
         <p className="mt-0.5 text-xs text-gray-400 truncate">
-          最新: {lastMessage ?? "（メッセージなし）"} ·{" "}
-          {new Date(lastSeen).toLocaleString("ja-JP")}
+          最新: {lastMessage ?? "（メッセージなし）"} · {new Date(lastSeen).toLocaleString("ja-JP")}
         </p>
       </div>
-      <PartnerCombobox
-        partners={partners}
-        value={selectedId}
-        onChange={setSelectedId}
-      />
+      <PartnerCombobox partners={partners} value={selectedId} onChange={setSelectedId} />
       <button
         type="button"
         onClick={() => {
@@ -175,11 +328,10 @@ function PartnerCombobox({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return partners.slice(0, 50); // 検索なしのときは先頭 50 件だけ表示
+    if (!q) return partners.slice(0, 50);
     return partners.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 100);
   }, [partners, query]);
 
-  // 外側クリックで閉じる
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {

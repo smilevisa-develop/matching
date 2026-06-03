@@ -85,15 +85,25 @@ export async function POST(req: Request) {
       country: string | null;
       introducibleFields: string | null;
       lineUserId: string | null;
+      /** 紐づけ済み LINE グループの groupId (会社単位の配信先) */
+      lineGroupId: string | null;
       messengerPsid: string | null;
       whatsappId: string | null;
     };
     let targets: Target[] = [];
 
+    const includeLineGroups = {
+      lineGroups: {
+        where: { isActive: true },
+        orderBy: { lastSeenAt: "desc" as const },
+        take: 1,
+      },
+    };
+
     if (mode === "group" && groupId) {
       const group = await prisma.group.findUnique({
         where: { id: groupId },
-        include: { members: { include: { partner: true } } },
+        include: { members: { include: { partner: { include: includeLineGroups } } } },
       });
       targets = (group?.members ?? []).map((m) => ({
         id: m.partner.id,
@@ -102,6 +112,7 @@ export async function POST(req: Request) {
         country: m.partner.country,
         introducibleFields: m.partner.introducibleFields,
         lineUserId: m.partner.lineUserId,
+        lineGroupId: m.partner.lineGroups[0]?.groupId ?? null,
         messengerPsid: m.partner.messengerPsid,
         whatsappId: m.partner.whatsappId,
       }));
@@ -111,7 +122,7 @@ export async function POST(req: Request) {
       // CSV カラムは contains で簡易検索
       if (introNationality) where.introducibleNationalities = { contains: introNationality };
       if (introField) where.introducibleFields = { contains: introField };
-      const partners = await prisma.partner.findMany({ where });
+      const partners = await prisma.partner.findMany({ where, include: includeLineGroups });
       targets = partners.map((p) => ({
         id: p.id,
         name: p.name,
@@ -119,6 +130,7 @@ export async function POST(req: Request) {
         country: p.country,
         introducibleFields: p.introducibleFields,
         lineUserId: p.lineUserId,
+        lineGroupId: p.lineGroups[0]?.groupId ?? null,
         messengerPsid: p.messengerPsid,
         whatsappId: p.whatsappId,
       }));
@@ -274,10 +286,24 @@ export async function POST(req: Request) {
       return { ok: false, error: await res.text() };
     };
 
+    let sentLineGroup = 0;
     for (const t of targets) {
       const personalizedMessage = renderFor(t);
 
-      // LINE 優先
+      // 1️⃣ LINE グループ (パートナー会社の LINE グループ) 優先
+      if (t.lineGroupId) {
+        const r = await sendLine(t.lineGroupId, personalizedMessage);
+        if (r.ok) {
+          sentCount++;
+          sentLineGroup++;
+        } else {
+          failedCount++;
+          failures.push({ name: t.name, channel: "LINE-Group", error: r.error });
+        }
+        continue;
+      }
+
+      // 2️⃣ 個人 LINE
       if (t.lineUserId) {
         const r = await sendLine(t.lineUserId, personalizedMessage);
         if (r.ok) {
@@ -345,6 +371,7 @@ export async function POST(req: Request) {
     return Response.json({
       ok: true,
       sentCount,
+      sentLineGroup,
       sentLine,
       sentWhatsapp,
       sentMessenger,

@@ -135,6 +135,7 @@ model Partner {
   invoices    Invoice[]
   ratingHistory PartnerRatingHistory[]
   messages    Message[]
+  lineGroups  LineGroup[]
 }
 
 model PartnerRatingHistory {
@@ -238,6 +239,32 @@ model LineProfile {
   lastMessageText String?
   lastWebhookType String?
   lastSeenAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+/// Bot が招待された LINE グループ / 複数人チャット
+model LineGroup {
+  id              Int      @id @default(autoincrement())
+  /// LINE 側の group ID (グループ) or room ID (複数人チャット)
+  groupId         String   @unique
+  /// "group" or "room"
+  sourceType      String   @default("group")
+  /// グループ名 (LINE API で取得)
+  groupName       String?
+  /// グループメンバー数 (取得時のスナップショット)
+  memberCount     Int?
+  /// 紐づけ済みパートナー (nullable - 未紐づけ状態あり)
+  partnerId       Int?
+  partner         Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  /// 最終受信メッセージ本文
+  lastMessageText String?
+  /// 最終 webhook イベントタイプ
+  lastWebhookType String?
+  /// 最終アクセス日時
+  lastSeenAt      DateTime @default(now())
+  /// Bot がまだグループに在籍しているか (leave イベントで false に)
+  isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
