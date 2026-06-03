@@ -71,6 +71,7 @@ export default function BroadcastClient({
   const [relationshipStatus, setRelationshipStatus] = useState(ALL);
   const [introNationality, setIntroNationality] = useState(ALL);
   const [introField, setIntroField] = useState(ALL);
+  const [linkFilter, setLinkFilter] = useState<"all" | "linked" | "unlinked">("linked");
   const [selectedGroup, setSelectedGroup] = useState("");
   const [message, setMessage] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -84,9 +85,12 @@ export default function BroadcastClient({
         if (relationshipStatus !== ALL && (p.relationshipStatus ?? "") !== relationshipStatus) return false;
         if (introNationality !== ALL && !parseCsv(p.introducibleNationalities).includes(introNationality)) return false;
         if (introField !== ALL && !parseCsv(p.introducibleFields).includes(introField)) return false;
+        const isLinked = Boolean(p.lineGroupId || p.lineUserId || p.messengerPsid || p.whatsappId);
+        if (linkFilter === "linked" && !isLinked) return false;
+        if (linkFilter === "unlinked" && isLinked) return false;
         return true;
       }),
-    [partners, relationshipStatus, introNationality, introField]
+    [partners, relationshipStatus, introNationality, introField, linkFilter]
   );
 
   const targetCount =
@@ -225,6 +229,13 @@ export default function BroadcastClient({
                 value={relationshipStatus}
                 onChange={setRelationshipStatus}
                 options={[ALL, ...RELATIONSHIP_STATUSES]}
+              />
+              <Select
+                label="連絡先紐づけ"
+                value={linkFilter}
+                onChange={(v) => setLinkFilter(v as "all" | "linked" | "unlinked")}
+                options={["all", "linked", "unlinked"]}
+                labels={["すべて", "紐づけ済み", "未紐づけ"]}
               />
             </div>
           ) : (
