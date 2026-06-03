@@ -36,6 +36,10 @@ function getTransporter(): Transporter | null {
     port,
     secure: port === 465, // 465 = TLS、587 = STARTTLS
     auth: { user, pass },
+    // ハング防止のためタイムアウト明示 (デフォルトはほぼ無限大)
+    connectionTimeout: 10_000, // 10 秒で接続失敗
+    greetingTimeout: 10_000, // 10 秒で SMTP 挨拶失敗
+    socketTimeout: 20_000, // 20 秒でソケット読み書き失敗
   });
   return cachedTransporter;
 }

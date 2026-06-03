@@ -197,10 +197,14 @@ export default function BroadcastClient({
     // 明示的なホワイトリスト: プレビューに表示されている partner のみ送信対象
     const partnerIds = targetPartners.map((p) => p.id);
     setSending(true);
+    // 90 秒で強制中断 (パートナー多数のときは長くなるので調整。1 通あたり ~3 秒 × 30 件想定)
+    const abort = new AbortController();
+    const timeoutId = setTimeout(() => abort.abort(), 90_000);
     try {
       const res = await fetch("/api/broadcast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abort.signal,
         body: JSON.stringify({
           mode,
           relationshipStatus: relationshipStatus === ALL ? null : relationshipStatus,
@@ -235,7 +239,17 @@ export default function BroadcastClient({
       } else {
         alert(`送信失敗: ${data.error}`);
       }
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        alert(
+          "送信が 90 秒以内に完了しませんでした。SMTP / Gmail への接続が遅延している可能性があります。\n" +
+            "Railway ログで詳細を確認してください。送信状態が不明なので、二重送信を避けるため受信側で届いているか確認してから再送してください。"
+        );
+      } else {
+        alert(`送信失敗: ${e instanceof Error ? e.message : "unknown error"}`);
+      }
     } finally {
+      clearTimeout(timeoutId);
       setSending(false);
     }
   };
