@@ -40,6 +40,9 @@ export type PartnerDetailData = {
   minFeeAmount: string | null;
   feeShareRatio: string | null;
   lineUserId: string | null;
+  lineGroupId: string | null;
+  lineGroupName: string | null;
+  lineGroupMemberCount: number | null;
   messengerPsid: string | null;
   whatsappId: string | null;
   createdAt: string;
@@ -269,7 +272,12 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
           <Field label="連絡先紐づけ" className="md:col-span-2">
             <LinkStatusDisplay
               linkStatus={form.linkStatus}
+              channel={form.channel}
+              email={form.email}
               lineUserId={initial.lineUserId}
+              lineGroupId={initial.lineGroupId}
+              lineGroupName={initial.lineGroupName}
+              lineGroupMemberCount={initial.lineGroupMemberCount}
               messengerPsid={initial.messengerPsid}
               whatsappId={initial.whatsappId}
             />
@@ -576,19 +584,39 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
 
 function LinkStatusDisplay({
   linkStatus,
+  channel,
+  email,
   lineUserId,
+  lineGroupId,
+  lineGroupName,
+  lineGroupMemberCount,
   messengerPsid,
   whatsappId,
 }: {
   linkStatus: string;
+  channel: string | null;
+  email: string | null;
   lineUserId: string | null;
+  lineGroupId: string | null;
+  lineGroupName: string | null;
+  lineGroupMemberCount: number | null;
   messengerPsid: string | null;
   whatsappId: string | null;
 }) {
   const ids: { label: string; value: string }[] = [];
+  if (lineGroupId)
+    ids.push({
+      label: "LINE グループ",
+      value: `${lineGroupName ?? "(名称不明)"}${lineGroupMemberCount ? ` ・${lineGroupMemberCount}名` : ""}`,
+    });
   if (lineUserId) ids.push({ label: "LINE", value: lineUserId });
   if (messengerPsid) ids.push({ label: "Messenger", value: messengerPsid });
   if (whatsappId) ids.push({ label: "WhatsApp", value: whatsappId });
+  // 主な連絡手段がメール + メアド入力済みなら、メールも紐づけ済みとして表示
+  const emailLinked = (channel ?? "").toLowerCase().includes("メール") || channel === "Email" || channel === "mail";
+  if (emailLinked && email && email.trim()) {
+    ids.push({ label: "Email", value: email });
+  }
   const isLinked = ids.length > 0 || linkStatus === "完了";
   return (
     <div className="space-y-2">
@@ -624,7 +652,7 @@ function LinkStatusDisplay({
         </dl>
       ) : (
         <p className="text-[11px] text-gray-400">
-          LINE / Messenger / WhatsApp の ID はまだ紐づけられていません。
+          LINE グループ / 個人 LINE / Messenger / WhatsApp / メール いずれも未登録です。
         </p>
       )}
     </div>

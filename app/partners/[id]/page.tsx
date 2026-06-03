@@ -59,6 +59,12 @@ export default async function PartnerDetailPage({
         take: 30,
         select: { id: true, rating: true, reason: true, recordedBy: true, createdAt: true },
       },
+      lineGroups: {
+        where: { isActive: true },
+        select: { groupId: true, groupName: true, memberCount: true },
+        orderBy: { lastSeenAt: "desc" },
+        take: 1,
+      },
     },
   });
   if (!partner) notFound();
@@ -87,6 +93,9 @@ export default async function PartnerDetailPage({
     minFeeAmount: partner.minFeeAmount,
     feeShareRatio: partner.feeShareRatio,
     lineUserId: partner.lineUserId,
+    lineGroupId: partner.lineGroups[0]?.groupId ?? null,
+    lineGroupName: partner.lineGroups[0]?.groupName ?? null,
+    lineGroupMemberCount: partner.lineGroups[0]?.memberCount ?? null,
     messengerPsid: partner.messengerPsid,
     whatsappId: partner.whatsappId,
     createdAt: partner.createdAt.toISOString(),
