@@ -39,7 +39,7 @@ type Partner = {
   introducibleFields: string | null;
   introducibleResidenceStatuses: string | null;
 };
-type Template = { id: number; name: string; content: string };
+type Template = { id: number; name: string; content: string; emailSubject: string | null };
 type Group = {
   id: number;
   name: string;
@@ -81,6 +81,7 @@ export default function BroadcastClient({
   const [linkFilter, setLinkFilter] = useState<"all" | "linked" | "unlinked">("linked");
   const [selectedGroup, setSelectedGroup] = useState("");
   const [message, setMessage] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [sending, setSending] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
@@ -120,7 +121,10 @@ export default function BroadcastClient({
 
   const applyTemplate = (id: string) => {
     const t = templates.find((t) => t.id === Number(id));
-    if (t) setMessage(t.content);
+    if (t) {
+      setMessage(t.content);
+      if (t.emailSubject) setEmailSubject(t.emailSubject);
+    }
     setSelectedTemplate(id);
   };
 
@@ -205,6 +209,7 @@ export default function BroadcastClient({
           groupId: selectedGroup ? Number(selectedGroup) : null,
           partnerIds,
           message,
+          emailSubject: emailSubject.trim() || null,
           scheduledAt: scheduled ? scheduleDate : null,
           templateId: selectedTemplate ? Number(selectedTemplate) : null,
         }),
@@ -310,6 +315,21 @@ export default function BroadcastClient({
             options={["", ...templates.map((t) => String(t.id))]}
             labels={["テンプレートを選択", ...templates.map((t) => t.name)]}
           />
+          <div className="mt-3">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              メール件名{" "}
+              <span className="text-[10px] text-gray-400">
+                (メール経由のパートナーのみに適用。空欄なら「【SMILE MATCHING】ご連絡」)
+              </span>
+            </label>
+            <input
+              type="text"
+              value={emailSubject}
+              onChange={(e) => setEmailSubject(e.target.value)}
+              placeholder="例: 【SMILE MATCHING】今週の急ぎ案件のご案内"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
+            />
+          </div>
           <textarea
             ref={textareaRef}
             className="w-full mt-3 border border-gray-300 rounded-lg px-3 py-2 text-sm h-32 resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
@@ -444,6 +464,14 @@ export default function BroadcastClient({
                 以下 <span className="font-semibold text-[var(--color-text-dark)]">{targetPartners.length} 社</span>{" "}
                 のパートナーへ送信します。これ以外のパートナーには送信されません。
               </p>
+              {/* メール経路のパートナーが含まれていれば件名を表示 */}
+              {targetPartners.some(
+                (p) => !p.lineGroupId && !p.lineUserId && !p.whatsappId && !p.messengerPsid && p.email
+              ) ? (
+                <p className="mt-2 text-[11px] text-gray-500">
+                  📧 メール件名: <span className="font-medium text-[var(--color-text-dark)]">{emailSubject.trim() || "【SMILE MATCHING】ご連絡"}</span>
+                </p>
+              ) : null}
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3">

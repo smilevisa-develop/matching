@@ -66,7 +66,12 @@ export default async function BroadcastPage() {
           introducibleFields: p.introducibleFields,
           introducibleResidenceStatuses: p.introducibleResidenceStatuses,
         }))}
-        templates={templates.map((t) => ({ id: t.id, name: t.name, content: t.content }))}
+        templates={templates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          content: t.content,
+          emailSubject: t.emailSubject,
+        }))}
         groups={groups.map((g) => ({
           id: g.id,
           name: g.name,

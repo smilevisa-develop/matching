@@ -39,6 +39,7 @@ export async function POST(req: Request) {
       groupId,
       partnerIds,
       message,
+      emailSubject: emailSubjectFromBody,
       scheduledAt,
       templateId,
     } = body as {
@@ -54,6 +55,8 @@ export async function POST(req: Request) {
        */
       partnerIds?: number[];
       message: string;
+      /** メール件名 (UI で個別指定された場合)。優先順位: 本体 > テンプレ > デフォルト */
+      emailSubject?: string | null;
       scheduledAt: string | null;
       /** MessageTemplate.id を渡すと、WhatsApp ではそのテンプレ承認名で送信できる */
       templateId?: number | null;
@@ -368,7 +371,11 @@ export async function POST(req: Request) {
           country: t.country,
           introducibleFields: t.introducibleFields,
         };
-        const subjectTemplate = tmpl?.emailSubject?.trim() || DEFAULT_EMAIL_SUBJECT;
+        // 件名優先順位: 本文呼び出しで明示指定 > テンプレ設定 > デフォルト
+        const subjectTemplate =
+          emailSubjectFromBody?.trim() ||
+          tmpl?.emailSubject?.trim() ||
+          DEFAULT_EMAIL_SUBJECT;
         const subject = expandTemplate(subjectTemplate, {
           partner: partnerCtx,
           openDeals,
