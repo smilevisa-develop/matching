@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   INTRODUCIBLE_FIELDS,
   INTRODUCIBLE_NATIONALITIES,
@@ -126,10 +126,41 @@ export default function BroadcastClient({
   const [emailSubject, setEmailSubject] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendingStartedAt, setSendingStartedAt] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
   /** 送信前の確認モーダル: 押下時の (scheduled) 値を保持 */
   const [confirmingScheduled, setConfirmingScheduled] = useState<boolean | null>(null);
+  /** 送信完了後の結果 (success or failure summary) */
+  const [sendResult, setSendResult] = useState<{
+    ok: boolean;
+    summary: string;
+    failures?: { name: string; channel: string; error: string }[];
+  } | null>(null);
+
+  // 送信中の経過秒数カウンタ
+  useEffect(() => {
+    if (sendingStartedAt === null) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - sendingStartedAt) / 1000));
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [sendingStartedAt]);
+
+  // 送信中はページ離脱時に警告
+  useEffect(() => {
+    if (!sending) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "配信中です。ページを閉じると送信が中断する可能性があります。";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [sending]);
 
   const filtered = useMemo(
     () =>
@@ -240,9 +271,12 @@ export default function BroadcastClient({
     // 明示的なホワイトリスト: プレビューに表示されている partner のみ送信対象
     const partnerIds = targetPartners.map((p) => p.id);
     setSending(true);
-    // 90 秒で強制中断 (パートナー多数のときは長くなるので調整。1 通あたり ~3 秒 × 30 件想定)
+    setSendingStartedAt(Date.now());
+    setSendResult(null);
+    // タイムアウト: 1 通あたり ~3 秒 × 件数 + 60 秒バッファ、上限 8 分 (Railway リクエスト上限内)
+    const timeoutMs = Math.min(60_000 + partnerIds.length * 3_000, 480_000);
     const abort = new AbortController();
-    const timeoutId = setTimeout(() => abort.abort(), 90_000);
+    const timeoutId = setTimeout(() => abort.abort(), timeoutMs);
     try {
       const res = await fetch("/api/broadcast", {
         method: "POST",
@@ -265,35 +299,23 @@ export default function BroadcastClient({
       if (data.ok) {
         const summary = scheduled
           ? `予約完了: ${data.scheduledAt} に ${data.targetCount} 件へ送信予定`
-          : `送信完了: ${data.sentCount} 件成功 (LINEグループ ${data.sentLineGroup ?? 0} / LINE個人 ${data.sentLine ?? 0} / WhatsApp ${data.sentWhatsapp ?? 0} / Messenger ${data.sentMessenger ?? 0} / メール ${data.sentEmail ?? 0}) / ${data.failedCount} 件失敗`;
-        // 失敗の詳細があれば一緒に表示 (デバッグ用)
-        const failureDetails: { name: string; channel: string; error: string }[] = data.failures ?? [];
-        if (failureDetails.length > 0) {
-          const lines = failureDetails
-            .slice(0, 10)
-            .map((f) => `・${f.name} (${f.channel}): ${f.error.slice(0, 120)}`)
-            .join("\n");
-          const more = failureDetails.length > 10 ? `\n... 他 ${failureDetails.length - 10} 件` : "";
-          alert(`${summary}\n\n失敗詳細:\n${lines}${more}`);
-        } else {
-          alert(summary);
-        }
+          : `送信完了: ${data.sentCount} 件成功 / ${data.failedCount} 件失敗\n` +
+            `内訳: LINEグループ ${data.sentLineGroup ?? 0} / LINE個人 ${data.sentLine ?? 0} / WhatsApp ${data.sentWhatsapp ?? 0} / Messenger ${data.sentMessenger ?? 0} / メール ${data.sentEmail ?? 0}`;
+        setSendResult({ ok: true, summary, failures: data.failures ?? [] });
         setShowSchedule(false);
       } else {
-        alert(`送信失敗: ${data.error}`);
+        setSendResult({ ok: false, summary: `送信失敗: ${data.error}` });
       }
     } catch (e) {
-      if (e instanceof Error && e.name === "AbortError") {
-        alert(
-          "送信が 90 秒以内に完了しませんでした。SMTP / Gmail への接続が遅延している可能性があります。\n" +
-            "Railway ログで詳細を確認してください。送信状態が不明なので、二重送信を避けるため受信側で届いているか確認してから再送してください。"
-        );
-      } else {
-        alert(`送信失敗: ${e instanceof Error ? e.message : "unknown error"}`);
-      }
+      const msg =
+        e instanceof Error && e.name === "AbortError"
+          ? `送信が ${Math.round(timeoutMs / 1000)} 秒以内に完了しませんでした。\nサーバー側で処理が続いている可能性があります。\n二重送信を避けるため、受信側で届いているか確認してから再送してください。`
+          : `送信失敗: ${e instanceof Error ? e.message : "unknown error"}`;
+      setSendResult({ ok: false, summary: msg });
     } finally {
       clearTimeout(timeoutId);
       setSending(false);
+      setSendingStartedAt(null);
     }
   };
 
@@ -519,71 +541,179 @@ export default function BroadcastClient({
         </div>
       </div>
 
-      {/* 送信前 確認モーダル: 対象パートナーの最終確認 */}
-      {confirmingScheduled !== null ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      {/* 確認 / 送信中 / 結果 モーダル (3 フェーズ) */}
+      {(confirmingScheduled !== null || sending || sendResult) ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          // 送信中は外側クリックでも閉じない
+          onClick={(e) => {
+            if (sending) return;
+            if (e.target === e.currentTarget && sendResult) {
+              setSendResult(null);
+              setConfirmingScheduled(null);
+            }
+          }}
+        >
           <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl max-h-[85vh] flex flex-col">
-            <div className="border-b border-gray-100 px-6 py-4">
-              <h2 className="text-lg font-bold text-[var(--color-text-dark)]">
-                配信前の最終確認
-              </h2>
-              <p className="mt-1 text-xs text-gray-500">
-                以下 <span className="font-semibold text-[var(--color-text-dark)]">{targetPartners.length} 社</span>{" "}
-                のパートナーへ送信します。これ以外のパートナーには送信されません。
-              </p>
-              {/* メール経路のパートナーが含まれていれば件名を表示 */}
-              {targetPartners.some(
-                (p) =>
-                  (p.channel === "mail" || p.channel === "メール" || p.channel === "Email") &&
-                  p.email &&
-                  /@/.test(p.email),
-              ) ? (
-                <p className="mt-2 text-[11px] text-gray-500">
-                  📧 メール件名: <span className="font-medium text-[var(--color-text-dark)]">{emailSubject.trim() || "【株式会社CROSLAN-人材事業部】ご連絡"}</span>
+            {/* === Phase 1: 確認 (sending でも sendResult でもない) === */}
+            {!sending && !sendResult && confirmingScheduled !== null ? (
+              <>
+                <div className="border-b border-gray-100 px-6 py-4">
+                  <h2 className="text-lg font-bold text-[var(--color-text-dark)]">配信前の最終確認</h2>
+                  <p className="mt-1 text-xs text-gray-500">
+                    以下 <span className="font-semibold text-[var(--color-text-dark)]">{targetPartners.length} 社</span>{" "}
+                    のパートナーへ送信します。これ以外のパートナーには送信されません。
+                  </p>
+                  {targetPartners.some(
+                    (p) =>
+                      (p.channel === "mail" || p.channel === "メール" || p.channel === "Email") &&
+                      p.email &&
+                      /@/.test(p.email),
+                  ) ? (
+                    <p className="mt-2 text-[11px] text-gray-500">
+                      📧 メール件名:{" "}
+                      <span className="font-medium text-[var(--color-text-dark)]">
+                        {emailSubject.trim() || "【株式会社CROSLAN-人材事業部】ご連絡"}
+                      </span>
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3">
+                  <ul className="divide-y divide-gray-100">
+                    {targetPartners.map((p) => (
+                      <li key={p.id} className="flex items-center gap-3 py-2">
+                        <span className="font-mono text-[11px] text-gray-400 shrink-0">#{p.id}</span>
+                        <span className="text-sm text-[var(--color-text-dark)] truncate flex-1">{p.name}</span>
+                        <span className="text-[10px] text-gray-400 shrink-0">{partnerChannelBadge(p)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="border-t border-gray-100 px-6 py-4 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingScheduled(null)}
+                    className="rounded-full border border-gray-300 px-5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const scheduled = confirmingScheduled ?? false;
+                      void handleSend(scheduled);
+                    }}
+                    className="rounded-full bg-[var(--color-primary)] px-6 py-2 text-sm font-semibold text-white shadow-md hover:bg-[var(--color-primary-hover)]"
+                  >
+                    {confirmingScheduled
+                      ? `${targetPartners.length} 社へ予約確定`
+                      : `${targetPartners.length} 社へ配信実行`}
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {/* === Phase 2: 送信中 === */}
+            {sending ? (
+              <div className="px-8 py-10 flex flex-col items-center text-center space-y-5">
+                {/* スピナー */}
+                <div className="relative w-20 h-20">
+                  <div className="absolute inset-0 rounded-full border-4 border-[var(--color-primary)]/20"></div>
+                  <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[var(--color-primary)] animate-spin"></div>
+                  <div className="absolute inset-0 flex items-center justify-center text-xl font-bold text-[var(--color-primary)]">
+                    {targetPartners.length}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h2 className="text-lg font-bold text-[var(--color-text-dark)]">
+                    配信中です... ({targetPartners.length} 社)
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    各パートナーへ順番に送信しています。<br />
+                    経過時間: <span className="font-mono font-semibold tabular-nums">{elapsedSeconds} 秒</span>
+                  </p>
+                </div>
+
+                <div className="w-full rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-left">
+                  <p className="text-xs font-semibold text-amber-800">⚠️ 完了までこの画面を閉じないでください</p>
+                  <ul className="mt-2 space-y-1 text-[11px] text-amber-700">
+                    <li>・ブラウザの戻る / リロード / タブを閉じる は控えてください</li>
+                    <li>・件数が多い場合 数分かかることがあります (目安: 1 社あたり 1〜3 秒)</li>
+                    <li>・他の画面 (別タブ) は使って大丈夫ですが、この画面は開いたままで</li>
+                  </ul>
+                </div>
+
+                <p className="text-[10px] text-gray-400">
+                  処理は実行中です。完了すると自動で結果が表示されます。
                 </p>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
 
-            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3">
-              <ul className="divide-y divide-gray-100">
-                {targetPartners.map((p) => (
-                  <li key={p.id} className="flex items-center gap-3 py-2">
-                    <span className="font-mono text-[11px] text-gray-400 shrink-0">#{p.id}</span>
-                    <span className="text-sm text-[var(--color-text-dark)] truncate flex-1">{p.name}</span>
-                    <span className="text-[10px] text-gray-400 shrink-0">
-                      {partnerChannelBadge(p)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            {/* === Phase 3: 結果表示 === */}
+            {sendResult ? (
+              <>
+                <div className={`border-b border-gray-100 px-6 py-4 ${sendResult.ok ? "bg-emerald-50" : "bg-red-50"}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${sendResult.ok ? "bg-emerald-500" : "bg-red-500"} text-white`}>
+                      {sendResult.ok ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18" />
+                          <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-base font-bold text-[var(--color-text-dark)]">
+                        {sendResult.ok ? "配信完了" : "配信失敗"}
+                      </h2>
+                      <pre className="mt-1 text-xs text-gray-700 whitespace-pre-wrap font-sans">
+                        {sendResult.summary}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="border-t border-gray-100 px-6 py-4 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setConfirmingScheduled(null)}
-                disabled={sending}
-                className="rounded-full border border-gray-300 px-5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const scheduled = confirmingScheduled ?? false;
-                  setConfirmingScheduled(null);
-                  await handleSend(scheduled);
-                }}
-                disabled={sending}
-                className="rounded-full bg-[var(--color-primary)] px-6 py-2 text-sm font-semibold text-white shadow-md hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
-              >
-                {sending
-                  ? "送信中..."
-                  : confirmingScheduled
-                    ? `${targetPartners.length} 社へ予約確定`
-                    : `${targetPartners.length} 社へ配信実行`}
-              </button>
-            </div>
+                {/* 失敗詳細リスト */}
+                {sendResult.failures && sendResult.failures.length > 0 ? (
+                  <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3">
+                    <p className="text-xs font-semibold text-gray-600 mb-2">
+                      失敗詳細 ({sendResult.failures.length} 件):
+                    </p>
+                    <ul className="divide-y divide-gray-100">
+                      {sendResult.failures.map((f, i) => (
+                        <li key={i} className="py-2">
+                          <p className="text-sm text-[var(--color-text-dark)]">
+                            <span className="text-[11px] text-gray-400 mr-2">[{f.channel}]</span>
+                            {f.name}
+                          </p>
+                          <p className="text-[11px] text-red-600 mt-0.5 break-words">{f.error}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                <div className="border-t border-gray-100 px-6 py-4 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSendResult(null);
+                      setConfirmingScheduled(null);
+                    }}
+                    className="rounded-full bg-[var(--color-primary)] px-6 py-2 text-sm font-semibold text-white shadow-md hover:bg-[var(--color-primary-hover)]"
+                  >
+                    閉じる
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
       ) : null}
