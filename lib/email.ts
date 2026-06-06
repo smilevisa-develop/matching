@@ -1,100 +1,29 @@
 /**
- * メール送信ライブラリ (Gmail API 経由 / HTTPS)
+ * メール送信ライブラリ (Google Apps Script Web App 経由)
  *
- * Railway は外向き SMTP (port 587/465) を遮断するため、HTTPS 経由で
- * Gmail API users.messages.send を叩く。
+ * Railway は外向き SMTP を遮断するため、Gmail API は CEO の DwD 承認が必要、
+ * という制約を回避するアプローチ:
+ *   - recruit@croslan.co.jp の Google Drive 内に Apps Script を作る
+ *   - Apps Script を Web App として公開 (Execute as: Me, Access: Anyone)
+ *   - Railway は その URL に HTTPS POST するだけで送信完了
  *
- * 仕組み:
- *   - 既存の Google Service Account (Drive/Docs 用) を流用
- *   - Domain-wide Delegation (DwD) で recruit@croslan.co.jp を impersonate
- *   - JWT 認証で Gmail API を呼ぶ
- *
- * Workspace 管理者作業 (1 回だけ):
- *   admin.google.com → セキュリティ → アクセスとデータ制御 → API の制御
- *     → ドメイン全体の委任を管理 → 新しく追加
- *   Client ID: サービスアカウントの 21 桁 数値 ID (Cloud Console で確認)
- *   OAuth スコープ: https://www.googleapis.com/auth/gmail.send
+ * Apps Script は recruit@ 自身の権限で MailApp.sendEmail() を呼ぶので、
+ * From: は recruit@croslan.co.jp として届く。
+ * Workspace ユーザー上限 1500 通/日 (御社用途 500 社 × 月 4 配信 = 月 2000 ≈ 67/日 で十分)
  *
  * 環境変数:
- *   GOOGLE_SERVICE_ACCOUNT_EMAIL = (既存)
- *   GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY           = (既存)
- *   GMAIL_SEND_AS_USER           = recruit@croslan.co.jp (impersonate するアカウント)
- *   GMAIL_FROM                   = 株式会社CROSLAN-人材紹介事業部 <recruit@croslan.co.jp>
- *   GMAIL_REPLY_TO               = (任意)
+ *   APPS_SCRIPT_EMAIL_URL    = https://script.google.com/macros/s/AKfycb.../exec
+ *   APPS_SCRIPT_EMAIL_SECRET = (Apps Script 内のコードと同じ秘密文字列。不正利用防止)
+ *   GMAIL_FROM               = 株式会社CROSLAN-人材紹介事業部 (任意、表示名のみ)
+ *   GMAIL_REPLY_TO           = (任意) 別の返信先に集約したい場合
  */
-import { google } from "googleapis";
 
 export type EmailSendResult =
   | { ok: true; id?: string }
   | { ok: false; error: string };
 
-function getGooglePrivateKey(): string {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.trim();
-  if (!raw) throw new Error("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY が未設定です");
-  // env では \n がエスケープされて入っているケースが多いので復元
-  return raw.includes("\\n") ? raw.replace(/\\n/g, "\n") : raw;
-}
-
-function getGoogleClientEmail(): string {
-  const value = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
-  if (!value) throw new Error("GOOGLE_SERVICE_ACCOUNT_EMAIL が未設定です");
-  return value;
-}
-
-/** RFC 2822 形式のメール本体を Base64URL エンコード */
-function buildRawEmail(opts: {
-  from: string;
-  to: string;
-  subject: string;
-  text?: string;
-  html?: string;
-  replyTo?: string;
-}): string {
-  const headers: string[] = [];
-  headers.push(`From: ${opts.from}`);
-  headers.push(`To: ${opts.to}`);
-  if (opts.replyTo) headers.push(`Reply-To: ${opts.replyTo}`);
-  // Subject は MIME B エンコード (=?UTF-8?B?...?=) で日本語対応
-  const subjectEncoded = `=?UTF-8?B?${Buffer.from(opts.subject, "utf-8").toString("base64")}?=`;
-  headers.push(`Subject: ${subjectEncoded}`);
-  headers.push("MIME-Version: 1.0");
-
-  let body: string;
-  if (opts.html && opts.text) {
-    const boundary = `b_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-    headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
-    body =
-      "\r\n" +
-      `--${boundary}\r\n` +
-      `Content-Type: text/plain; charset="UTF-8"\r\n` +
-      `Content-Transfer-Encoding: base64\r\n\r\n` +
-      Buffer.from(opts.text, "utf-8").toString("base64") +
-      `\r\n--${boundary}\r\n` +
-      `Content-Type: text/html; charset="UTF-8"\r\n` +
-      `Content-Transfer-Encoding: base64\r\n\r\n` +
-      Buffer.from(opts.html, "utf-8").toString("base64") +
-      `\r\n--${boundary}--`;
-  } else if (opts.html) {
-    headers.push(`Content-Type: text/html; charset="UTF-8"`);
-    headers.push(`Content-Transfer-Encoding: base64`);
-    body = "\r\n" + Buffer.from(opts.html, "utf-8").toString("base64");
-  } else {
-    headers.push(`Content-Type: text/plain; charset="UTF-8"`);
-    headers.push(`Content-Transfer-Encoding: base64`);
-    body = "\r\n" + Buffer.from(opts.text ?? "", "utf-8").toString("base64");
-  }
-
-  const message = headers.join("\r\n") + "\r\n" + body;
-  // Gmail API は base64url 形式 (-, _、パディング無し)
-  return Buffer.from(message, "utf-8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
-
 /**
- * 1 件のメールを送信する。Gmail API users.messages.send 経由。
+ * 1 件のメールを Apps Script Web App 経由で送信。
  */
 export async function sendEmail(opts: {
   to: string | string[];
@@ -103,52 +32,55 @@ export async function sendEmail(opts: {
   html?: string;
   replyTo?: string;
 }): Promise<EmailSendResult> {
-  const sendAsUser = process.env.GMAIL_SEND_AS_USER?.trim();
-  const from = process.env.GMAIL_FROM?.trim() ?? sendAsUser;
+  const url = process.env.APPS_SCRIPT_EMAIL_URL?.trim();
+  const secret = process.env.APPS_SCRIPT_EMAIL_SECRET?.trim();
+  const fromName = process.env.GMAIL_FROM?.trim() ?? undefined;
+  const defaultReplyTo = process.env.GMAIL_REPLY_TO?.trim() ?? undefined;
 
-  if (!sendAsUser) {
+  if (!url || !secret) {
     return {
       ok: false,
       error:
-        "GMAIL_SEND_AS_USER が未設定です。Domain-wide Delegation で impersonate するアカウントを指定してください。",
+        "APPS_SCRIPT_EMAIL_URL / APPS_SCRIPT_EMAIL_SECRET が未設定です。Apps Script のセットアップ後 Railway に追加してください。",
     };
-  }
-  if (!from) {
-    return { ok: false, error: "GMAIL_FROM または GMAIL_SEND_AS_USER が必要です" };
   }
   if (!opts.text && !opts.html) {
     return { ok: false, error: "text または html のいずれかが必要です" };
   }
 
-  const to = Array.isArray(opts.to) ? opts.to.join(", ") : opts.to;
-  const replyTo = opts.replyTo ?? process.env.GMAIL_REPLY_TO ?? undefined;
+  const to = Array.isArray(opts.to) ? opts.to.join(",") : opts.to;
+  const replyTo = opts.replyTo ?? defaultReplyTo;
 
   try {
-    const auth = new google.auth.JWT({
-      email: getGoogleClientEmail(),
-      key: getGooglePrivateKey(),
-      scopes: ["https://www.googleapis.com/auth/gmail.send"],
-      subject: sendAsUser, // ← DwD で impersonate するユーザー
+    // Apps Script は POST body で受信、JSON で応答
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // 90 秒タイムアウト
+      signal: AbortSignal.timeout(90_000),
+      body: JSON.stringify({
+        secret,
+        to,
+        subject: opts.subject,
+        text: opts.text ?? null,
+        html: opts.html ?? null,
+        replyTo: replyTo ?? null,
+        fromName: fromName ?? null,
+      }),
     });
-    await auth.authorize();
-    const gmail = google.gmail({ version: "v1", auth });
-
-    const raw = buildRawEmail({
-      from,
-      to,
-      subject: opts.subject,
-      text: opts.text,
-      html: opts.html,
-      replyTo,
-    });
-
-    const res = await gmail.users.messages.send({
-      userId: "me",
-      requestBody: { raw },
-    });
-    return { ok: true, id: res.data.id ?? undefined };
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status}: ${await res.text()}` };
+    }
+    const data = (await res.json()) as { ok?: boolean; error?: string; id?: string };
+    if (data.ok) {
+      return { ok: true, id: data.id };
+    }
+    return { ok: false, error: data.error ?? "Apps Script returned no detail" };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "gmail api error" };
+    if (e instanceof Error && e.name === "TimeoutError") {
+      return { ok: false, error: "Apps Script 応答が 90 秒以内に返らなかった" };
+    }
+    return { ok: false, error: e instanceof Error ? e.message : "fetch error" };
   }
 }
 
