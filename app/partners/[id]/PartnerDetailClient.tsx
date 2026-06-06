@@ -678,14 +678,16 @@ function LinkStatusDisplay({
   if (messengerPsid) ids.push({ label: "Messenger", value: messengerPsid });
   if (whatsappId) ids.push({ label: "WhatsApp", value: whatsappId });
   // 主な連絡手段がメール + メアド入力済み (@ 含む有効形式) のときだけ、メールも紐づけ済みと判定
-  const emailLinked =
+  const emailLinkedByChannel =
     (channel === "mail" || channel === "メール" || channel === "Email") &&
     Boolean(email && /@/.test(email));
-  if (emailLinked && email) {
+  if (emailLinkedByChannel && email) {
     ids.push({ label: "Email", value: email });
   }
-  // 「完了」判定: 主な連絡手段に応じて、必要な ID が登録されているか
-  const isLinked = (() => {
+  // 「紐づけ完了」: 何らかの連絡先 ID が紐づいているか (チャネル設定は問わない)
+  const isLinked = ids.length > 0 || linkStatus === "完了";
+  // 「配信対象」: 主な連絡手段が設定済 かつ それに対応する ID が登録されているか
+  const isBroadcastReady = (() => {
     switch (channel) {
       case "LINE":
         return Boolean(lineGroupId || lineUserId);
@@ -696,10 +698,9 @@ function LinkStatusDisplay({
       case "mail":
       case "メール":
       case "Email":
-        return emailLinked;
+        return emailLinkedByChannel;
       default:
-        // 未設定の場合は手動の linkStatus "完了" だけ尊重
-        return linkStatus === "完了";
+        return false;
     }
   })();
   return (
@@ -725,6 +726,13 @@ function LinkStatusDisplay({
           </Link>
         ) : null}
       </div>
+      {/* 紐づけは完了しているのに主な連絡手段が未設定/不一致な場合は警告表示 */}
+      {isLinked && !isBroadcastReady ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+          ⚠️ 連絡先 ID は紐づいていますが、<span className="font-semibold">「主な連絡手段」が未設定 (または対応 ID 未登録)</span> のため
+          一斉配信の対象外になります。配信したい場合は上の「連絡」セクションで主な連絡手段を選択してください。
+        </div>
+      ) : null}
       {ids.length > 0 ? (
         <dl className="grid gap-2 text-sm md:grid-cols-3">
           {ids.map((id) => (
