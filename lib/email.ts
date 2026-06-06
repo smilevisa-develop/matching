@@ -1,115 +1,159 @@
 /**
- * メール送信ライブラリ (SMTP 経由)
+ * メール送信ライブラリ (Gmail API 経由 / HTTPS)
  *
- * デフォルトで Gmail / Google Workspace の SMTP を使用する想定。
- * 返信は SMTP_USER (送信元) の受信箱に直接届く。
+ * Railway などの一部ホスティングは外向き SMTP (port 587/465) を遮断するため、
+ * SMTP ではなく Gmail API (HTTPS) で送信する。
+ *
+ * 仕組み:
+ *   - 既存の Google Service Account (Drive/Docs 用) を流用
+ *   - Domain-wide Delegation (DwD) で recruit@croslan.co.jp を impersonate
+ *   - JWT 認証で Gmail API users.messages.send を呼ぶ
+ *
+ * Workspace 管理者作業 (1 回だけ):
+ *   admin.google.com → セキュリティ → API の制御 → ドメイン全体の委任
+ *   Client ID: サービスアカウントの Client ID (Cloud Console で確認)
+ *   OAuth スコープ: https://www.googleapis.com/auth/gmail.send
  *
  * 環境変数:
- *   SMTP_HOST     = smtp.gmail.com
- *   SMTP_PORT     = 587  (TLS / STARTTLS)
- *   SMTP_USER     = 認証アカウント (例: kodai.tsuchida@smilevisa.jp)
- *   SMTP_PASS     = (Google アプリパスワード 16 文字)
- *   SMTP_FROM     = 表示用差出人 (例: SMILE MATCHING <info@smilevisa.jp>)
- *                   ※ SMTP_USER と同じか、その Send-as に追加済みのアドレスでないと
- *                   Gmail が From を書き換えるので注意
- *   SMTP_REPLY_TO = 返信先 (例: info@smilevisa.jp)
- *                   省略時は SMTP_FROM の宛先に返信が届く
+ *   GOOGLE_SERVICE_ACCOUNT_EMAIL = (既存)
+ *   GOOGLE_PRIVATE_KEY           = (既存)
+ *   GMAIL_SEND_AS_USER           = recruit@croslan.co.jp (impersonate するアカウント)
+ *   GMAIL_FROM                   = 株式会社CROSLAN-人材紹介事業部 <recruit@croslan.co.jp>
+ *   GMAIL_REPLY_TO               = (任意)
  */
-import nodemailer, { type Transporter } from "nodemailer";
-import dns from "node:dns";
+import { google } from "googleapis";
 
 export type EmailSendResult =
   | { ok: true; id?: string }
   | { ok: false; error: string };
 
-let cachedTransporter: Transporter | null = null;
+function getGooglePrivateKey(): string {
+  const raw = process.env.GOOGLE_PRIVATE_KEY?.trim();
+  if (!raw) throw new Error("GOOGLE_PRIVATE_KEY が未設定です");
+  // env 変数では \n がエスケープされて入っているケースが多いので復元
+  return raw.includes("\\n") ? raw.replace(/\\n/g, "\n") : raw;
+}
 
-function getTransporter(): Transporter | null {
-  if (cachedTransporter) return cachedTransporter;
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT ?? "587");
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null;
+function getGoogleClientEmail(): string {
+  const value = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
+  if (!value) throw new Error("GOOGLE_SERVICE_ACCOUNT_EMAIL が未設定です");
+  return value;
+}
 
-  // Railway などのホスティング環境は IPv6 ルーティング無しのことが多い。
-  // smtp.gmail.com を解決すると IPv6 が先に返るため ENETUNREACH エラーになる。
-  // IPv4 を強制することで回避する。
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lookupIPv4: any = (
-    hostname: string,
-    _options: unknown,
-    callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void,
-  ) => dns.lookup(hostname, { family: 4 }, callback);
+/** RFC 2822 形式のメール本体を Base64URL エンコード */
+function buildRawEmail(opts: {
+  from: string;
+  to: string;
+  subject: string;
+  text?: string;
+  html?: string;
+  replyTo?: string;
+}): string {
+  const headers: string[] = [];
+  headers.push(`From: ${opts.from}`);
+  headers.push(`To: ${opts.to}`);
+  if (opts.replyTo) headers.push(`Reply-To: ${opts.replyTo}`);
+  // Subject は MIME エンコード (=?UTF-8?B?...?=) して日本語対応
+  const subjectEncoded = `=?UTF-8?B?${Buffer.from(opts.subject, "utf-8").toString("base64")}?=`;
+  headers.push(`Subject: ${subjectEncoded}`);
+  headers.push("MIME-Version: 1.0");
 
-  cachedTransporter = nodemailer.createTransport(
-    {
-      host,
-      port,
-      secure: port === 465, // 465 = TLS、587 = STARTTLS
-      auth: { user, pass },
-      // ハング防止のためタイムアウト明示 (デフォルトはほぼ無限大)
-      connectionTimeout: 10_000, // 10 秒で接続失敗
-      greetingTimeout: 10_000, // 10 秒で SMTP 挨拶失敗
-      socketTimeout: 20_000, // 20 秒でソケット読み書き失敗
-      // IPv4 経路を強制 (Railway での ENETUNREACH 対策)
-      lookup: lookupIPv4,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any,
-  );
-  return cachedTransporter;
+  let body: string;
+  if (opts.html && opts.text) {
+    // multipart/alternative (text + HTML)
+    const boundary = `b_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+    body =
+      "\r\n" +
+      `--${boundary}\r\n` +
+      `Content-Type: text/plain; charset="UTF-8"\r\n` +
+      `Content-Transfer-Encoding: base64\r\n\r\n` +
+      Buffer.from(opts.text, "utf-8").toString("base64") +
+      `\r\n--${boundary}\r\n` +
+      `Content-Type: text/html; charset="UTF-8"\r\n` +
+      `Content-Transfer-Encoding: base64\r\n\r\n` +
+      Buffer.from(opts.html, "utf-8").toString("base64") +
+      `\r\n--${boundary}--`;
+  } else if (opts.html) {
+    headers.push(`Content-Type: text/html; charset="UTF-8"`);
+    headers.push(`Content-Transfer-Encoding: base64`);
+    body = "\r\n" + Buffer.from(opts.html, "utf-8").toString("base64");
+  } else {
+    headers.push(`Content-Type: text/plain; charset="UTF-8"`);
+    headers.push(`Content-Transfer-Encoding: base64`);
+    body = "\r\n" + Buffer.from(opts.text ?? "", "utf-8").toString("base64");
+  }
+
+  const message = headers.join("\r\n") + "\r\n" + body;
+  // Gmail API requires base64url encoding (no padding, - and _ instead of + and /)
+  return Buffer.from(message, "utf-8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 /**
- * 1 件のメールを送信する。HTML / プレーンテキスト両対応。
- * - text のみ渡すとプレーンテキストメール
- * - html のみ渡すと HTML メール
- * - 両方渡すと マルチパート (text は HTML 非対応クライアント用フォールバック)
+ * 1 件のメールを送信する。Gmail API users.messages.send 経由。
  */
 export async function sendEmail(opts: {
   to: string | string[];
   subject: string;
   text?: string;
   html?: string;
-  /** Reply-To ヘッダ。省略時は SMTP_USER と同じになるので、別アドレスへの返信誘導に使う */
   replyTo?: string;
 }): Promise<EmailSendResult> {
-  const transporter = getTransporter();
-  if (!transporter) {
+  const sendAsUser = process.env.GMAIL_SEND_AS_USER?.trim();
+  const from = process.env.GMAIL_FROM?.trim() ?? sendAsUser;
+
+  if (!sendAsUser) {
     return {
       ok: false,
-      error: "SMTP_HOST / SMTP_USER / SMTP_PASS のいずれかが未設定です",
+      error:
+        "GMAIL_SEND_AS_USER が未設定です。Domain-wide Delegation で impersonate するアカウントを指定してください。",
     };
+  }
+  if (!from) {
+    return { ok: false, error: "GMAIL_FROM または GMAIL_SEND_AS_USER が必要です" };
   }
   if (!opts.text && !opts.html) {
     return { ok: false, error: "text または html のいずれかが必要です" };
   }
 
-  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER;
-  if (!from) {
-    return { ok: false, error: "SMTP_FROM または SMTP_USER が必要です" };
-  }
-
-  const replyTo = opts.replyTo ?? process.env.SMTP_REPLY_TO ?? undefined;
+  const to = Array.isArray(opts.to) ? opts.to.join(", ") : opts.to;
+  const replyTo = opts.replyTo ?? process.env.GMAIL_REPLY_TO ?? undefined;
 
   try {
-    const info = await transporter.sendMail({
+    const auth = new google.auth.JWT({
+      email: getGoogleClientEmail(),
+      key: getGooglePrivateKey(),
+      scopes: ["https://www.googleapis.com/auth/gmail.send"],
+      subject: sendAsUser, // ← DwD で impersonate
+    });
+    await auth.authorize();
+    const gmail = google.gmail({ version: "v1", auth });
+
+    const raw = buildRawEmail({
       from,
-      to: opts.to,
+      to,
       subject: opts.subject,
       text: opts.text,
       html: opts.html,
       replyTo,
     });
-    return { ok: true, id: info.messageId };
+
+    const res = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw },
+    });
+    return { ok: true, id: res.data.id ?? undefined };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "smtp error" };
+    return { ok: false, error: e instanceof Error ? e.message : "gmail api error" };
   }
 }
 
 /**
  * テンプレ本文 (プレーンテキスト) を簡易 HTML に変換。
- * 改行を <br> に、URL を <a> に置換するだけの軽量変換。
  */
 export function textToBasicHtml(text: string): string {
   const escaped = text
