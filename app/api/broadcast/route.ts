@@ -126,6 +126,10 @@ export async function POST(req: Request) {
       email: string | null;
       /** 主な連絡手段 (channel) — メール送信判定に使う */
       channel: string | null;
+      /** Messenger Recurring Notifications 購読 token (有効なら 24h 縛り無し) */
+      messengerSubscriptionToken: string | null;
+      messengerSubscriptionStatus: string | null;
+      messengerSubscriptionExpiresAt: Date | null;
     };
     // 明示指定された partnerIds の partner のみを取得 (フィルタ再評価せず)
     const partners = await prisma.partner.findMany({
@@ -155,6 +159,9 @@ export async function POST(req: Request) {
       whatsappId: p.whatsappId,
       email: p.email,
       channel: p.channel,
+      messengerSubscriptionToken: p.messengerSubscriptionToken,
+      messengerSubscriptionStatus: p.messengerSubscriptionStatus,
+      messengerSubscriptionExpiresAt: p.messengerSubscriptionExpiresAt,
     }));
 
     // 変数展開のため案件スナップショットを 1 回ロード
@@ -289,22 +296,34 @@ export async function POST(req: Request) {
       return { ok: false, error: await res.text() };
     };
 
-    /** Messenger (Facebook Graph API) で送る */
-    const sendMessenger = async (psid: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+    /**
+     * Messenger (Facebook Graph API) で送る。
+     * - 購読 token (Recurring Notifications) があればそれを優先 (24h 関係なく送れる)
+     * - 無ければ通常の RESPONSE タイプ (24h ウィンドウ内のみ届く)
+     */
+    const sendMessenger = async (
+      psid: string,
+      text: string,
+      subscriptionToken?: string | null
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
       if (!fbPageToken) return { ok: false, error: "FB_PAGE_ACCESS_TOKEN 未設定" };
-      // 24h ウィンドウ内ならタグなしで送れる。範囲外だと Meta が 10/200 エラーを返す。
-      const res = await fetch(
-        `https://graph.facebook.com/v22.0/me/messages?access_token=${encodeURIComponent(fbPageToken)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+      const url = `https://graph.facebook.com/v22.0/me/messages?access_token=${encodeURIComponent(fbPageToken)}`;
+      const payload = subscriptionToken
+        ? {
+            // Recurring Notifications: token 指定で 24h 関係なく送れる
+            recipient: { notification_messages_token: subscriptionToken },
+            message: { text },
+          }
+        : {
             recipient: { id: psid },
             messaging_type: "RESPONSE",
             message: { text },
-          }),
-        }
-      );
+          };
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
       if (res.ok) return { ok: true };
       return { ok: false, error: await res.text() };
     };
@@ -366,7 +385,14 @@ export async function POST(req: Request) {
       // === Messenger ===
       if (ch === "Messenger") {
         if (t.messengerPsid) {
-          const r = await sendMessenger(t.messengerPsid, personalizedMessage);
+          // 購読 token が有効 (ACTIVE + 期限内) なら、それで送信 (24h 関係なし)
+          const subToken =
+            t.messengerSubscriptionStatus === "ACTIVE" &&
+            t.messengerSubscriptionToken &&
+            (!t.messengerSubscriptionExpiresAt || t.messengerSubscriptionExpiresAt > new Date())
+              ? t.messengerSubscriptionToken
+              : null;
+          const r = await sendMessenger(t.messengerPsid, personalizedMessage, subToken);
           if (r.ok) {
             sentCount++;
             sentMessenger++;

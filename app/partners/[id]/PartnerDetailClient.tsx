@@ -44,6 +44,11 @@ export type PartnerDetailData = {
   lineGroupName: string | null;
   lineGroupMemberCount: number | null;
   messengerPsid: string | null;
+  messengerSubscriptionStatus: string | null;
+  messengerSubscriptionFrequency: string | null;
+  messengerSubscribedAt: string | null;
+  messengerSubscriptionExpiresAt: string | null;
+  messengerSubscriptionTopic: string | null;
   whatsappId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -315,6 +320,18 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
               whatsappId={initial.whatsappId}
             />
           </Field>
+          {initial.messengerPsid ? (
+            <Field label="Messenger 定期通知 (RN)" className="md:col-span-2">
+              <MessengerSubscriptionPanel
+                partnerId={initial.id}
+                status={initial.messengerSubscriptionStatus}
+                frequency={initial.messengerSubscriptionFrequency}
+                subscribedAt={initial.messengerSubscribedAt}
+                expiresAt={initial.messengerSubscriptionExpiresAt}
+                topic={initial.messengerSubscriptionTopic}
+              />
+            </Field>
+          ) : null}
         </Group>
 
         {/* 評価 */}
@@ -642,6 +659,118 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
             </button>
           </div>
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MessengerSubscriptionPanel({
+  partnerId,
+  status,
+  frequency,
+  subscribedAt,
+  expiresAt,
+  topic,
+}: {
+  partnerId: number;
+  status: string | null;
+  frequency: string | null;
+  subscribedAt: string | null;
+  expiresAt: string | null;
+  topic: string | null;
+}) {
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  const isActive = status === "ACTIVE";
+  const expSoon =
+    expiresAt && new Date(expiresAt).getTime() - Date.now() < 30 * 24 * 60 * 60 * 1000;
+
+  const sendOptin = async (freq: "DAILY" | "WEEKLY" | "MONTHLY") => {
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/messenger/send-optin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ partnerId, frequency: freq, title: "求人情報の定期通知" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setResult(`✅ パートナーの Messenger に購読カードを送信しました (頻度: ${freq})。
+パートナーが「Allow」をタップすると、24h 関係なく push 可能になります。`);
+      } else {
+        setResult(`❌ 送信失敗: ${data.error}${data.metaResponse ? "\n" + data.metaResponse.slice(0, 200) : ""}`);
+      }
+    } catch (e) {
+      setResult(`❌ ${e instanceof Error ? e.message : "error"}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {isActive ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
+          <p className="font-medium text-emerald-800">
+            ● 購読中 (頻度: {frequency ?? "?"}, トピック: {topic ?? "?"})
+          </p>
+          <p className="mt-1 text-[11px] text-emerald-700">
+            購読開始: {subscribedAt ? new Date(subscribedAt).toLocaleDateString("ja-JP") : "?"}
+            {" / "}
+            期限: {expiresAt ? new Date(expiresAt).toLocaleDateString("ja-JP") : "?"}
+            {expSoon ? " ⚠️ もうすぐ期限切れ" : ""}
+          </p>
+          <p className="mt-1 text-[11px] text-emerald-700">
+            このパートナーには 24h 関係なく いつでも配信できます。
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+          <p className="text-gray-700">
+            {status === "STOPPED"
+              ? "🛑 パートナーが購読停止しました"
+              : status === "EXPIRED"
+                ? "⌛ 購読期限切れ"
+                : "未購読"}
+          </p>
+          <p className="mt-1 text-[11px] text-gray-500">
+            ⚠️ Meta の制約上、購読カードを送れるのは <strong>パートナーから過去 24h 以内に DM があった場合のみ</strong> です。
+            送信後、パートナーが「Allow」ボタンをタップすると購読開始 (6 ヶ月有効)。
+          </p>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => void sendOptin("WEEKLY")}
+          disabled={sending}
+          className="rounded-lg border border-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)] disabled:opacity-50"
+        >
+          週次 購読カードを送信
+        </button>
+        <button
+          type="button"
+          onClick={() => void sendOptin("MONTHLY")}
+          disabled={sending}
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+        >
+          月次
+        </button>
+        <button
+          type="button"
+          onClick={() => void sendOptin("DAILY")}
+          disabled={sending}
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+        >
+          日次
+        </button>
+      </div>
+      {result ? (
+        <pre className="text-[11px] whitespace-pre-wrap text-gray-700 rounded-md bg-gray-50 border border-gray-200 px-3 py-2">
+          {result}
+        </pre>
       ) : null}
     </div>
   );

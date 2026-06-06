@@ -45,6 +45,17 @@ type MessengerEvent = {
     title?: string;
     payload?: string;
   };
+  /** Recurring Notifications opt-in イベント */
+  optin?: {
+    type?: string;
+    payload?: string;
+    notification_messages_token?: string;
+    notification_messages_frequency?: "DAILY" | "WEEKLY" | "MONTHLY";
+    notification_messages_status?: "STOP_NOTIFICATIONS" | "REFRESH_TOKEN";
+    token_expiry_timestamp?: number;
+    user_token_status?: "REFRESHED" | "NOT_REFRESHED";
+    topic?: string;
+  };
   delivery?: unknown;
   read?: unknown;
 };
@@ -57,6 +68,7 @@ function eventType(ev: MessengerEvent): string {
   if (ev.message?.is_echo) return "echo";
   if (ev.message) return "message";
   if (ev.postback) return "postback";
+  if (ev.optin) return "optin";
   if (ev.delivery) return "delivery";
   if (ev.read) return "read";
   return "other";
@@ -133,6 +145,44 @@ export async function POST(req: Request) {
             sentAt: seenAt,
           },
         });
+      }
+
+      // ── Recurring Notifications 同意イベント処理 ──
+      if (ev.optin?.type === "notification_messages") {
+        const partner = await prisma.partner.findFirst({ where: { messengerPsid: psid } });
+        if (partner) {
+          const o = ev.optin;
+          // STOP_NOTIFICATIONS は受信者が購読停止した
+          if (o.notification_messages_status === "STOP_NOTIFICATIONS") {
+            await prisma.partner.update({
+              where: { id: partner.id },
+              data: {
+                messengerSubscriptionStatus: "STOPPED",
+                messengerSubscriptionToken: null,
+              },
+            });
+            console.log(`[messenger/webhook] partner ${partner.id} stopped subscription`);
+          } else if (o.notification_messages_token) {
+            // 初回 opt-in or 更新 (REFRESH_TOKEN)
+            const expiresAt = o.token_expiry_timestamp
+              ? new Date(o.token_expiry_timestamp)
+              : new Date(Date.now() + 180 * 24 * 60 * 60 * 1000); // 6 ヶ月
+            await prisma.partner.update({
+              where: { id: partner.id },
+              data: {
+                messengerSubscriptionToken: o.notification_messages_token,
+                messengerSubscriptionFrequency: o.notification_messages_frequency ?? "WEEKLY",
+                messengerSubscribedAt: seenAt,
+                messengerSubscriptionExpiresAt: expiresAt,
+                messengerSubscriptionStatus: "ACTIVE",
+                messengerSubscriptionTopic: o.topic ?? "求人情報",
+              },
+            });
+            console.log(`[messenger/webhook] partner ${partner.id} opted in (${o.notification_messages_frequency})`);
+          }
+        } else {
+          console.warn(`[messenger/webhook] optin received for unlinked PSID ${psid}`);
+        }
       }
       upserts++;
     }

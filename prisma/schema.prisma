@@ -126,6 +126,20 @@ model Partner {
   /// 配分比率
   feeShareRatio  String?
 
+  // ── Messenger Recurring Notifications (定期通知) ──
+  /// Meta から発行される購読 token (これを使うと 24h 関係なく push 可)
+  messengerSubscriptionToken      String?
+  /// 購読頻度: "DAILY" | "WEEKLY" | "MONTHLY"
+  messengerSubscriptionFrequency  String?
+  /// 購読開始日時
+  messengerSubscribedAt           DateTime?
+  /// 購読期限 (通常 6 ヶ月後)
+  messengerSubscriptionExpiresAt  DateTime?
+  /// 購読状態: "ACTIVE" | "STOPPED" | "EXPIRED"
+  messengerSubscriptionStatus     String?
+  /// 購読トピック (例: 求人情報)
+  messengerSubscriptionTopic      String?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
