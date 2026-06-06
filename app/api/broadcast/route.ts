@@ -140,6 +140,10 @@ export async function POST(req: Request) {
           orderBy: { lastSeenAt: "desc" as const },
           take: 1,
         },
+        contacts: {
+          where: { isPrimary: true },
+          take: 1,
+        },
       },
     });
     // 戻り順を partnerIds の指定順に並び替え (UI 上の表示順と一致させる)
@@ -150,14 +154,16 @@ export async function POST(req: Request) {
     const targets: Target[] = orderedPartners.map((p) => ({
       id: p.id,
       name: p.name,
-      contactName: p.contactName,
+      // メール配信宛先: 主担当の担当者名 (フォールバックで legacy Partner.contactName)
+      contactName: p.contacts[0]?.name ?? p.contactName,
       country: p.country,
       introducibleFields: p.introducibleFields,
       lineUserId: p.lineUserId,
       lineGroupId: p.lineGroups[0]?.groupId ?? null,
       messengerPsid: p.messengerPsid,
       whatsappId: p.whatsappId,
-      email: p.email,
+      // メール: 主担当のメアド (フォールバックで legacy Partner.email)
+      email: p.contacts[0]?.email ?? p.email,
       channel: p.channel,
       messengerSubscriptionToken: p.messengerSubscriptionToken,
       messengerSubscriptionStatus: p.messengerSubscriptionStatus,

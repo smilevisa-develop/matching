@@ -31,15 +31,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!body?.name || typeof body.name !== "string" || !body.name.trim()) {
       return Response.json({ ok: false, error: "担当者名は必須です" }, { status: 400 });
     }
+    const partnerId = Number(id);
+
+    // 主担当指定 or 1 人目 (既存 0 件) は自動で isPrimary=true に
+    const existingCount = await prisma.partnerContact.count({ where: { partnerId } });
+    const wantPrimary = body.isPrimary === true || existingCount === 0;
+    if (wantPrimary) {
+      // 他の isPrimary を false に
+      await prisma.partnerContact.updateMany({
+        where: { partnerId, isPrimary: true },
+        data: { isPrimary: false },
+      });
+    }
+
     const contact = await prisma.partnerContact.create({
       data: {
-        partnerId: Number(id),
+        partnerId,
         name: body.name.trim(),
         title: body.title?.trim() || null,
         email: body.email?.trim() || null,
         phone: body.phone?.trim() || null,
         notes: body.notes?.trim() || null,
         sortOrder: Number.isFinite(body.sortOrder) ? Number(body.sortOrder) : 0,
+        isPrimary: wantPrimary,
       },
     });
     return Response.json({ ok: true, contact });

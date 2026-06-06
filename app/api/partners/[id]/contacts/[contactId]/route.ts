@@ -12,7 +12,8 @@ export async function PATCH(
 ) {
   try {
     await requireApiAccount();
-    const { contactId } = await params;
+    const { id, contactId } = await params;
+    const partnerId = Number(id);
     const body = await req.json();
     const data: Record<string, unknown> = {};
     if (body.name !== undefined) data.name = String(body.name).trim();
@@ -21,6 +22,17 @@ export async function PATCH(
     if (body.phone !== undefined) data.phone = body.phone ? String(body.phone).trim() : null;
     if (body.notes !== undefined) data.notes = body.notes ? String(body.notes).trim() : null;
     if (body.sortOrder !== undefined) data.sortOrder = Number(body.sortOrder) || 0;
+
+    // isPrimary を true に切り替える場合は同パートナーの他を全部 false に
+    if (body.isPrimary === true) {
+      await prisma.partnerContact.updateMany({
+        where: { partnerId, NOT: { id: Number(contactId) } },
+        data: { isPrimary: false },
+      });
+      data.isPrimary = true;
+    } else if (body.isPrimary === false) {
+      data.isPrimary = false;
+    }
 
     const contact = await prisma.partnerContact.update({
       where: { id: Number(contactId) },
@@ -41,8 +53,23 @@ export async function DELETE(
 ) {
   try {
     await requireApiAccount();
-    const { contactId } = await params;
+    const { id, contactId } = await params;
+    const partnerId = Number(id);
+    const target = await prisma.partnerContact.findUnique({ where: { id: Number(contactId) } });
     await prisma.partnerContact.delete({ where: { id: Number(contactId) } });
+    // 主担当を削除した場合、残りの先頭を新しい主担当に昇格
+    if (target?.isPrimary) {
+      const next = await prisma.partnerContact.findFirst({
+        where: { partnerId },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      });
+      if (next) {
+        await prisma.partnerContact.update({
+          where: { id: next.id },
+          data: { isPrimary: true },
+        });
+      }
+    }
     return Response.json({ ok: true });
   } catch (e) {
     return Response.json(

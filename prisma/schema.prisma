@@ -170,10 +170,13 @@ model PartnerContact {
   notes     String?
   /// 並び順 (社内の主担当を先頭に等)
   sortOrder Int      @default(0)
+  /// 主担当フラグ (1 パートナーにつき 1 人だけ true)。一斉配信の宛先として使う
+  isPrimary Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([partnerId, sortOrder])
+  @@index([partnerId, isPrimary])
 }
 
 model PartnerRatingHistory {

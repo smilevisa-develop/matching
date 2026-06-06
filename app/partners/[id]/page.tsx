@@ -154,6 +154,7 @@ export default async function PartnerDetailPage({
       phone: c.phone,
       notes: c.notes,
       sortOrder: c.sortOrder,
+      isPrimary: c.isPrimary,
     })),
   };
 

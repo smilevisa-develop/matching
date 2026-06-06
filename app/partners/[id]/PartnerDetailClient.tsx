@@ -98,6 +98,7 @@ export type PartnerDetailData = {
     phone: string | null;
     notes: string | null;
     sortOrder: number;
+    isPrimary: boolean;
   }[];
 };
 
@@ -108,13 +109,11 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
     country: initial.country ?? "",
     channel: initial.channel ?? "未設定",
     linkStatus: initial.linkStatus,
-    contactName: initial.contactName ?? "",
     notes: initial.notes ?? "",
     rating: initial.rating ?? 0,
     ratingReason: initial.ratingReason ?? "",
     role: initial.role ?? "",
     relationshipStatus: initial.relationshipStatus ?? "",
-    email: initial.email ?? "",
     snsContact: initial.snsContact ?? "",
     features: initial.features ?? "",
     introducibleNationalities: parseCsv(initial.introducibleNationalities),
@@ -290,20 +289,10 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
               ))}
             </select>
           </Field>
-          <Field label="担当者名">
-            <input
-              className={INPUT}
-              value={form.contactName}
-              onChange={(e) => set("contactName", e.target.value)}
-            />
-          </Field>
         </Group>
 
         {/* 連絡 */}
         <Group title="連絡">
-          <Field label="メール">
-            <input className={INPUT} value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="example@example.com" />
-          </Field>
           <Field label="SNS 連絡先">
             <input className={INPUT} value={form.snsContact} onChange={(e) => set("snsContact", e.target.value)} placeholder="LINE / Facebook URL など" />
           </Field>
@@ -320,7 +309,7 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
             <LinkStatusDisplay
               linkStatus={form.linkStatus}
               channel={form.channel}
-              email={form.email}
+              email={initial.contacts.find((c) => c.isPrimary)?.email ?? null}
               lineUserId={initial.lineUserId}
               lineGroupId={initial.lineGroupId}
               lineGroupName={initial.lineGroupName}
@@ -775,6 +764,22 @@ function ContactsPanel({
     router.refresh();
   };
 
+  const makePrimary = async (id: number) => {
+    const res = await fetch(`/api/partners/${partnerId}/contacts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isPrimary: true }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(`主担当切替失敗: ${data.error ?? res.statusText}`);
+      return;
+    }
+    // 全 contact の isPrimary を再計算 (このひとつだけ true、他全部 false)
+    setContacts((cs) => cs.map((c) => ({ ...c, isPrimary: c.id === id })));
+    router.refresh();
+  };
+
   return (
     <div className="mt-4 space-y-3">
       {contacts.length === 0 && !addingMode ? (
@@ -797,13 +802,20 @@ function ContactsPanel({
         ) : (
           <div
             key={c.id}
-            className="rounded-xl border border-blue-100 bg-white px-4 py-3 shadow-sm"
+            className={`rounded-xl border px-4 py-3 shadow-sm ${
+              c.isPrimary ? "border-amber-300 bg-amber-50/40 ring-1 ring-amber-200" : "border-blue-100 bg-white"
+            }`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-[var(--color-text-dark)]">
-                  {c.name}
-                  {c.title ? <span className="ml-2 text-xs font-normal text-gray-500">{c.title}</span> : null}
+                <p className="text-sm font-semibold text-[var(--color-text-dark)] flex items-center gap-2 flex-wrap">
+                  {c.isPrimary ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                      ★ 主担当
+                    </span>
+                  ) : null}
+                  <span>{c.name}</span>
+                  {c.title ? <span className="text-xs font-normal text-gray-500">{c.title}</span> : null}
                 </p>
                 <div className="mt-1 grid gap-1 text-xs text-gray-600 md:grid-cols-2">
                   {c.email ? (
@@ -822,6 +834,16 @@ function ContactsPanel({
                 ) : null}
               </div>
               <div className="flex gap-2 shrink-0">
+                {!c.isPrimary ? (
+                  <button
+                    type="button"
+                    onClick={() => void makePrimary(c.id)}
+                    className="rounded-md border border-amber-300 px-2.5 py-1 text-[11px] text-amber-700 hover:bg-amber-50"
+                    title="この担当者を主担当 (一斉配信メール宛先) にします"
+                  >
+                    主担当に
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => startEdit(c)}

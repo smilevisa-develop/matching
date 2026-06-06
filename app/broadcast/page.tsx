@@ -16,6 +16,11 @@ export default async function BroadcastPage() {
           select: { groupId: true, groupName: true },
           take: 1,
         },
+        contacts: {
+          where: { isPrimary: true },
+          select: { email: true },
+          take: 1,
+        },
       },
     }),
     // 連絡テンプレートは全アカウント共通
@@ -52,7 +57,8 @@ export default async function BroadcastPage() {
           channel: p.channel,
           linkStatus: p.linkStatus,
           contactName: p.contactName,
-          email: p.email,
+          // メール宛先: 主担当のメアドを優先、無ければ legacy Partner.email
+          email: p.contacts[0]?.email ?? p.email,
           lineUserId: p.lineUserId,
           lineGroupName: p.lineGroups[0]?.groupName ?? null,
           lineGroupId: p.lineGroups[0]?.groupId ?? null,
