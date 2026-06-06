@@ -16,6 +16,7 @@
  *                   省略時は SMTP_FROM の宛先に返信が届く
  */
 import nodemailer, { type Transporter } from "nodemailer";
+import dns from "node:dns";
 
 export type EmailSendResult =
   | { ok: true; id?: string }
@@ -31,16 +32,31 @@ function getTransporter(): Transporter | null {
   const pass = process.env.SMTP_PASS;
   if (!host || !user || !pass) return null;
 
-  cachedTransporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465, // 465 = TLS、587 = STARTTLS
-    auth: { user, pass },
-    // ハング防止のためタイムアウト明示 (デフォルトはほぼ無限大)
-    connectionTimeout: 10_000, // 10 秒で接続失敗
-    greetingTimeout: 10_000, // 10 秒で SMTP 挨拶失敗
-    socketTimeout: 20_000, // 20 秒でソケット読み書き失敗
-  });
+  // Railway などのホスティング環境は IPv6 ルーティング無しのことが多い。
+  // smtp.gmail.com を解決すると IPv6 が先に返るため ENETUNREACH エラーになる。
+  // IPv4 を強制することで回避する。
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lookupIPv4: any = (
+    hostname: string,
+    _options: unknown,
+    callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void,
+  ) => dns.lookup(hostname, { family: 4 }, callback);
+
+  cachedTransporter = nodemailer.createTransport(
+    {
+      host,
+      port,
+      secure: port === 465, // 465 = TLS、587 = STARTTLS
+      auth: { user, pass },
+      // ハング防止のためタイムアウト明示 (デフォルトはほぼ無限大)
+      connectionTimeout: 10_000, // 10 秒で接続失敗
+      greetingTimeout: 10_000, // 10 秒で SMTP 挨拶失敗
+      socketTimeout: 20_000, // 20 秒でソケット読み書き失敗
+      // IPv4 経路を強制 (Railway での ENETUNREACH 対策)
+      lookup: lookupIPv4,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any,
+  );
   return cachedTransporter;
 }
 
