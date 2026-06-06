@@ -313,107 +313,129 @@ export async function POST(req: Request) {
     for (const t of targets) {
       const personalizedMessage = renderFor(t);
 
-      // 1️⃣ LINE グループ (パートナー会社の LINE グループ) 優先
-      if (t.lineGroupId) {
-        const r = await sendLine(t.lineGroupId, personalizedMessage);
-        if (r.ok) {
-          sentCount++;
-          sentLineGroup++;
+      // 「主な連絡手段」 (t.channel) で送信経路を決める。
+      // 該当 ID が無ければ failed (他経路へのフォールバックはしない)。
+      const ch = t.channel ?? "";
+
+      // === LINE 経路 (グループ → 個人 の順、両方無いと失敗) ===
+      if (ch === "LINE") {
+        if (t.lineGroupId) {
+          const r = await sendLine(t.lineGroupId, personalizedMessage);
+          if (r.ok) {
+            sentCount++;
+            sentLineGroup++;
+          } else {
+            failedCount++;
+            failures.push({ name: t.name, channel: "LINE-Group", error: r.error });
+          }
+        } else if (t.lineUserId) {
+          const r = await sendLine(t.lineUserId, personalizedMessage);
+          if (r.ok) {
+            sentCount++;
+            sentLine++;
+          } else {
+            failedCount++;
+            failures.push({ name: t.name, channel: "LINE", error: r.error });
+          }
         } else {
           failedCount++;
-          failures.push({ name: t.name, channel: "LINE-Group", error: r.error });
+          failures.push({ name: t.name, channel: "LINE", error: "LINE ID 未登録 (主な連絡手段=LINE)" });
         }
         continue;
       }
 
-      // 2️⃣ 個人 LINE
-      if (t.lineUserId) {
-        const r = await sendLine(t.lineUserId, personalizedMessage);
-        if (r.ok) {
-          sentCount++;
-          sentLine++;
+      // === WhatsApp ===
+      if (ch === "WhatsApp") {
+        if (t.whatsappId) {
+          const params = buildWaTemplateParams(t);
+          const r = await sendWhatsapp(t.whatsappId, personalizedMessage, params);
+          if (r.ok) {
+            sentCount++;
+            sentWhatsapp++;
+          } else {
+            failedCount++;
+            failures.push({ name: t.name, channel: "WhatsApp", error: r.error });
+          }
         } else {
           failedCount++;
-          failures.push({ name: t.name, channel: "LINE", error: r.error });
+          failures.push({ name: t.name, channel: "WhatsApp", error: "WhatsApp 番号未登録" });
         }
         continue;
       }
 
-      // LINE が無ければ WhatsApp
-      if (t.whatsappId) {
-        const params = buildWaTemplateParams(t);
-        const r = await sendWhatsapp(t.whatsappId, personalizedMessage, params);
-        if (r.ok) {
-          sentCount++;
-          sentWhatsapp++;
+      // === Messenger ===
+      if (ch === "Messenger") {
+        if (t.messengerPsid) {
+          const r = await sendMessenger(t.messengerPsid, personalizedMessage);
+          if (r.ok) {
+            sentCount++;
+            sentMessenger++;
+          } else {
+            failedCount++;
+            failures.push({ name: t.name, channel: "Messenger", error: r.error });
+          }
         } else {
           failedCount++;
-          failures.push({ name: t.name, channel: "WhatsApp", error: r.error });
+          failures.push({ name: t.name, channel: "Messenger", error: "Messenger PSID 未登録" });
         }
         continue;
       }
 
-      // Messenger
-      if (t.messengerPsid) {
-        const r = await sendMessenger(t.messengerPsid, personalizedMessage);
-        if (r.ok) {
-          sentCount++;
-          sentMessenger++;
-        } else {
-          failedCount++;
-          failures.push({ name: t.name, channel: "Messenger", error: r.error });
-        }
-        continue;
-      }
-
-      // 最終フォールバック: メール (主な連絡手段がメール かつ email が有効形式 のときのみ)
-      const emailUsable =
-        (t.channel === "mail" || t.channel === "メール" || t.channel === "Email") &&
-        Boolean(t.email && /@/.test(t.email));
-      if (emailUsable && t.email) {
-        const partnerCtx: PartnerForBroadcast = {
-          name: t.name,
-          contactName: t.contactName,
-          country: t.country,
-          introducibleFields: t.introducibleFields,
-        };
-        // 件名優先順位: 本文呼び出しで明示指定 > テンプレ設定 > デフォルト
-        const subjectTemplate =
-          emailSubjectFromBody?.trim() ||
-          tmpl?.emailSubject?.trim() ||
-          DEFAULT_EMAIL_SUBJECT;
-        const subject = expandTemplate(subjectTemplate, {
-          partner: partnerCtx,
-          openDeals,
-          urgentDeals,
-        });
-        const r = await sendEmail({
-          to: t.email,
-          subject,
-          text: personalizedMessage,
-          html: textToBasicHtml(personalizedMessage),
-        });
-        if (r.ok) {
-          sentCount++;
-          sentEmail++;
-          await prisma.message.create({
-            data: {
-              partnerId: t.id,
-              channel: "Email",
-              direction: "outbound",
-              content: personalizedMessage,
-              externalId: t.email,
-            },
+      // === メール ===
+      if (ch === "mail" || ch === "メール" || ch === "Email") {
+        const emailOk = Boolean(t.email && /@/.test(t.email));
+        if (emailOk && t.email) {
+          const partnerCtx: PartnerForBroadcast = {
+            name: t.name,
+            contactName: t.contactName,
+            country: t.country,
+            introducibleFields: t.introducibleFields,
+          };
+          const subjectTemplate =
+            emailSubjectFromBody?.trim() ||
+            tmpl?.emailSubject?.trim() ||
+            DEFAULT_EMAIL_SUBJECT;
+          const subject = expandTemplate(subjectTemplate, {
+            partner: partnerCtx,
+            openDeals,
+            urgentDeals,
           });
+          const r = await sendEmail({
+            to: t.email,
+            subject,
+            text: personalizedMessage,
+            html: textToBasicHtml(personalizedMessage),
+          });
+          if (r.ok) {
+            sentCount++;
+            sentEmail++;
+            await prisma.message.create({
+              data: {
+                partnerId: t.id,
+                channel: "Email",
+                direction: "outbound",
+                content: personalizedMessage,
+                externalId: t.email,
+              },
+            });
+          } else {
+            failedCount++;
+            failures.push({ name: t.name, channel: "Email", error: r.error });
+          }
         } else {
           failedCount++;
-          failures.push({ name: t.name, channel: "Email", error: r.error });
+          failures.push({ name: t.name, channel: "Email", error: "メールアドレス未登録 or 形式不正" });
         }
         continue;
       }
 
+      // === 主な連絡手段が未設定 or 不明 ===
       failedCount++;
-      failures.push({ name: t.name, channel: "-", error: "連絡先 ID 未登録" });
+      failures.push({
+        name: t.name,
+        channel: "-",
+        error: "主な連絡手段が未設定です。パートナー詳細で設定してください",
+      });
     }
 
     await prisma.messageLog.create({

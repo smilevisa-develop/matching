@@ -684,7 +684,24 @@ function LinkStatusDisplay({
   if (emailLinked && email) {
     ids.push({ label: "Email", value: email });
   }
-  const isLinked = ids.length > 0 || linkStatus === "完了";
+  // 「完了」判定: 主な連絡手段に応じて、必要な ID が登録されているか
+  const isLinked = (() => {
+    switch (channel) {
+      case "LINE":
+        return Boolean(lineGroupId || lineUserId);
+      case "Messenger":
+        return Boolean(messengerPsid);
+      case "WhatsApp":
+        return Boolean(whatsappId);
+      case "mail":
+      case "メール":
+      case "Email":
+        return emailLinked;
+      default:
+        // 未設定の場合は手動の linkStatus "完了" だけ尊重
+        return linkStatus === "完了";
+    }
+  })();
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">

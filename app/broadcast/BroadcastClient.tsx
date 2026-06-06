@@ -40,6 +40,48 @@ type Partner = {
   introducibleResidenceStatuses: string | null;
 };
 type Template = { id: number; name: string; content: string; emailSubject: string | null };
+
+/**
+ * 「主な連絡手段」(channel) を基準に、配信可能なパートナーか判定する。
+ * 未設定 / 該当 ID 未登録 のパートナーは false (配信対象外)。
+ */
+function isPartnerReachable(p: Partner): boolean {
+  switch (p.channel) {
+    case "LINE":
+      return Boolean(p.lineGroupId || p.lineUserId);
+    case "Messenger":
+      return Boolean(p.messengerPsid);
+    case "WhatsApp":
+      return Boolean(p.whatsappId);
+    case "mail":
+    case "メール":
+    case "Email":
+      return Boolean(p.email && /@/.test(p.email));
+    default:
+      // 未設定 / null / 未知の値
+      return false;
+  }
+}
+
+/** 「主な連絡手段」に応じて配信経路バッジを返す */
+function partnerChannelBadge(p: Partner): string {
+  switch (p.channel) {
+    case "LINE":
+      if (p.lineGroupId) return "LINEグループ";
+      if (p.lineUserId) return "LINE個人";
+      return "LINE 未登録";
+    case "Messenger":
+      return p.messengerPsid ? "Messenger" : "MSG 未登録";
+    case "WhatsApp":
+      return p.whatsappId ? "WhatsApp" : "WA 未登録";
+    case "mail":
+    case "メール":
+    case "Email":
+      return p.email && /@/.test(p.email) ? "メール" : "メール 未登録";
+    default:
+      return "未設定";
+  }
+}
 type Group = {
   id: number;
   name: string;
@@ -95,11 +137,8 @@ export default function BroadcastClient({
         if (relationshipStatus !== ALL && (p.relationshipStatus ?? "") !== relationshipStatus) return false;
         if (introNationality !== ALL && !parseCsv(p.introducibleNationalities).includes(introNationality)) return false;
         if (introField !== ALL && !parseCsv(p.introducibleFields).includes(introField)) return false;
-        // メールは「主な連絡手段が mail」かつ「email が @ を含む有効形式」のときだけ紐づけ済みと判定
-        const emailUsable =
-          (p.channel === "mail" || p.channel === "メール" || p.channel === "Email") &&
-          Boolean(p.email && /@/.test(p.email));
-        const isLinked = Boolean(p.lineGroupId || p.lineUserId || p.messengerPsid || p.whatsappId || emailUsable);
+        // 「主な連絡手段」だけを判定基準にする (未設定は紐づけ済みに入らない)
+        const isLinked = isPartnerReachable(p);
         if (linkFilter === "linked" && !isLinked) return false;
         if (linkFilter === "unlinked" && isLinked) return false;
         return true;
@@ -424,17 +463,7 @@ export default function BroadcastClient({
                 </p>
               </div>
               <span className="ml-auto text-xs text-gray-400 shrink-0">
-                {p.lineGroupId
-                  ? "LINE-Group"
-                  : p.lineUserId
-                    ? "LINE"
-                    : p.messengerPsid
-                      ? "MSG"
-                      : p.whatsappId
-                        ? "WA"
-                        : (p.channel === "mail" || p.channel === "メール" || p.channel === "Email") && p.email && /@/.test(p.email)
-                          ? "Mail"
-                          : "未登録"}
+                {partnerChannelBadge(p)}
               </span>
             </div>
           ))}
@@ -505,10 +534,6 @@ export default function BroadcastClient({
               {/* メール経路のパートナーが含まれていれば件名を表示 */}
               {targetPartners.some(
                 (p) =>
-                  !p.lineGroupId &&
-                  !p.lineUserId &&
-                  !p.whatsappId &&
-                  !p.messengerPsid &&
                   (p.channel === "mail" || p.channel === "メール" || p.channel === "Email") &&
                   p.email &&
                   /@/.test(p.email),
@@ -526,17 +551,7 @@ export default function BroadcastClient({
                     <span className="font-mono text-[11px] text-gray-400 shrink-0">#{p.id}</span>
                     <span className="text-sm text-[var(--color-text-dark)] truncate flex-1">{p.name}</span>
                     <span className="text-[10px] text-gray-400 shrink-0">
-                      {p.lineGroupId
-                        ? "LINEグループ"
-                        : p.lineUserId
-                          ? "LINE個人"
-                          : p.whatsappId
-                            ? "WhatsApp"
-                            : p.messengerPsid
-                              ? "Messenger"
-                              : (p.channel === "mail" || p.channel === "メール" || p.channel === "Email") && p.email && /@/.test(p.email)
-                                ? "メール"
-                                : "未登録"}
+                      {partnerChannelBadge(p)}
                     </span>
                   </li>
                 ))}
