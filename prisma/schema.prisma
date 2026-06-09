@@ -37,57 +37,57 @@ model Person {
   portalTasks     PortalTask[]
   resumeProfile   ResumeProfile?
   resumeDocuments ResumeDocument[]
-  dealCandidates DealCandidate[]
+  dealCandidates  DealCandidate[]
   customQuestions PersonCustomQuestion[]
-  placement      PersonPlacement?
-  invoices       Invoice[]
-  partner         Partner?  @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  placement       PersonPlacement?
+  invoices        Invoice[]
+  partner         Partner?               @relation(fields: [partnerId], references: [id], onDelete: SetNull)
 }
 
 model PersonCustomQuestion {
-  id          Int      @id @default(autoincrement())
-  personId    Int
-  person      Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
-  label       String
-  type        String   @default("text") // "text" or "file"
-  required    Boolean  @default(false)
-  answer      String?
-  fileName    String?
-  fileUrl     String?
-  mimeType    String?
-  active      Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  personId  Int
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  label     String
+  type      String   @default("text") // "text" or "file"
+  required  Boolean  @default(false)
+  answer    String?
+  fileName  String?
+  fileUrl   String?
+  mimeType  String?
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([personId, sortOrder])
 }
 
 model Company {
-  id           Int      @id @default(autoincrement())
-  externalId   String?  @unique
-  name         String
-  industry     String?
-  location     String?
-  hiringStatus String   @default("募集中")
+  id             Int      @id @default(autoincrement())
+  externalId     String?  @unique
+  name           String
+  industry       String?
+  location       String?
+  hiringStatus   String   @default("募集中")
   driveFolderUrl String?
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  deals        Deal[]
+  deals Deal[]
 }
 
 model Partner {
-  id            Int      @id @default(autoincrement())
+  id            Int     @id @default(autoincrement())
   name          String
   country       String?
   channel       String?
-  linkStatus    String   @default("未")
+  linkStatus    String  @default("未")
   contactName   String?
   notes         String?
-  lineUserId    String?  @unique
-  messengerPsid String?  @unique
+  lineUserId    String? @unique
+  messengerPsid String? @unique
   whatsappId    String?
   /// 1〜5 の評価 (☆ 5 段階)。null = 未評価
   rating        Int?
@@ -96,61 +96,61 @@ model Partner {
 
   // --- スプシ「アライアンス先」由来のフィールド ---
   /// 役割: 求人 / 求職 / 求人・求職 / 学校 など
-  role          String?
+  role               String?
   /// 関係性 (実績有り/無し) — 後方互換用。relationshipStatus 由来の derived 値
-  hasPerformance Boolean  @default(false)
+  hasPerformance     Boolean @default(false)
   /// 関係性ラベル (実績有り / 実績無し / 有料 / 無料 / その他自由文字列)
   relationshipStatus String?
   /// メール
-  email         String?
+  email              String?
   /// SNS 連絡先 (URL or ID)
-  snsContact    String?
+  snsContact         String?
   /// 特徴・強み (備考列)
-  features      String?
+  features           String?
 
   // --- 紹介可能 (checkbox 選択, CSV 保存) ---
   /// 紹介可能な国籍 (CSV: "ベトナム,インドネシア,...")
-  introducibleNationalities      String?
+  introducibleNationalities     String?
   /// 国内 / 国外 / 両方
-  introducibleScope              String?
+  introducibleScope             String?
   /// 紹介可能な分野 (CSV: "介護,外食,建設,...")
-  introducibleFields             String?
+  introducibleFields            String?
   /// 紹介可能な在留資格 (CSV: "技能実習,特定技能1号,...")
-  introducibleResidenceStatuses  String?
+  introducibleResidenceStatuses String?
 
   // --- 手数料 ---
   /// 目安の紹介手数料 (free text)
-  feeAmount      String?
+  feeAmount     String?
   /// 最低金額
-  minFeeAmount   String?
+  minFeeAmount  String?
   /// 配分比率
-  feeShareRatio  String?
+  feeShareRatio String?
 
   // ── Messenger Recurring Notifications (定期通知) ──
   /// Meta から発行される購読 token (これを使うと 24h 関係なく push 可)
-  messengerSubscriptionToken      String?
+  messengerSubscriptionToken     String?
   /// 購読頻度: "DAILY" | "WEEKLY" | "MONTHLY"
-  messengerSubscriptionFrequency  String?
+  messengerSubscriptionFrequency String?
   /// 購読開始日時
-  messengerSubscribedAt           DateTime?
+  messengerSubscribedAt          DateTime?
   /// 購読期限 (通常 6 ヶ月後)
-  messengerSubscriptionExpiresAt  DateTime?
+  messengerSubscriptionExpiresAt DateTime?
   /// 購読状態: "ACTIVE" | "STOPPED" | "EXPIRED"
-  messengerSubscriptionStatus     String?
+  messengerSubscriptionStatus    String?
   /// 購読トピック (例: 求人情報)
-  messengerSubscriptionTopic      String?
+  messengerSubscriptionTopic     String?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  deals       Deal[]
-  persons     Person[]
-  groupMembers GroupMember[]
-  invoices    Invoice[]
+  deals         Deal[]
+  persons       Person[]
+  groupMembers  GroupMember[]
+  invoices      Invoice[]
   ratingHistory PartnerRatingHistory[]
-  messages    Message[]
-  lineGroups  LineGroup[]
-  contacts    PartnerContact[]
+  messages      Message[]
+  lineGroups    LineGroup[]
+  contacts      PartnerContact[]
 }
 
 /// パートナー会社の担当者 (1 社につき複数人を登録できる)
@@ -180,66 +180,66 @@ model PartnerContact {
 }
 
 model PartnerRatingHistory {
-  id        Int      @id @default(autoincrement())
-  partnerId Int
-  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  id         Int      @id @default(autoincrement())
+  partnerId  Int
+  partner    Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   /// 1〜5 (null は手動でクリアした時点のレコード)
-  rating    Int?
-  reason    String?
+  rating     Int?
+  reason     String?
   /// 記入者 (任意)
   recordedBy String?
-  createdAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   @@index([partnerId, createdAt])
 }
 
 model StaffAccount {
-  id                       Int                      @id @default(autoincrement())
-  loginId                  String                   @unique
-  name                     String
-  role                     String                   @default("member")
-  passcodeHash             String
-  createdAt                DateTime                 @default(now())
-  updatedAt                DateTime                 @updatedAt
+  id           Int      @id @default(autoincrement())
+  loginId      String   @unique
+  name         String
+  role         String   @default("member")
+  passcodeHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  sessions                 StaffSession[]
-  appSettings              AppSettings?
-  onboardingFormTemplates  OnboardingFormTemplate[]
-  messageTemplates         MessageTemplate[]
-  resumeTemplates          ResumeTemplate[]
-  createdResumes           ResumeDocument[]
-  ownedDeals               Deal[]
+  sessions                StaffSession[]
+  appSettings             AppSettings?
+  onboardingFormTemplates OnboardingFormTemplate[]
+  messageTemplates        MessageTemplate[]
+  resumeTemplates         ResumeTemplate[]
+  createdResumes          ResumeDocument[]
+  ownedDeals              Deal[]
 }
 
 model StaffSession {
-  id               Int          @id @default(autoincrement())
+  id               Int      @id @default(autoincrement())
   accountId        Int
-  token            String       @unique
+  token            String   @unique
   impersonatedById Int?
   expiresAt        DateTime
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  account          StaffAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account StaffAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
 model PersonOnboarding {
-  id                       Int      @id @default(autoincrement())
-  personId                 Int      @unique
-  person                   Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
-  englishName              String?
-  fullNameKana             String?
-  birthDate                String?
-  phoneNumber              String?
-  postalCode               String?
-  address                  String?
-  emergencyContactName     String?
-  emergencyContactPhone    String?
-  emergencyRelationship    String?
-  status                   String   @default("draft")
-  submittedAt              DateTime?
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                    Int       @id @default(autoincrement())
+  personId              Int       @unique
+  person                Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  englishName           String?
+  fullNameKana          String?
+  birthDate             String?
+  phoneNumber           String?
+  postalCode            String?
+  address               String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyRelationship String?
+  status                String    @default("draft")
+  submittedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 }
 
 model PortalDocument {
@@ -352,7 +352,7 @@ model Message {
 }
 
 model MessageTemplate {
-  id        Int      @id @default(autoincrement())
+  id        Int          @id @default(autoincrement())
   accountId Int
   account   StaffAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   name      String
@@ -364,9 +364,9 @@ model MessageTemplate {
 
   // ── WhatsApp 承認済みテンプレートメッセージとして送る場合 ──
   /// Meta WhatsApp Business Manager で承認された テンプレ名 (例: partner_broadcast_v1)
-  whatsappTemplateName String?
+  whatsappTemplateName   String?
   /// テンプレートの言語コード (例: ja, en, vi)
-  whatsappTemplateLang String?
+  whatsappTemplateLang   String?
   /// 本文 {{1}} {{2}} ... に渡す変数キーを順番で CSV 指定
   /// 例: "パートナー名,急ぎ案件一覧" → WhatsApp テンプレ本文の {{1}} = パートナー名展開後, {{2}} = 急ぎ案件一覧展開後
   whatsappTemplateParams String?
@@ -376,77 +376,77 @@ model MessageTemplate {
 }
 
 model ResumeTemplate {
-  id               Int          @id @default(autoincrement())
-  accountId        Int
-  account          StaffAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  name             String
-  templateUrl      String
-  driveFolderUrl   String?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id             Int          @id @default(autoincrement())
+  accountId      Int
+  account        StaffAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name           String
+  templateUrl    String
+  driveFolderUrl String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  resumeDocuments  ResumeDocument[]
+  resumeDocuments ResumeDocument[]
 }
 
 model ResumeDocument {
-  id               Int          @id @default(autoincrement())
-  personId         Int
-  person           Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
-  templateId       Int
-  template         ResumeTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  accountId        Int
-  account          StaffAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  title            String
-  documentId       String?
-  documentUrl      String?
-  driveFolderUrl   String
-  status           String       @default("draft")
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id             Int            @id @default(autoincrement())
+  personId       Int
+  person         Person         @relation(fields: [personId], references: [id], onDelete: Cascade)
+  templateId     Int
+  template       ResumeTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  accountId      Int
+  account        StaffAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  title          String
+  documentId     String?
+  documentUrl    String?
+  driveFolderUrl String
+  status         String         @default("draft")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 }
 
 model ResumeProfile {
-  id              Int      @id @default(autoincrement())
-  personId        Int      @unique
-  person          Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
-  gender          String?
-  country         String?
-  spouseStatus    String?
-  childrenCount   String?
-  phoneHome       String?
-  visaType        String?
-  visaExpiryDate  String?
-  workVisa        String?
-  remarks         String?
-  educations      Json?
-  workExperiences Json?
-  certifications  Json?
-  motivation      String?
-  selfIntroduction String?
-  japanPurpose    String?
-  currentJob      String?
-  retirementReason String?
-  preferenceNote  String?
-  japaneseLevel   String?
-  japaneseLevelDate String?
-  licenseName     String?
-  licenseExpiryDate String?
-  otherQualificationName String?
+  id                           Int      @id @default(autoincrement())
+  personId                     Int      @unique
+  person                       Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  gender                       String?
+  country                      String?
+  spouseStatus                 String?
+  childrenCount                String?
+  phoneHome                    String?
+  visaType                     String?
+  visaExpiryDate               String?
+  workVisa                     String?
+  remarks                      String?
+  educations                   Json?
+  workExperiences              Json?
+  certifications               Json?
+  motivation                   String?
+  selfIntroduction             String?
+  japanPurpose                 String?
+  currentJob                   String?
+  retirementReason             String?
+  preferenceNote               String?
+  japaneseLevel                String?
+  japaneseLevelDate            String?
+  licenseName                  String?
+  licenseExpiryDate            String?
+  otherQualificationName       String?
   otherQualificationExpiryDate String?
-  traineeExperience String?
-  highSchoolName  String?
-  highSchoolStartDate String?
-  highSchoolEndDate String?
-  universityName  String?
-  universityStartDate String?
-  universityEndDate String?
+  traineeExperience            String?
+  highSchoolName               String?
+  highSchoolStartDate          String?
+  highSchoolEndDate            String?
+  universityName               String?
+  universityStartDate          String?
+  universityEndDate            String?
   /// 事前質問 (面接前ヒアリング) の自由回答群。
   /// 形式: { questionKey: answer } の Json オブジェクト。
   /// 履歴書に出る項目 (志望動機/自己紹介/来日目的/現在の仕事/退職理由) は
   /// 専用カラムに直接入る。それ以外はここに格納する。
-  interviewAnswers Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  interviewAnswers             Json?
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
 }
 
 model AppSettings {
@@ -455,24 +455,24 @@ model AppSettings {
   account          StaffAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   calendarEmbedUrl String?
   calendarLabel    String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 }
 
 model CoreSettings {
-  id                     Int      @id
-  fixedQuestions         Json?
+  id                        Int      @id
+  fixedQuestions            Json?
   // 推薦リスト出力で使うカラムキー (lib/recommendation-columns.ts の RECOMMENDATION_COLUMN_OPTIONS の key)
-  recommendationColumns  Json?
+  recommendationColumns     Json?
   // 月ごとの目標 (内定数 / 売上)。後方互換のための既定値、新しい monthlyTargets が無い場合のフォールバック
-  monthlyOfferTarget     Int?
-  monthlyRevenueTarget   Int?
+  monthlyOfferTarget        Int?
+  monthlyRevenueTarget      Int?
   // 月ごとの目標履歴。形式: [{ month: "2026-04", offer: 5, revenue: 1500000 }, ...]
-  monthlyTargets         Json?
+  monthlyTargets            Json?
   // 推薦リスト用 Google Sheets テンプレ URL (列見出し + フォーマット込み)
   recommendationTemplateUrl String?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 }
 
 model OnboardingFormTemplate {
@@ -510,72 +510,72 @@ model Group {
 }
 
 model GroupMember {
-  id       Int    @id @default(autoincrement())
-  group    Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  groupId  Int
-  partner  Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  id        Int     @id @default(autoincrement())
+  group     Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   Int
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   partnerId Int
 
   @@unique([groupId, partnerId])
 }
 
 model Deal {
-  id           Int          @id @default(autoincrement())
-  title        String
-  companyId    Int
-  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  partnerId    Int?
-  partner      Partner?     @relation(fields: [partnerId], references: [id], onDelete: SetNull)
-  ownerId      Int?
-  owner        StaffAccount? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  field        String?
-  priority     String       @default("normal")
-  status       String       @default("募集中")
-  unitPrice    String?
-  deadline     DateTime?
-  acceptedAt   DateTime?
-  requiredCount    Int      @default(0)
-  recommendedCount Int      @default(0)
-  interviewCount   Int      @default(0)
-  offerCount       Int      @default(0)
-  contractCount    Int      @default(0) // 旧: 成約 (UI 上は廃止、データは互換維持)
-  declineCount     Int      @default(0) // 内定辞退
-  rejectCount      Int      @default(0) // 不合格
-  notes        String?
+  id               Int           @id @default(autoincrement())
+  title            String
+  companyId        Int
+  company          Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  partnerId        Int?
+  partner          Partner?      @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  ownerId          Int?
+  owner            StaffAccount? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  field            String?
+  priority         String        @default("normal")
+  status           String        @default("募集中")
+  unitPrice        String?
+  deadline         DateTime?
+  acceptedAt       DateTime?
+  requiredCount    Int           @default(0)
+  recommendedCount Int           @default(0)
+  interviewCount   Int           @default(0)
+  offerCount       Int           @default(0)
+  contractCount    Int           @default(0) // 旧: 成約 (UI 上は廃止、データは互換維持)
+  declineCount     Int           @default(0) // 内定辞退
+  rejectCount      Int           @default(0) // 不合格
+  notes            String?
   /// 求人票の元になる条件 (Json: ExtractedJobPosting と同じキー集合)
   /// AI 取り込み / ChatGPT 貼り付け / 手動入力のいずれかで埋め、
   /// ここから 求人票 (JobPosting) を生成する
-  conditions   Json?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  conditions       Json?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  candidates   DealCandidate[]
-  invoices     Invoice[]
-  jobPostings  JobPosting[]
+  candidates  DealCandidate[]
+  invoices    Invoice[]
+  jobPostings JobPosting[]
 }
 
 model JobPostingTemplate {
-  id              Int      @id @default(autoincrement())
-  name            String
-  templateUrl     String
-  driveFolderUrl  String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  name           String
+  templateUrl    String
+  driveFolderUrl String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  documents       JobPosting[]
+  documents JobPosting[]
 }
 
 model JobPosting {
-  id                  Int      @id @default(autoincrement())
+  id                  Int                 @id @default(autoincrement())
   dealId              Int
-  deal                Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  deal                Deal                @relation(fields: [dealId], references: [id], onDelete: Cascade)
   templateId          Int?
   template            JobPostingTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   title               String
   documentId          String?
   documentUrl         String?
   driveFolderUrl      String?
-  status              String   @default("draft")
+  status              String              @default("draft")
   // 仕事内容
   jobDescription      String?
   workLocation        String?
@@ -618,77 +618,77 @@ model JobPosting {
   holidays            String?
   otherBenefits       String?
   notes               String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   @@index([dealId])
 }
 
 model PersonPlacement {
-  id                    Int      @id @default(autoincrement())
-  personId              Int      @unique
-  person                Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
-  stage                 String?
-  acceptedAt            DateTime?
-  preInterviewAt        DateTime?
-  companyInterviewAt    DateTime?
-  offerAt               DateTime?
-  offerAcceptedAt       DateTime?
-  applicationPlannedAt  DateTime?
-  applicationAt         DateTime?
-  applicationResultAt   DateTime?
-  applicationType       String?
-  applicantName         String?
-  returnHomeFlag        String?
-  returnHomeAt          DateTime?
-  entryPlannedAt        DateTime?
-  entryAt               DateTime?
-  joinPlannedAt         DateTime?
-  joinAt                DateTime?
-  sixMonthStatus        String?
-  consultation          String?
-  currentAction         String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                   Int       @id @default(autoincrement())
+  personId             Int       @unique
+  person               Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  stage                String?
+  acceptedAt           DateTime?
+  preInterviewAt       DateTime?
+  companyInterviewAt   DateTime?
+  offerAt              DateTime?
+  offerAcceptedAt      DateTime?
+  applicationPlannedAt DateTime?
+  applicationAt        DateTime?
+  applicationResultAt  DateTime?
+  applicationType      String?
+  applicantName        String?
+  returnHomeFlag       String?
+  returnHomeAt         DateTime?
+  entryPlannedAt       DateTime?
+  entryAt              DateTime?
+  joinPlannedAt        DateTime?
+  joinAt               DateTime?
+  sixMonthStatus       String?
+  consultation         String?
+  currentAction        String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 model Invoice {
-  id              Int      @id @default(autoincrement())
-  personId        Int
-  person          Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
-  dealId          Int?
-  deal            Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
-  unitPrice       String?
-  invoiceDate     DateTime?
-  invoiceAmount   String?
-  invoiceNumber   String?
-  invoiceStatus   String   @default("未送付")
-  invoiceUrl      String?
-  channel         String   @default("自社") // "自社" or "PA"
-  partnerId       Int?
-  partner         Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull, map: "Invoice_partnerId_fkey")
-  costAmount      String?
-  paInvoiceUrl    String?
-  paPaid          Boolean  @default(false)
-  paPaidAt        DateTime?
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            Int       @id @default(autoincrement())
+  personId      Int
+  person        Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  dealId        Int?
+  deal          Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  unitPrice     String?
+  invoiceDate   DateTime?
+  invoiceAmount String?
+  invoiceNumber String?
+  invoiceStatus String    @default("未送付")
+  invoiceUrl    String?
+  channel       String    @default("自社") // "自社" or "PA"
+  partnerId     Int?
+  partner       Partner?  @relation(fields: [partnerId], references: [id], onDelete: SetNull, map: "Invoice_partnerId_fkey")
+  costAmount    String?
+  paInvoiceUrl  String?
+  paPaid        Boolean   @default(false)
+  paPaidAt      DateTime?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([personId])
   @@index([dealId])
 }
 
 model DealCandidate {
-  id          Int      @id @default(autoincrement())
-  dealId      Int
-  deal        Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  personId    Int
-  person      Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
-  stage       String   @default("new")
-  note        String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  dealId    Int
+  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  personId  Int
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  stage     String   @default("new")
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([dealId, personId])
 }
@@ -708,4 +708,24 @@ model MessageLog {
   failures     Json?
   scheduledAt  DateTime?
   createdAt    DateTime  @default(now())
+}
+
+/// 一斉送信の画像添付など、システム生成 / 管理者アップロードファイル。
+/// 画像 (JPG/PNG) のみ想定、最大 5MB。HTTPS で公開して LINE / Messenger の
+/// originalContentUrl から参照できるようにする。
+///
+/// 注意: 公開アクセスだが、id は cuid(unguessable) で実質保護。
+/// expiresAt 経過後は cron で物理削除する想定。
+model UploadedFile {
+  id                String    @id @default(cuid())
+  filename          String
+  mimeType          String
+  sizeBytes         Int
+  data              Bytes
+  /// アップロードしたアカウント (将来監査用)。今は null 許容で運用開始 OK。
+  uploaderAccountId Int?
+  createdAt         DateTime  @default(now())
+  expiresAt         DateTime?
+
+  @@index([expiresAt])
 }

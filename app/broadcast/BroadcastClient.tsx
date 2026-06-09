@@ -125,6 +125,55 @@ export default function BroadcastClient({
   const [message, setMessage] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
+
+  /** 添付画像: アップロード済みファイル (LINE image message + メール添付に使う) */
+  const [attachedImages, setAttachedImages] = useState<
+    { id: string; filename: string; url: string; sizeBytes: number }[]
+  >([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const handleImagePick = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadError(null);
+    const remaining = 4 - attachedImages.length;
+    if (remaining <= 0) {
+      setUploadError("画像は最大 4 枚までです");
+      return;
+    }
+    const toUpload = Array.from(files).slice(0, remaining);
+    setUploadingImage(true);
+    try {
+      for (const file of toUpload) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/files", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!data.ok) {
+          setUploadError(`「${file.name}」: ${data.error}`);
+          continue;
+        }
+        setAttachedImages((prev) => [
+          ...prev,
+          {
+            id: data.file.id,
+            filename: data.file.filename,
+            url: data.file.url,
+            sizeBytes: data.file.sizeBytes,
+          },
+        ]);
+      }
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "アップロード失敗");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const removeAttachedImage = (id: string) => {
+    setAttachedImages((prev) => prev.filter((f) => f.id !== id));
+  };
+
   const [sending, setSending] = useState(false);
   const [sendingStartedAt, setSendingStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -293,6 +342,7 @@ export default function BroadcastClient({
           emailSubject: emailSubject.trim() || null,
           scheduledAt: scheduled ? scheduleDate : null,
           templateId: selectedTemplate ? Number(selectedTemplate) : null,
+          fileIds: attachedImages.map((a) => a.id),
         }),
       });
       const data = await res.json();
@@ -443,6 +493,77 @@ export default function BroadcastClient({
                 + {v.label}
               </button>
             ))}
+          </div>
+
+          {/* 画像添付 (LINE image message + メール添付として送る、最大 4 枚) */}
+          <div className="mt-4 border-t border-gray-200 pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <label className="text-xs font-semibold text-[var(--color-text-dark)]">
+                  📷 画像添付
+                </label>
+                <span className="ml-2 text-[10px] text-gray-400">
+                  (LINE / メール 両方に添付。JPG / PNG, 1枚 ≤ 5MB, 最大 4 枚)
+                </span>
+              </div>
+              <label
+                className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border cursor-pointer transition-colors ${
+                  attachedImages.length >= 4 || uploadingImage
+                    ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                    : "border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
+                }`}
+              >
+                {uploadingImage ? "アップロード中..." : "+ 画像を追加"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  multiple
+                  disabled={attachedImages.length >= 4 || uploadingImage}
+                  onChange={(e) => {
+                    handleImagePick(e.target.files);
+                    e.target.value = "";
+                  }}
+                  className="hidden"
+                />
+              </label>
+            </div>
+            {uploadError ? (
+              <div className="mb-2 text-[11px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
+                {uploadError}
+              </div>
+            ) : null}
+            {attachedImages.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {attachedImages.map((img) => (
+                  <div
+                    key={img.id}
+                    className="relative group rounded-lg border border-gray-200 overflow-hidden bg-white"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.url}
+                      alt={img.filename}
+                      className="w-20 h-20 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeAttachedImage(img.id)}
+                      title="削除"
+                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 text-white text-xs leading-none flex items-center justify-center opacity-80 hover:opacity-100"
+                    >
+                      ×
+                    </button>
+                    <p className="text-[10px] text-gray-500 px-1 py-0.5 truncate w-20" title={img.filename}>
+                      {img.filename}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-gray-400">
+                画像なし。案件チラシや会社ロゴを添付して LINE / メール で同時配信できます。
+              </p>
+            )}
           </div>
         </div>
 

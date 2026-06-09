@@ -7,7 +7,68 @@ import {
   type DealForBroadcast,
   type PartnerForBroadcast,
 } from "@/lib/broadcast-variables";
-import { sendEmail, textToBasicHtml, DEFAULT_EMAIL_SUBJECT } from "@/lib/email";
+import { sendEmail, textToBasicHtml, DEFAULT_EMAIL_SUBJECT, type EmailAttachment } from "@/lib/email";
+import { publicUrl } from "@/lib/public-url";
+
+/** LINE / メール 用に添付画像をまとめて事前ロード */
+type LoadedAttachment = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  /** 公開絶対 URL (LINE の originalContentUrl 用) */
+  publicAbsUrl: string;
+  /** メール添付用に base64 化したバイト列 (オンデマンド計算で OK だが、毎パートナーで再計算しないよう先に持っておく) */
+  dataBase64: string;
+};
+
+/** 添付画像を id 配列から事前ロード。最大 4 件 (LINE の 1push 5 message 制約 = text 1 + image 4) */
+async function loadAttachments(ids: string[]): Promise<{
+  loaded: LoadedAttachment[];
+  skipped: { id: string; reason: string }[];
+}> {
+  const loaded: LoadedAttachment[] = [];
+  const skipped: { id: string; reason: string }[] = [];
+  if (!ids || ids.length === 0) return { loaded, skipped };
+
+  // 最大 4 件まで採用 (LINE 制約)。残りは skipped に記録。
+  const usableIds = ids.slice(0, 4);
+  if (ids.length > 4) {
+    for (const extra of ids.slice(4)) {
+      skipped.push({ id: extra, reason: "添付は最大 4 件まで (LINE: 1push 5 message 制約)" });
+    }
+  }
+
+  const files = await prisma.uploadedFile.findMany({
+    where: { id: { in: usableIds } },
+    select: { id: true, filename: true, mimeType: true, data: true, expiresAt: true },
+  });
+  const filesById = new Map(files.map((f) => [f.id, f]));
+
+  for (const id of usableIds) {
+    const f = filesById.get(id);
+    if (!f) {
+      skipped.push({ id, reason: "ファイルが見つかりません" });
+      continue;
+    }
+    if (f.expiresAt && f.expiresAt.getTime() < Date.now()) {
+      skipped.push({ id, reason: "ファイルの有効期限切れです" });
+      continue;
+    }
+    if (!["image/jpeg", "image/png"].includes(f.mimeType)) {
+      skipped.push({ id, reason: `画像のみ対応 (受信: ${f.mimeType})` });
+      continue;
+    }
+    loaded.push({
+      id: f.id,
+      filename: f.filename,
+      mimeType: f.mimeType,
+      publicAbsUrl: publicUrl(`/api/files/${f.id}`),
+      dataBase64: Buffer.from(f.data).toString("base64"),
+    });
+  }
+
+  return { loaded, skipped };
+}
 
 /** 配信時の案件スナップショットを 1 回だけ取得 */
 async function loadDealSnapshot(): Promise<{
@@ -42,6 +103,7 @@ export async function POST(req: Request) {
       emailSubject: emailSubjectFromBody,
       scheduledAt,
       templateId,
+      fileIds,
     } = body as {
       mode: "filter" | "group";
       relationshipStatus: string | null;
@@ -60,6 +122,8 @@ export async function POST(req: Request) {
       scheduledAt: string | null;
       /** MessageTemplate.id を渡すと、WhatsApp ではそのテンプレ承認名で送信できる */
       templateId?: number | null;
+      /** 添付画像 (UploadedFile.id 配列、最大 4 件)。LINE 用に image message、メール用に添付。 */
+      fileIds?: string[];
     };
 
     // ── 安全装置: partnerIds が明示指定されていない場合は送信を拒否する ──
@@ -172,6 +236,17 @@ export async function POST(req: Request) {
 
     // 変数展開のため案件スナップショットを 1 回ロード
     const { openDeals, urgentDeals } = await loadDealSnapshot();
+
+    // 添付画像を事前ロード (LINE / メール 共通で使う)
+    const { loaded: attachments, skipped: attachmentSkipped } = await loadAttachments(
+      Array.isArray(fileIds) ? fileIds.filter((s): s is string => typeof s === "string" && s.length > 0) : []
+    );
+    /** Apps Script に渡す添付フォーマット */
+    const emailAttachments: EmailAttachment[] = attachments.map((a) => ({
+      filename: a.filename,
+      mimeType: a.mimeType,
+      dataBase64: a.dataBase64,
+    }));
     const renderFor = (t: Target): string => {
       const partner: PartnerForBroadcast = {
         name: t.name,
@@ -231,13 +306,29 @@ export async function POST(req: Request) {
       );
     };
 
-    /** LINE で送る */
-    const sendLine = async (to: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+    /**
+     * LINE で送る (テキスト + 画像 0〜4 枚)。
+     * 1 push で text 1 + image N 個を同梱送信できる (max 5 message)。
+     * 画像が無ければ従来通り text のみ。
+     */
+    const sendLine = async (
+      to: string,
+      text: string,
+      images: LoadedAttachment[]
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
       if (!lineToken) return { ok: false, error: "LINE_CHANNEL_ACCESS_TOKEN 未設定" };
+      const messages: Array<Record<string, unknown>> = [{ type: "text", text }];
+      for (const img of images.slice(0, 4)) {
+        messages.push({
+          type: "image",
+          originalContentUrl: img.publicAbsUrl,
+          previewImageUrl: img.publicAbsUrl,
+        });
+      }
       const res = await fetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${lineToken}` },
-        body: JSON.stringify({ to, messages: [{ type: "text", text }] }),
+        body: JSON.stringify({ to, messages }),
       });
       if (res.ok) return { ok: true };
       return { ok: false, error: await res.text() };
@@ -345,7 +436,7 @@ export async function POST(req: Request) {
       // === LINE 経路 (グループ → 個人 の順、両方無いと失敗) ===
       if (ch === "LINE") {
         if (t.lineGroupId) {
-          const r = await sendLine(t.lineGroupId, personalizedMessage);
+          const r = await sendLine(t.lineGroupId, personalizedMessage, attachments);
           if (r.ok) {
             sentCount++;
             sentLineGroup++;
@@ -354,7 +445,7 @@ export async function POST(req: Request) {
             failures.push({ name: t.name, channel: "LINE-Group", error: r.error });
           }
         } else if (t.lineUserId) {
-          const r = await sendLine(t.lineUserId, personalizedMessage);
+          const r = await sendLine(t.lineUserId, personalizedMessage, attachments);
           if (r.ok) {
             sentCount++;
             sentLine++;
@@ -437,6 +528,7 @@ export async function POST(req: Request) {
             subject,
             text: personalizedMessage,
             html: textToBasicHtml(personalizedMessage),
+            attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
           });
           if (r.ok) {
             sentCount++;
@@ -503,6 +595,8 @@ export async function POST(req: Request) {
       failedCount,
       skippedCount,
       failures,
+      attachmentCount: attachments.length,
+      attachmentSkipped,
     });
   } catch (e) {
     return Response.json({ ok: false, error: e instanceof Error ? e.message : "error" }, { status: 500 });

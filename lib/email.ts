@@ -23,6 +23,18 @@ export type EmailSendResult =
   | { ok: false; error: string };
 
 /**
+ * 添付ファイル。Apps Script 側で base64 デコード → Utilities.newBlob → 添付。
+ *   - filename:   "case-flyer.jpg" など
+ *   - mimeType:   "image/jpeg" / "image/png"
+ *   - dataBase64: 添付バイト列の base64 文字列 (header なし)
+ */
+export type EmailAttachment = {
+  filename: string;
+  mimeType: string;
+  dataBase64: string;
+};
+
+/**
  * 1 件のメールを Apps Script Web App 経由で送信。
  */
 export async function sendEmail(opts: {
@@ -31,6 +43,12 @@ export async function sendEmail(opts: {
   text?: string;
   html?: string;
   replyTo?: string;
+  /**
+   * 添付ファイル (任意)。画像 (JPG / PNG) を想定、最大 5 件 / 合計 25MB 程度まで。
+   * Apps Script の URLFetch には body サイズ上限 50MB あり、base64 で 4/3 倍なので
+   * 実質 35MB 弱までは送れる。安全側に 25MB を上限の目安。
+   */
+  attachments?: EmailAttachment[];
 }): Promise<EmailSendResult> {
   const url = process.env.APPS_SCRIPT_EMAIL_URL?.trim();
   const secret = process.env.APPS_SCRIPT_EMAIL_SECRET?.trim();
@@ -66,6 +84,8 @@ export async function sendEmail(opts: {
         html: opts.html ?? null,
         replyTo: replyTo ?? null,
         fromName: fromName ?? null,
+        // 添付 (任意)。Apps Script 側が attachments: [{filename, mimeType, dataBase64}] を期待
+        attachments: opts.attachments && opts.attachments.length > 0 ? opts.attachments : null,
       }),
     });
     if (!res.ok) {
