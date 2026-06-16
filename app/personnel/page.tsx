@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import PersonnelTableClient from "./PersonnelTableClient";
-import PersonnelTabs from "./PersonnelTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -44,10 +43,9 @@ export default async function PersonnelPage() {
   return (
     <div className="p-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">候補者</h1>
+        <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">候補者一覧</h1>
         <p className="text-sm text-gray-500 mt-1">{persons.length} 件</p>
       </div>
-      <PersonnelTabs />
       <PersonnelTableClient
         headerExtras={null}
         persons={persons.map((person) => ({
