@@ -9,6 +9,7 @@ import {
   RESIDENCE_STATUSES,
   inferRegistrantFromAccount,
 } from "@/lib/candidate-profile";
+import PersonnelTabs from "../PersonnelTabs";
 
 export default function NewPersonnelPage() {
   const router = useRouter();
@@ -69,8 +70,12 @@ export default function NewPersonnelPage() {
     <div className="px-8 py-10">
       <div className="mx-auto w-full max-w-3xl space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-[var(--color-text-dark)]">候補者を追加</h1>
-          <p className="text-sm text-gray-500 mt-2">
+          <h1 className="text-3xl font-bold text-[var(--color-text-dark)]">候補者</h1>
+        </div>
+        <PersonnelTabs />
+        <div>
+          <h2 className="text-lg font-semibold text-[var(--color-text-dark)]">追加</h2>
+          <p className="text-sm text-gray-500 mt-1">
             候補者の基本情報を登録し、あとから詳細情報を追加します。
           </p>
         </div>

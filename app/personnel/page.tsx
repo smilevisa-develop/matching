@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import PersonnelTableClient from "./PersonnelTableClient";
+import PersonnelTabs from "./PersonnelTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -44,26 +44,12 @@ export default async function PersonnelPage() {
   return (
     <div className="p-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">候補者一覧</h1>
+        <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">候補者</h1>
         <p className="text-sm text-gray-500 mt-1">{persons.length} 件</p>
       </div>
+      <PersonnelTabs />
       <PersonnelTableClient
-        headerExtras={
-          <div className="flex gap-2">
-            <Link
-              href="/personnel/bulk-add"
-              className="border border-[var(--color-primary)] text-[var(--color-primary)] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-light)] transition-colors"
-            >
-              📥 AI 一括登録
-            </Link>
-            <Link
-              href="/personnel/new"
-              className="bg-[var(--color-primary)] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-hover)] transition-colors"
-            >
-              + 候補者を追加
-            </Link>
-          </div>
-        }
+        headerExtras={null}
         persons={persons.map((person) => ({
           id: person.id,
           name: person.name,

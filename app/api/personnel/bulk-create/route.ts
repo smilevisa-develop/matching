@@ -1,16 +1,23 @@
 /**
  * 編集済みの候補者配列を一括で Person + Onboarding + ResumeProfile として作成。
+ * + uploadedFileId 付きなら Drive フォルダに元ファイルを保存し photoUrl / driveFolderUrl を自動設定。
  *
  * 入力: { candidates: BulkCandidate[] }
  * 出力: { ok, created: [{ id, name }], failed: [{ index, name, error }] }
  *
  * 1 件失敗が全体ロールバックにはならない (per-item try-catch)。
- * 失敗分は failed 配列で報告して、成功分はそのまま DB に残す方針。
+ * Drive 保存失敗時も Person 作成は維持 (Drive エラーを warning として返す)。
  */
 
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { NATIONALITIES, RESIDENCE_STATUSES, CHANNELS } from "@/lib/candidate-profile";
+import {
+  ensurePersonDriveFolder,
+  buildPersonAssetName,
+  uploadDataUrlToDrive,
+} from "@/lib/google-docs";
+import { toDriveThumbUrl } from "@/lib/drive-url";
 
 type BulkCandidate = {
   // Person 直下
@@ -59,6 +66,9 @@ type BulkCandidate = {
     endDate?: string;
     reason?: string;
   }[];
+
+  // bulk-extract で返した一時保存ファイル ID (Drive にアップする元データ)
+  uploadedFileId?: string | null;
 };
 
 function s(v: unknown): string | null {
@@ -85,6 +95,45 @@ function normalizeChannel(v: string | null | undefined): string {
   return CHANNELS.some((c) => c.value === t) ? t : "未設定";
 }
 
+/**
+ * UploadedFile を Drive の候補者フォルダにアップロードし、ファイル ID + URL を返す。
+ * 認証 + アップロードは既存の uploadDataUrlToDrive を再利用 (同じ Service Account)。
+ */
+async function uploadToPersonDriveFolder(args: {
+  uploadedFileId: string;
+  person: { id: number; name: string };
+  englishName: string | null;
+  folderUrl: string;
+}): Promise<{ fileId: string; fileUrl: string; mimeType: string } | null> {
+  const { uploadedFileId, person, englishName, folderUrl } = args;
+  const file = await prisma.uploadedFile.findUnique({
+    where: { id: uploadedFileId },
+    select: { filename: true, mimeType: true, data: true },
+  });
+  if (!file) return null;
+
+  // ファイル名: 0192_NGUYEN VAN AN_履歴書.pdf
+  const baseAsset = file.filename.replace(/\.[a-z0-9]+$/i, "") || "履歴書";
+  const ext = file.filename.match(/\.[a-z0-9]+$/i)?.[0] ?? "";
+  const niceName =
+    buildPersonAssetName({
+      person: { id: person.id, name: person.name, englishName },
+      assetName: baseAsset,
+    }) + ext;
+
+  // bytes → data URL に変換
+  const base64 = Buffer.from(file.data).toString("base64");
+  const dataUrl = `data:${file.mimeType};base64,${base64}`;
+
+  const { fileId, fileUrl, mimeType } = await uploadDataUrlToDrive({
+    dataUrl,
+    fileName: niceName,
+    folderUrl,
+  });
+
+  return { fileId, fileUrl, mimeType };
+}
+
 export async function POST(req: Request) {
   try {
     await requireApiAccount();
@@ -100,8 +149,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const created: { id: number; name: string }[] = [];
+    const created: { id: number; name: string; driveUrl?: string; photoUrl?: string }[] = [];
     const failed: { index: number; name: string; error: string }[] = [];
+    const warnings: string[] = [];
 
     for (let i = 0; i < candidates.length; i++) {
       const c = candidates[i];
@@ -111,6 +161,7 @@ export async function POST(req: Request) {
         continue;
       }
       try {
+        // 1. Person 作成 (ID は auto-increment、手作業 /personnel/new と同じ)
         const person = await prisma.person.create({
           data: {
             name,
@@ -162,7 +213,49 @@ export async function POST(req: Request) {
             },
           },
         });
-        created.push({ id: person.id, name: person.name });
+
+        // 2. Drive 保存 (uploadedFileId 付きの場合)
+        let driveFolderUrl: string | undefined;
+        let autoPhotoUrl: string | undefined;
+        const uploadedFileId = s(c.uploadedFileId);
+        if (uploadedFileId) {
+          try {
+            // 候補者フォルダ作成 (4桁ID prefix で 0192_NGUYEN... の名前)
+            const englishName = s(c.englishName);
+            const folder = await ensurePersonDriveFolder({
+              existingFolderUrl: null,
+              personName: name,
+              personId: person.id,
+            });
+            driveFolderUrl = folder.folderUrl ?? undefined;
+
+            // 元ファイルを Drive に保存
+            const uploaded = await uploadToPersonDriveFolder({
+              uploadedFileId,
+              person: { id: person.id, name },
+              englishName,
+              folderUrl: folder.folderUrl ?? "",
+            });
+            if (uploaded) {
+              // Drive サムネ URL を photoUrl に設定 (PDF はページ1, 画像はその画像)
+              autoPhotoUrl = toDriveThumbUrl(uploaded.fileUrl) ?? undefined;
+            }
+            // Person を更新 (driveFolderUrl + photoUrl)
+            await prisma.person.update({
+              where: { id: person.id },
+              data: {
+                driveFolderUrl: driveFolderUrl || undefined,
+                photoUrl: !person.photoUrl && autoPhotoUrl ? autoPhotoUrl : undefined,
+              },
+            });
+          } catch (driveErr) {
+            warnings.push(
+              `ID=${person.id} ${name}: Drive 保存失敗 (${driveErr instanceof Error ? driveErr.message : "error"})`
+            );
+          }
+        }
+
+        created.push({ id: person.id, name: person.name, driveUrl: driveFolderUrl, photoUrl: autoPhotoUrl });
       } catch (e) {
         failed.push({
           index: i,
@@ -172,7 +265,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return Response.json({ ok: true, created, failed });
+    return Response.json({ ok: true, created, failed, warnings });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "error" },

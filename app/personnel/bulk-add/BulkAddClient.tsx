@@ -48,8 +48,18 @@ type ExtractedCandidate = {
   }[];
 };
 
+type Duplicate = { id: number; name: string; similarity: number; reason: "name" | "email" };
+
 type ExtractItem =
-  | { fileName: string; ok: true; candidate: ExtractedCandidate; warnings: string[] }
+  | {
+      fileName: string;
+      ok: true;
+      candidate: ExtractedCandidate;
+      warnings: string[];
+      duplicates: Duplicate[];
+      uploadedFileId: string;
+      mimeType: string;
+    }
   | { fileName: string; ok: false; error: string };
 
 /** カードの編集状態 (登録対象になる) */
@@ -59,6 +69,9 @@ type CardState = ExtractedCandidate & {
   channel: string;
   include: boolean; // チェック外したらスキップ
   warnings: string[];
+  duplicates: Duplicate[];
+  uploadedFileId: string;
+  mimeType: string;
 };
 
 const MAX_FILES = 10;
@@ -128,8 +141,12 @@ export default function BulkAddClient({ partners }: { partners: Partner[] }) {
             fileName: it.fileName,
             partnerId: bulkPartnerId ? Number(bulkPartnerId) : null,
             channel: bulkChannel,
-            include: true,
+            // 重複候補があれば初期は除外しておく (誤って登録しないため)
+            include: it.duplicates.length === 0,
             warnings: it.warnings,
+            duplicates: it.duplicates,
+            uploadedFileId: it.uploadedFileId,
+            mimeType: it.mimeType,
           });
         } else {
           failures.push({ fileName: it.fileName, error: it.error });
@@ -201,6 +218,7 @@ export default function BulkAddClient({ partners }: { partners: Partner[] }) {
             retirementReason: c.retirementReason,
             preferenceNote: c.preferenceNote,
             workExperiences: c.workExperiences,
+            uploadedFileId: c.uploadedFileId,
           })),
         }),
       });
@@ -407,6 +425,21 @@ function CandidateCard({
         </button>
       </div>
 
+      {card.duplicates.length > 0 && (
+        <div className="text-[11px] bg-red-50 border border-red-300 rounded px-2 py-1.5 text-red-800">
+          <p className="font-semibold mb-0.5">⚠️ 既存候補者と重複の可能性 (チェック外して再確認推奨)</p>
+          <ul className="space-y-0.5">
+            {card.duplicates.slice(0, 3).map((d) => (
+              <li key={d.id}>
+                ・ID={d.id} {d.name}{" "}
+                <span className="text-red-600 font-medium">
+                  ({d.reason === "email" ? "メール一致" : `名前 ${(d.similarity * 100).toFixed(0)}% 一致`})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {card.warnings.length > 0 && (
         <div className="text-[10px] bg-amber-50 border border-amber-200 rounded px-2 py-1 text-amber-800">
           ⚠️ {card.warnings.join(" / ")}
