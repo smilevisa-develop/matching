@@ -49,12 +49,20 @@ export default async function PersonnelPage() {
       </div>
       <PersonnelTableClient
         headerExtras={
-          <Link
-            href="/personnel/new"
-            className="bg-[var(--color-primary)] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-hover)] transition-colors"
-          >
-            + 候補者を追加
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/personnel/bulk-add"
+              className="border border-[var(--color-primary)] text-[var(--color-primary)] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-light)] transition-colors"
+            >
+              📥 AI 一括登録
+            </Link>
+            <Link
+              href="/personnel/new"
+              className="bg-[var(--color-primary)] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[var(--color-primary-hover)] transition-colors"
+            >
+              + 候補者を追加
+            </Link>
+          </div>
         }
         persons={persons.map((person) => ({
           id: person.id,
