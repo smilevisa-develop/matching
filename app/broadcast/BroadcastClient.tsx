@@ -177,6 +177,26 @@ export default function BroadcastClient({
   const [sending, setSending] = useState(false);
   const [sendingStartedAt, setSendingStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  /** 今月の チャネル別 送信通数 + 上限 (LINE フリープラン 200通/月 警告用) */
+  const [usage, setUsage] = useState<
+    { channel: string; used: number; limit: number | null }[] | null
+  >(null);
+  const refetchUsage = async () => {
+    try {
+      const res = await fetch("/api/broadcast/usage");
+      const data = await res.json();
+      if (data.ok) setUsage(data.usage);
+    } catch {
+      // 失敗してもサイレント (UI 必須ではない)
+    }
+  };
+  // 初回ロード
+  useEffect(() => {
+    refetchUsage();
+  }, []);
+
+  // plannedUsage / lineUsage / lineAfter / lineOverLimit は targetPartners 確定後にまとめて算出 (下記)
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
   /** 送信前の確認モーダル: 押下時の (scheduled) 値を保持 */
@@ -241,6 +261,29 @@ export default function BroadcastClient({
   }, [mode, filtered, groups, selectedGroup, partners]);
 
   const targetCount = targetPartners.length;
+
+  /** 今回の配信で各チャネル何通使うかを試算 */
+  const plannedUsage = useMemo(() => {
+    let line = 0;
+    let messenger = 0;
+    let email = 0;
+    let whatsapp = 0;
+    const imgCount = Math.min(attachedImages.length, 4);
+    const linePerPartner = 1 + imgCount;
+    for (const p of targetPartners) {
+      const ch = p.channel ?? "";
+      if (ch === "LINE") line += linePerPartner;
+      else if (ch === "Messenger") messenger += 1;
+      else if (ch === "WhatsApp") whatsapp += 1;
+      else if (ch === "mail" || ch === "メール" || ch === "Email") email += 1;
+    }
+    return { line, messenger, email, whatsapp };
+  }, [targetPartners, attachedImages.length]);
+
+  const lineUsage = usage?.find((u) => u.channel === "LINE");
+  const lineAfter = (lineUsage?.used ?? 0) + plannedUsage.line;
+  const lineOverLimit =
+    lineUsage?.limit !== null && lineUsage?.limit !== undefined && lineAfter > lineUsage.limit;
 
   const applyTemplate = (id: string) => {
     const t = templates.find((t) => t.id === Number(id));
@@ -366,6 +409,8 @@ export default function BroadcastClient({
       clearTimeout(timeoutId);
       setSending(false);
       setSendingStartedAt(null);
+      // 送信後に利用通数を再フェッチ (上限警告の更新)
+      void refetchUsage();
     }
   };
 
@@ -625,6 +670,71 @@ export default function BroadcastClient({
       {/* グリッド下: ボタン + 予約フォーム (左カラム幅に合わせる) */}
       <div className="grid grid-cols-2 gap-6">
         <div className="space-y-5">
+          {/* 送信前のチャネル別 通数 / 上限 表示 */}
+          {usage ? (
+            <div
+              className={`rounded-xl border p-4 text-xs ${
+                lineOverLimit
+                  ? "bg-red-50 border-red-300 text-red-900"
+                  : "bg-amber-50 border-amber-200 text-amber-900"
+              }`}
+            >
+              <div className="font-semibold mb-2 flex items-center gap-1.5">
+                <span>📊 今月の利用 + この配信の予測</span>
+                {lineOverLimit && (
+                  <span className="rounded bg-red-600 text-white px-1.5 py-0.5 text-[10px]">
+                    LINE 上限超過!
+                  </span>
+                )}
+              </div>
+              <ul className="space-y-1">
+                <li className="flex items-center gap-2">
+                  <span className="font-medium w-20">LINE:</span>
+                  <span className={lineOverLimit ? "font-semibold" : ""}>
+                    {lineUsage?.used ?? 0} 通 + 今回 {plannedUsage.line} 通
+                    {" = "}
+                    <span className={lineOverLimit ? "text-red-700 font-bold" : "font-semibold"}>
+                      {lineAfter}
+                    </span>
+                    {lineUsage?.limit ? <> / {lineUsage.limit} 通 (フリープラン)</> : null}
+                  </span>
+                </li>
+                {plannedUsage.email > 0 && (
+                  <li className="flex items-center gap-2">
+                    <span className="font-medium w-20">メール:</span>
+                    <span>
+                      {usage.find((u) => u.channel === "Email")?.used ?? 0} 通 + 今回 {plannedUsage.email} 通
+                    </span>
+                  </li>
+                )}
+                {plannedUsage.messenger > 0 && (
+                  <li className="flex items-center gap-2">
+                    <span className="font-medium w-20">Messenger:</span>
+                    <span>
+                      {usage.find((u) => u.channel === "Messenger")?.used ?? 0} 通 + 今回 {plannedUsage.messenger} 通
+                    </span>
+                  </li>
+                )}
+                {plannedUsage.whatsapp > 0 && (
+                  <li className="flex items-center gap-2">
+                    <span className="font-medium w-20">WhatsApp:</span>
+                    <span>
+                      {usage.find((u) => u.channel === "WhatsApp")?.used ?? 0} 通 + 今回 {plannedUsage.whatsapp} 通
+                    </span>
+                  </li>
+                )}
+              </ul>
+              {lineOverLimit && (
+                <p className="mt-2 pt-2 border-t border-red-200 text-[11px] leading-relaxed">
+                  ⚠️ LINE フリープランの月 200 通を超えるため、超過分は <strong>送信されません</strong>。
+                  ライトプラン (¥5,000/月, 5000通) へアップグレード推奨。
+                  <br />
+                  画像 1 枚 = +1 通、4 枚 = +4 通カウントされます。
+                </p>
+              )}
+            </div>
+          ) : null}
+
           <div className="flex gap-3">
             <button
               onClick={() => requestSend(false)}

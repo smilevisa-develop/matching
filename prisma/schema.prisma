@@ -710,6 +710,27 @@ model MessageLog {
   createdAt    DateTime  @default(now())
 }
 
+/// チャネル別 月次送信通数。
+/// LINE フリープラン 200通/月 等の上限を画面で警告するため自前で集計する。
+/// (LINE API は今月の利用通数を取得できない)
+///
+///   channel:   "LINE" | "Messenger" | "Email" | "WhatsApp"
+///   yearMonth: "2026-06" 形式 (UTC ベース、月初切り替え)
+///   messageCount: その月にこのチャネルで送ったメッセージ数 (画像枚数も含む)
+///
+/// LINE は "1 push の text + image 4枚 = 5 通" としてカウント (LINE 課金単位に合わせる)
+model MonthlyChannelUsage {
+  id            Int      @id @default(autoincrement())
+  channel       String
+  yearMonth     String
+  messageCount  Int      @default(0)
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@unique([channel, yearMonth])
+  @@index([yearMonth])
+}
+
 /// 一斉送信の画像添付など、システム生成 / 管理者アップロードファイル。
 /// 画像 (JPG/PNG) のみ想定、最大 5MB。HTTPS で公開して LINE / Messenger の
 /// originalContentUrl から参照できるようにする。

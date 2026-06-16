@@ -9,6 +9,7 @@ import {
 } from "@/lib/broadcast-variables";
 import { sendEmail, textToBasicHtml, DEFAULT_EMAIL_SUBJECT, type EmailAttachment } from "@/lib/email";
 import { publicUrl } from "@/lib/public-url";
+import { incrementChannelUsage } from "@/lib/channel-usage";
 
 /** LINE / メール 用に添付画像をまとめて事前ロード */
 type LoadedAttachment = {
@@ -435,11 +436,14 @@ export async function POST(req: Request) {
 
       // === LINE 経路 (グループ → 個人 の順、両方無いと失敗) ===
       if (ch === "LINE") {
+        // 1 push の通数 = text(1) + image(attachments.length, max 4)
+        const lineMsgCount = 1 + Math.min(attachments.length, 4);
         if (t.lineGroupId) {
           const r = await sendLine(t.lineGroupId, personalizedMessage, attachments);
           if (r.ok) {
             sentCount++;
             sentLineGroup++;
+            await incrementChannelUsage("LINE", lineMsgCount);
           } else {
             failedCount++;
             failures.push({ name: t.name, channel: "LINE-Group", error: r.error });
@@ -449,6 +453,7 @@ export async function POST(req: Request) {
           if (r.ok) {
             sentCount++;
             sentLine++;
+            await incrementChannelUsage("LINE", lineMsgCount);
           } else {
             failedCount++;
             failures.push({ name: t.name, channel: "LINE", error: r.error });
@@ -468,6 +473,7 @@ export async function POST(req: Request) {
           if (r.ok) {
             sentCount++;
             sentWhatsapp++;
+            await incrementChannelUsage("WhatsApp", 1);
           } else {
             failedCount++;
             failures.push({ name: t.name, channel: "WhatsApp", error: r.error });
@@ -493,6 +499,7 @@ export async function POST(req: Request) {
           if (r.ok) {
             sentCount++;
             sentMessenger++;
+            await incrementChannelUsage("Messenger", 1);
           } else {
             failedCount++;
             failures.push({ name: t.name, channel: "Messenger", error: r.error });
@@ -533,6 +540,7 @@ export async function POST(req: Request) {
           if (r.ok) {
             sentCount++;
             sentEmail++;
+            await incrementChannelUsage("Email", 1);
             await prisma.message.create({
               data: {
                 partnerId: t.id,
