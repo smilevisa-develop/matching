@@ -42,6 +42,7 @@ type CandidateInput = {
       japaneseLevelDate: string | null;
       licenseName: string | null;
       preferenceNote: string | null;
+      resumeFileUrl: string | null;
     } | null;
     resumeDocuments?: { documentUrl: string | null }[];
     partner?: { name: string } | null;
@@ -115,9 +116,11 @@ export function buildRecommendationCellValue(
     case "partner":
       return p.partner?.name ?? "";
     case "resumeUrl":
-      // 1. ResumeDocument の最新 (Docs テンプレ展開で作られた履歴書)
-      // 2. 無ければ Drive 候補者フォルダの URL (bulk-add で保存した元 PDF/docx が入ってる)
-      return latestResume?.documentUrl || p.driveFolderUrl || "";
+      // 履歴書 URL の優先順位:
+      //   1. ResumeProfile.resumeFileUrl (bulk-add でアップした履歴書ファイル直接 URL)
+      //   2. ResumeDocument.documentUrl (Docs テンプレ展開で作られた履歴書)
+      //   3. Drive 候補者フォルダ URL (フォールバック)
+      return resume?.resumeFileUrl || latestResume?.documentUrl || p.driveFolderUrl || "";
     case "driveFolderUrl":
       return p.driveFolderUrl ?? "";
     default:

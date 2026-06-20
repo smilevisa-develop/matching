@@ -241,9 +241,12 @@ export async function POST(req: Request) {
               englishName,
               folderUrl: folder.folderUrl ?? "",
             });
+            let resumeFileUrl: string | undefined;
             if (uploaded) {
               // Drive サムネ URL を photoUrl に設定 (PDF はページ1, 画像はその画像)
               autoPhotoUrl = toDriveThumbUrl(uploaded.fileUrl) ?? undefined;
+              // 履歴書ファイル本体 (PDF/docx/画像) の Drive 直接 URL を ResumeProfile に保存
+              resumeFileUrl = uploaded.fileUrl;
             }
             // Person を更新 (driveFolderUrl + photoUrl)
             await prisma.person.update({
@@ -253,6 +256,13 @@ export async function POST(req: Request) {
                 photoUrl: !person.photoUrl && autoPhotoUrl ? autoPhotoUrl : undefined,
               },
             });
+            // ResumeProfile.resumeFileUrl を更新
+            if (resumeFileUrl) {
+              await prisma.resumeProfile.update({
+                where: { personId: person.id },
+                data: { resumeFileUrl },
+              });
+            }
           } catch (driveErr) {
             warnings.push(
               `ID=${person.id} ${name}: Drive 保存失敗 (${driveErr instanceof Error ? driveErr.message : "error"})`

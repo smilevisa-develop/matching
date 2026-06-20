@@ -427,6 +427,10 @@ model ResumeProfile {
   currentJob                   String?
   retirementReason             String?
   preferenceNote               String?
+  /// 履歴書 (元 PDF / docx / 画像) の Drive 上の直接 URL。
+  /// bulk-add で履歴書をアップロードした際に保存される。推薦リスト出力時に
+  /// 「履歴書 URL」列で使う。手作業で /personnel/[id]/edit から差し替え可能。
+  resumeFileUrl                String?
   japaneseLevel                String?
   japaneseLevelDate            String?
   licenseName                  String?
