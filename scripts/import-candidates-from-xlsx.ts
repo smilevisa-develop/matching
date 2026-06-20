@@ -22,6 +22,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { getDatabaseUrl } from "../lib/database-url";
 import { parseFlexibleDate } from "../lib/flexible-date";
 import { toDriveThumbUrl } from "../lib/drive-url";
+import { normalizeToIsoDate } from "../lib/date-normalize";
 
 const FILE = process.env.FILE || `${process.env.HOME}/Downloads/候補者データベース.xlsx`;
 const DRY_RUN = process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true";
@@ -48,8 +49,11 @@ function d(value: unknown): Date | null {
 }
 
 function dStr(value: unknown): string | null {
-  const date = d(value);
-  if (date) return date.toISOString().slice(0, 10);
+  // 第一優先: Excel serial / Date / "YYYY-MM-DD" 等の正規化
+  // これで xlsx の 36926 のような Excel serial 番号を 2001-02-04 に正しく変換できる
+  const normalized = normalizeToIsoDate(value);
+  if (normalized) return normalized;
+  // フォールバック: parseFlexibleDate (日本語の和暦などに対応)
   const r = parseFlexibleDate(value);
   if (r && r.type === "iso") return r.value;
   if (r && r.type === "current") return null;

@@ -3,6 +3,19 @@ import {
   RECOMMENDATION_COLUMN_OPTIONS,
   type RecommendationColumnKey,
 } from "@/lib/recommendation-columns";
+import { normalizeToIsoDate, isBrokenExtendedIsoDate } from "@/lib/date-normalize";
+
+/**
+ * DB に万一 broken な "+0YYYYY-XX" 形式が残っていても、CSV 出力時に
+ * 防衛的に正規化する。バックフィルスクリプトの取りこぼし救済。
+ */
+function safeDateOut(value: string | null | undefined): string {
+  if (!value) return "";
+  if (isBrokenExtendedIsoDate(value)) {
+    return normalizeToIsoDate(value) ?? "";
+  }
+  return value;
+}
 
 type CandidateInput = {
   stage: string;
@@ -70,7 +83,7 @@ export function buildRecommendationCellValue(
     case "gender":
       return resume?.gender ?? "";
     case "age":
-      return calculateAge(onb?.birthDate ?? null) || "";
+      return calculateAge(safeDateOut(onb?.birthDate ?? null) || null) || "";
     case "nationality":
       return p.nationality;
     case "residenceStatus":
@@ -78,9 +91,9 @@ export function buildRecommendationCellValue(
     case "address":
       return onb?.address ?? "";
     case "birthDate":
-      return onb?.birthDate ?? "";
+      return safeDateOut(onb?.birthDate ?? null);
     case "visaExpiryDate":
-      return resume?.visaExpiryDate ?? "";
+      return safeDateOut(resume?.visaExpiryDate ?? null);
     case "sswYears":
       return p.residenceStatus?.includes("特定技能")
         ? calcYearsSince(resume?.visaType ? resume?.visaExpiryDate : null) || ""
@@ -90,7 +103,7 @@ export function buildRecommendationCellValue(
     case "japaneseLevel":
       return resume?.japaneseLevel ?? "";
     case "japaneseLevelDate":
-      return resume?.japaneseLevelDate ?? "";
+      return safeDateOut(resume?.japaneseLevelDate ?? null);
     case "licenseName":
       return resume?.licenseName ?? "";
     case "preferenceNote":

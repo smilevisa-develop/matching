@@ -18,6 +18,7 @@ import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { getDatabaseUrl } from "../lib/database-url";
 import { parseFlexibleDate } from "../lib/flexible-date";
+import { normalizeToIsoDate } from "../lib/date-normalize";
 
 const FROM_ID = Number(process.env.FROM_ID ?? 101);
 const TO_ID = Number(process.env.TO_ID ?? 110);
@@ -45,8 +46,9 @@ function d(value: unknown): Date | null {
 }
 
 function dStr(value: unknown): string | null {
-  const date = d(value);
-  if (date) return date.toISOString().slice(0, 10);
+  // Excel serial / Date / "YYYY-MM-DD" 等を正規化 (broken な "+036926-XX" を回避)
+  const normalized = normalizeToIsoDate(value);
+  if (normalized) return normalized;
   const r = parseFlexibleDate(value);
   if (r && r.type === "iso") return r.value;
   if (r && r.type === "current") return null;
