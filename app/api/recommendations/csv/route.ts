@@ -61,7 +61,9 @@ export async function GET(req: Request) {
     const rows = candidates.map((candidate) => {
       const cells: (string | number)[] = [
         candidate.person.id,
-        "", // 進捗 (Sheets 上で選択)
+        // 進捗の初期値はシステム上の現ステージ (接続済み / 推薦済み 等)。
+        // 受信側企業が Sheets 上の dropdown で更新する。
+        candidate.stage ?? "",
       ];
       for (const key of userColumns) {
         cells.push(buildRecommendationCellValue(candidate, key));

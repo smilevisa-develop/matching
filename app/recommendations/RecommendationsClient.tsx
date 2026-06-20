@@ -20,9 +20,12 @@ export default function RecommendationsClient({
   const [dealId, setDealId] = useState(
     lockedDealId ? String(lockedDealId) : deals[0]?.id ? String(deals[0].id) : ""
   );
-  // ステージ複数選択 (デフォルトは接続済みのみ)
+  // ステージ複数選択 (デフォルトは全ステージ選択 = 紐付いてる全候補者を出力)
+  // 過去は「接続済みのみ」がデフォルトだったが、「5人紐付いているのに1人しか
+  //  出力されない」という混乱があったため、全ステージ初期選択に変更。
+  //  ユーザーは不要なステージのチップをクリックして外す運用。
   const STAGE_OPTIONS = ["接続済み", "事前面談済み", "推薦済み", "内定済み", "書類NG", "面談NG", "不合格"] as const;
-  const [stageFilters, setStageFilters] = useState<string[]>(["接続済み"]);
+  const [stageFilters, setStageFilters] = useState<string[]>([...STAGE_OPTIONS]);
   const [saving, setSaving] = useState(false);
 
   const toggleStage = (stage: string) => {

@@ -76,7 +76,9 @@ export async function POST(req: Request) {
       "備考",
     ];
     const dataRows: (string | number)[][] = candidates.map((candidate) => {
-      const cells: (string | number)[] = [candidate.person.id, ""];
+      // 進捗の初期値は候補者の現ステージ (接続済み / 推薦済み 等)。
+      // 受信側企業が Sheets 上の dropdown で更新する。
+      const cells: (string | number)[] = [candidate.person.id, candidate.stage ?? ""];
       for (const key of userColumns) cells.push(buildRecommendationCellValue(candidate, key));
       cells.push("");
       return cells;

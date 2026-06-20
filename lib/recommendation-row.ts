@@ -115,7 +115,9 @@ export function buildRecommendationCellValue(
     case "partner":
       return p.partner?.name ?? "";
     case "resumeUrl":
-      return latestResume?.documentUrl ?? "";
+      // 1. ResumeDocument の最新 (Docs テンプレ展開で作られた履歴書)
+      // 2. 無ければ Drive 候補者フォルダの URL (bulk-add で保存した元 PDF/docx が入ってる)
+      return latestResume?.documentUrl || p.driveFolderUrl || "";
     case "driveFolderUrl":
       return p.driveFolderUrl ?? "";
     default:

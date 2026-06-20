@@ -62,6 +62,10 @@ export const RECOMMENDATION_COLUMN_OPTIONS: RecommendationColumnOption[] = [
   { key: "driveFolderUrl", label: "書類フォルダ URL" },
 ];
 
+/**
+ * デフォルトの推薦リスト出力列。
+ * 「本人希望/希望手取り」「特定技能経過年数」は実運用で使われないので除外済 (2026-06-17)。
+ */
 export const DEFAULT_RECOMMENDATION_COLUMNS: RecommendationColumnKey[] = [
   "addedAt",
   "englishName",
@@ -74,10 +78,8 @@ export const DEFAULT_RECOMMENDATION_COLUMNS: RecommendationColumnKey[] = [
   "address",
   "birthDate",
   "visaExpiryDate",
-  "sswYears",
   "traineeExperience",
   "japaneseLevel",
-  "preferenceNote",
   "resumeUrl",
   "driveFolderUrl",
 ];
@@ -92,11 +94,20 @@ export function sanitizeRecommendationColumns(input: unknown): RecommendationCol
   return filtered.length > 0 ? filtered : DEFAULT_RECOMMENDATION_COLUMNS;
 }
 
-// 進捗列で許可される選択肢 (Sheets の data validation で使用)
+// 進捗列で許可される選択肢 (Sheets の data validation で使用)。
+// 出力時はシステムのステージ (接続済み 等) を初期値で入れるため、
+// それも dropdown に含めておく。受信企業が応募/内定 など別の値を選びたい時用に
+// 後ろにも追加。strict: false にしているので任意の値も入力可。
 export const RECOMMENDATION_PROGRESS_OPTIONS: string[] = [
+  "接続済み",
+  "事前面談済み",
+  "推薦済み",
+  "内定済み",
+  "書類NG",
+  "面談NG",
+  "不合格",
   "応募",
   "面接結果待ち",
   "内定",
   "辞退",
-  "不合格",
 ];
