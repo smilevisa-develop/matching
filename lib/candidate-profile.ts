@@ -76,8 +76,13 @@ export const CHANNELS = [
 export const GENDERS = ["男性", "女性", "その他"];
 
 // 全在留資格に共通する書類 (常に提出)
+// 「residence-card」は旧 kind で「在留カード」と呼んでいた。後方互換のため
+//  そのまま「在留カード (表面)」として扱い、新たに「在留カード (裏面)」と
+//  「顔写真」の枠を追加。
 export const BASIC_DOCUMENTS = [
-  { kind: "residence-card", label: "在留カード" },
+  { kind: "photo", label: "顔写真" },
+  { kind: "residence-card", label: "在留カード (表面)" },
+  { kind: "residence-card-back", label: "在留カード (裏面)" },
 ] as const;
 
 // 技能実習: 専門級 / 随時3級 / 実習生評価書 / 終了証明書 + 技能検定合格証書
