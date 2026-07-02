@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -140,10 +139,12 @@ export default function EditPersonForm({
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  // NOTE: photoUrl は PhotoPanel が単独で管理するため、この form state には含めない。
+  //       (含めると PhotoPanel での upload 直後にフォーム内 state が古い値のまま残り、
+  //        別項目の保存時に photoUrl を空文字で上書きしてしまう。915fb5a で server 側
+  //        でも防御済みだが、根本策として client 側からも送らない設計に統一。)
   const [form, setForm] = useState({
     name: person.name,
-    photoUrl: person.photoUrl ?? "",
     englishName: person.onboarding?.englishName ?? "",
     partnerId: person.partnerId ? String(person.partnerId) : "",
     nationality: person.nationality,
@@ -244,25 +245,8 @@ export default function EditPersonForm({
     return () => window.removeEventListener("keydown", handler);
   }, [dirty, submitting]);
 
-  const handlePhotoChange = async (file: File | null) => {
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      alert("画像ファイルを選択してください");
-      return;
-    }
-    if (file.size > 3 * 1024 * 1024) {
-      alert("画像は3MB以下にしてください");
-      return;
-    }
-
-    setUploadingPhoto(true);
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setValue("photoUrl", dataUrl);
-    } finally {
-      setUploadingPhoto(false);
-    }
-  };
+  // handlePhotoChange 削除: 写真は PhotoPanel (上のコンポーネント) が単独で管理。
+  // EditPersonForm 側からは photoUrl を触らない設計に統一 (再発防止)。
 
   const [uploadingKind, setUploadingKind] = useState<string | null>(null);
 
@@ -956,35 +940,8 @@ function SectionTitle({ title, description }: { title: string; description: stri
 const INPUT =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]";
 
-function AvatarPreview({ name, photoUrl }: { name: string; photoUrl: string }) {
-  if (photoUrl) {
-    return (
-      <Image
-        src={photoUrl}
-        alt={name || "人材写真"}
-        width={96}
-        height={96}
-        unoptimized
-        className="h-24 w-24 rounded-2xl border border-gray-200 object-cover shadow-sm"
-      />
-    );
-  }
-
-  return (
-    <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-[var(--color-primary)] text-3xl font-bold text-white shadow-sm">
-      {(name.trim()[0] ?? "人").toUpperCase()}
-    </div>
-  );
-}
-
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
+// AvatarPreview / readFileAsDataUrl 削除: 写真表示・アップロードは PhotoPanel に集約。
+// EditPersonForm 側からは photoUrl を触らない設計に統一。
 
 function buildInitialDocuments(documents: Person["documents"], residenceStatus: string): DocumentInput[] {
   return getDocumentDefinitions(residenceStatus).map((definition) => {
