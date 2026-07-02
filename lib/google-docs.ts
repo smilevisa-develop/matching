@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { Readable } from "node:stream";
 
 const DOC_URL_RE = /\/document\/d\/([a-zA-Z0-9_-]+)/;
 const DRIVE_FOLDER_RE = /\/folders\/([a-zA-Z0-9_-]+)/;
@@ -688,7 +689,8 @@ export async function uploadDataUrlToDrive({
     },
     media: {
       mimeType,
-      body: Buffer.from(buffer),
+      // googleapis v171+ は media.body に Readable ストリームが必要 (Buffer 不可)
+      body: Readable.from(Buffer.from(buffer)),
     },
     fields: "id,webViewLink",
   });
