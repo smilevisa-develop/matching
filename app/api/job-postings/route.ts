@@ -159,6 +159,8 @@ export async function POST(req: Request) {
     let documentId: string | null = null;
     let documentUrl: string | null = null;
     let driveFolderUrl: string | null = null;
+    // Drive 連携が失敗した場合の警告 (UI に表示するため 応答に含める)
+    let driveWarning: string | null = null;
 
     // テンプレート指定ありかつ Drive 設定がある場合は Google Docs を複製
     if (templateId) {
@@ -230,8 +232,11 @@ export async function POST(req: Request) {
           documentId = generated.documentId;
           documentUrl = generated.documentUrl;
         } catch (error) {
-          // Drive 連携が未設定なら Docs 生成スキップし、フィールドのみ保存
+          // Drive 連携が失敗した場合は フィールドのみ DB 保存し、警告を応答に含める。
+          // UI で「Drive に保存できませんでした」というメッセージを見せる。
+          const message = error instanceof Error ? error.message : String(error);
           console.warn("JobPosting: skip Docs generation", error);
+          driveWarning = message;
         }
       }
     }
@@ -253,7 +258,7 @@ export async function POST(req: Request) {
       },
     });
 
-    return Response.json({ ok: true, jobPosting });
+    return Response.json({ ok: true, jobPosting, driveWarning });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "error" },

@@ -539,7 +539,7 @@ function CreateJobPostingModal({
   );
   const [stage, setStage] = useState<"input" | "creating">("input");
   const [error, setError] = useState<string | null>(null);
-  const [createdInfo, setCreatedInfo] = useState<{ documentUrl: string | null; driveFolderUrl: string | null } | null>(
+  const [createdInfo, setCreatedInfo] = useState<{ documentUrl: string | null; driveFolderUrl: string | null; driveWarning: string | null } | null>(
     null
   );
 
@@ -584,6 +584,7 @@ function CreateJobPostingModal({
       setCreatedInfo({
         documentUrl: data.jobPosting?.documentUrl ?? null,
         driveFolderUrl: data.jobPosting?.driveFolderUrl ?? null,
+        driveWarning: data.driveWarning ?? null,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "error");
@@ -599,9 +600,20 @@ function CreateJobPostingModal({
 
       {createdInfo ? (
         <div className="space-y-4">
-          <div className="rounded-xl border border-[#16A34A]/30 bg-[#F0FDF4] px-4 py-3 text-sm text-[#15803D]">
-            求人票を作成しました
-          </div>
+          {createdInfo.documentUrl ? (
+            <div className="rounded-xl border border-[#16A34A]/30 bg-[#F0FDF4] px-4 py-3 text-sm text-[#15803D]">
+              ✅ 求人票を作成しました (Docs + 保管フォルダ)
+            </div>
+          ) : (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              ⚠️ 求人票の情報は保存しましたが、Google Docs 生成に失敗しました (Drive に保管されていません)。
+              {createdInfo.driveWarning ? (
+                <p className="mt-2 whitespace-pre-wrap text-xs font-mono text-amber-800">
+                  {createdInfo.driveWarning}
+                </p>
+              ) : null}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             {createdInfo.documentUrl ? (
               <a
