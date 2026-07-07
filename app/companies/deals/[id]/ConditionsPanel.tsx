@@ -612,6 +612,20 @@ function CreateJobPostingModal({
                   {createdInfo.driveWarning}
                 </p>
               ) : null}
+              {/* Insufficient permissions は 企業フォルダに SA が共有されていないケース */}
+              {createdInfo.driveWarning?.includes("Insufficient permissions") ? (
+                <div className="mt-3 rounded-lg bg-white/70 p-3 text-xs text-amber-900">
+                  <p className="font-semibold">対処方法:</p>
+                  <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                    <li>下の「保管フォルダ」ボタンで Drive を開く</li>
+                    <li>Drive 右上「共有」→ 以下のアカウントを追加:</li>
+                  </ol>
+                  <p className="mt-2 select-all rounded bg-amber-100 px-2 py-1 font-mono text-[11px]">
+                    kodai-77@smile-link-493702.iam.gserviceaccount.com
+                  </p>
+                  <p className="mt-1">権限は「編集者」を選択、通知メールは不要 (チェック外して OK)。共有したらもう一度「求人票を作成」を押してください。</p>
+                </div>
+              ) : null}
             </div>
           )}
           <div className="flex flex-wrap gap-2">
