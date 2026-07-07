@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { SSW_INDUSTRIES } from "@/lib/company-options";
 
@@ -14,10 +14,20 @@ export default function NewDealClient({
   accounts: Option[];
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // 企業詳細画面から遷移してきた場合、?companyId=X で対象企業を初期選択できる。
+  //   例: /companies/deals/new?companyId=42 → 企業 42 が selected
+  const requestedCompanyId = searchParams.get("companyId");
+  const initialCompanyId =
+    requestedCompanyId && companies.some((c) => c.id === Number(requestedCompanyId))
+      ? requestedCompanyId
+      : companies[0]?.id
+        ? String(companies[0].id)
+        : "";
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     title: "",
-    companyId: companies[0]?.id ? String(companies[0].id) : "",
+    companyId: initialCompanyId,
     ownerId: accounts[0]?.id ? String(accounts[0].id) : "",
     field: SSW_INDUSTRIES[0] as string,
     priority: "normal",

@@ -27,8 +27,8 @@ export default async function CompaniesPage() {
     },
   });
 
-  // externalId (数値プレフィックス) で昇順。欠番は末尾
-  const sorted = [...companies].sort((a, b) => compareExternalId(a.externalId, b.externalId));
+  // externalId (数値プレフィックス) で 降順 (新しい/大きい番号ほど上)。欠番は末尾。
+  const sorted = [...companies].sort((a, b) => compareExternalId(b.externalId, a.externalId));
 
   const active = sorted
     .filter((company) => company.hiringStatus !== "停止")
