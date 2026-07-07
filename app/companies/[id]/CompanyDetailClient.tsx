@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { HIRING_STATUSES, SSW_INDUSTRIES } from "@/lib/company-options";
+import { HIRING_STATUSES, SSW_INDUSTRIES, normalizeSswIndustry } from "@/lib/company-options";
 
 type DealSummary = {
   id: number;
@@ -50,7 +50,7 @@ export default function CompanyDetailClient({ initialCompany }: { initialCompany
   const [form, setForm] = useState({
     externalId: initialCompany.externalId ?? "",
     name: initialCompany.name,
-    industry: initialCompany.industry ?? SSW_INDUSTRIES[0],
+    industry: normalizeSswIndustry(initialCompany.industry) ?? SSW_INDUSTRIES[0],
     location: initialCompany.location ?? "",
     hiringStatus: initialCompany.hiringStatus,
     driveFolderUrl: initialCompany.driveFolderUrl ?? "",
@@ -151,7 +151,7 @@ export default function CompanyDetailClient({ initialCompany }: { initialCompany
               <div className="mt-4 space-y-3 text-sm text-gray-600">
                 <InfoRow label="企業ID" value={company.externalId ?? "-"} />
                 <InfoRow label="企業名" value={company.name} />
-                <InfoRow label="業種" value={company.industry ?? "-"} />
+                <InfoRow label="業種" value={normalizeSswIndustry(company.industry) ?? "-"} />
                 <InfoRow label="所在地" value={company.location ?? "-"} />
                 <InfoRow label="採用状況" value={company.hiringStatus} />
                 <InfoRow label="案件数" value={`${company.deals.length}件`} />

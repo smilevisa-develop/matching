@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { SSW_INDUSTRIES } from "@/lib/company-options";
+import { SSW_INDUSTRIES, normalizeSswIndustry } from "@/lib/company-options";
 import PersonPicker from "@/app/components/PersonPicker";
 import PersonAvatar from "@/app/components/PersonAvatar";
 import RecommendationsClient from "@/app/recommendations/RecommendationsClient";
@@ -134,7 +134,7 @@ export default function DealDetailClient({
   const [recommendationOpen, setRecommendationOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     title: deal.title,
-    field: deal.field ?? SSW_INDUSTRIES[0],
+    field: normalizeSswIndustry(deal.field) ?? SSW_INDUSTRIES[0],
     priority: deal.priority,
     status: deal.status,
     unitPrice: deal.unitPrice ?? "",
@@ -163,7 +163,7 @@ export default function DealDetailClient({
   const startEdit = () => {
     setEditForm({
       title: currentDeal.title,
-      field: currentDeal.field ?? SSW_INDUSTRIES[0],
+      field: normalizeSswIndustry(currentDeal.field) ?? SSW_INDUSTRIES[0],
       priority: currentDeal.priority,
       status: currentDeal.status,
       unitPrice: currentDeal.unitPrice ?? "",
@@ -307,7 +307,7 @@ export default function DealDetailClient({
                 <InfoRow label="単価" value={formatUnitPrice(currentDeal.unitPrice)} />
                 <InfoRow label="案件受付日" value={currentDeal.acceptedAt ? new Date(currentDeal.acceptedAt).toLocaleDateString("ja-JP") : "未設定"} />
                 <InfoRow label="期限" value={currentDeal.deadline ? new Date(currentDeal.deadline).toLocaleDateString("ja-JP") : "未設定"} />
-                <InfoRow label="分野" value={currentDeal.field ?? "未設定"} />
+                <InfoRow label="分野" value={normalizeSswIndustry(currentDeal.field) ?? "未設定"} />
               </div>
             ) : null}
           </div>
