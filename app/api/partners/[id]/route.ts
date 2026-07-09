@@ -48,6 +48,7 @@ function buildPartnerData(body: Record<string, unknown>) {
   return {
     name: String(body.name ?? "").trim(),
     country: cleanString(body.country),
+    isActive: typeof body.isActive === "boolean" ? body.isActive : undefined,
     channel: cleanString(body.channel),
     preferredChannels: cleanString(body.preferredChannels),
     linkStatus: cleanString(body.linkStatus) ?? "未",
@@ -149,6 +150,26 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       });
     }
 
+    return Response.json({ ok: true, partner });
+  } catch (error) {
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : "error" },
+      { status: error instanceof AuthError ? error.status : 500 }
+    );
+  }
+}
+
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requireApiAccount();
+    const { id } = await params;
+    const body = await req.json();
+    const data: { isActive?: boolean } = {};
+    if (typeof body.isActive === "boolean") data.isActive = body.isActive;
+    if (Object.keys(data).length === 0) {
+      return Response.json({ ok: false, error: "更新項目がありません" }, { status: 400 });
+    }
+    const partner = await prisma.partner.update({ where: { id: Number(id) }, data });
     return Response.json({ ok: true, partner });
   } catch (error) {
     return Response.json(

@@ -20,6 +20,7 @@ export type PartnerDetailData = {
   id: number;
   name: string;
   country: string | null;
+  isActive: boolean;
   channel: string | null;
   /** 一括送信で使う連絡手段の複数選択 (CSV: "LINE,mail,Messenger") */
   preferredChannels: string | null;
@@ -139,6 +140,34 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
   const [deleting, setDeleting] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [isActive, setIsActive] = useState(initial.isActive);
+  const [togglingActive, setTogglingActive] = useState(false);
+
+  const toggleActive = async () => {
+    const next = !isActive;
+    setTogglingActive(true);
+    const prev = isActive;
+    setIsActive(next);
+    try {
+      const res = await fetch(`/api/partners/${initial.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: next }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setIsActive(prev);
+        alert(`ステータス変更失敗: ${data.error ?? res.statusText}`);
+        return;
+      }
+      router.refresh();
+    } catch (e) {
+      setIsActive(prev);
+      alert(`ステータス変更失敗: ${e instanceof Error ? e.message : "error"}`);
+    } finally {
+      setTogglingActive(false);
+    }
+  };
 
   // 未保存のままページ離脱時に警告
   useEffect(() => {
@@ -247,6 +276,55 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
 
   return (
     <div className="space-y-6">
+      {/* アクティブ/非アクティブ トグル (最上部で一目で分かるように) */}
+      <section
+        className={`rounded-2xl border p-4 shadow-sm ${
+          isActive
+            ? "border-emerald-200 bg-emerald-50"
+            : "border-gray-200 bg-gray-50"
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ${
+                isActive
+                  ? "bg-emerald-500 text-white"
+                  : "bg-gray-300 text-gray-700"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isActive ? "bg-white" : "bg-gray-500"
+                }`}
+              />
+              {isActive ? "アクティブ" : "非アクティブ"}
+            </span>
+            <span className="text-xs text-gray-600">
+              {isActive
+                ? "一斉配信・一覧・案件作成の対象に含まれます"
+                : "一覧では折りたたみセクションに移動します"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void toggleActive()}
+            disabled={togglingActive}
+            role="switch"
+            aria-checked={isActive}
+            className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:opacity-50 ${
+              isActive ? "bg-emerald-500" : "bg-gray-300"
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                isActive ? "translate-x-8" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
+      </section>
+
       {/* 編集フォーム */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">

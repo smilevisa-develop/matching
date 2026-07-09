@@ -45,6 +45,7 @@ export default async function PartnersPage() {
           introducibleNationalities: p.introducibleNationalities,
           dealCount: p._count.deals,
           personCount: p._count.persons,
+          isActive: p.isActive,
         }))}
       />
     </div>

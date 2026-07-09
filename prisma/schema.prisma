@@ -82,6 +82,8 @@ model Partner {
   id            Int     @id @default(autoincrement())
   name          String
   country       String?
+  /// アクティブかどうか (非アクティブ = 一覧で折りたたみ非表示)
+  isActive      Boolean @default(true)
   /// レガシー: 単一チャネル (後方互換用、preferredChannels に集約)
   channel       String?
   /// 一括送信で使う連絡手段の複数選択 (CSV: "LINE,mail,Messenger")。

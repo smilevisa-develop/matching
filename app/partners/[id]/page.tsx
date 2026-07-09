@@ -76,6 +76,7 @@ export default async function PartnerDetailPage({
     id: partner.id,
     name: partner.name,
     country: partner.country,
+    isActive: partner.isActive,
     channel: partner.channel,
     preferredChannels: partner.preferredChannels,
     linkStatus: partner.linkStatus,
