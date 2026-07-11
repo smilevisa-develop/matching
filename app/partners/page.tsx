@@ -21,7 +21,7 @@ export default async function PartnersPage() {
           <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">パートナーリスト</h1>
           <p className="mt-1 text-sm text-gray-500">
             海外紹介パートナーの情報は全アカウント共通です。行をクリックすると詳細を編集できます。
-            非アクティブは一番下の折りたたみに集約されます。
+            非アクティブなパートナーは一番下の折りたたみセクションに集約されます。
           </p>
         </div>
         <Link
