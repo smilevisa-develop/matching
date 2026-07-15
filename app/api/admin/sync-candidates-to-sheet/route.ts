@@ -1,11 +1,11 @@
 /**
- * 全候補者を SYNC_SHEET_URL の「!バックアップ!」シートに書き出す admin エンドポイント。
+ * 全候補者を SYNC_SHEET_URL の「DB」シートに書き出す admin エンドポイント。
  *
  * GET  /api/admin/sync-candidates-to-sheet             ← ドライラン (件数と先頭 3 行のプレビューだけ)
  * GET  /api/admin/sync-candidates-to-sheet?apply=1     ← 本実行 (ヘッダ 2 行目, データ 3 行目 以降を全上書き)
+ * GET  /api/admin/sync-candidates-to-sheet?sheet=名前  ← 別シートを指定して上書き (旧: !バックアップ! など)
  *
- * 同期先シートは lib/sheets-sync.ts の SYNC_SHEET_TAB_NAME で管理 (`!バックアップ!`)。
- * DB シートには 触らない。
+ * 同期先シートは lib/sheets-sync.ts の SYNC_SHEET_TAB_NAME で管理 (`DB`)。
  */
 
 import { prisma } from "@/lib/prisma";

@@ -5,7 +5,11 @@
  *
  * 対象:
  *   環境変数 SYNC_SHEET_URL で指定された Google Sheets の
- *   「!バックアップ!」シート (DB シートは触らない)
+ *   「DB」シート (正規のメインシート)
+ *   ※旧: 「!バックアップ!」シート → 2026-07-09 に DB へ切替
+ *
+ * ⚠️ 全上書きなので、DB の A〜W 列 3 行目以降に手入力データがあれば消える。
+ *    特に G「推薦先企業」/ H「状況」は系にまだ列がないため、cron 実行のたびに ""。
  *
  * 列構成 (23 列、既存 候補者データベース.xlsx の DB シートに準拠):
  *   A ID / B 追加日付 / C 候補者名 (英語) / D カタカナ名 / E 分野 /
@@ -19,8 +23,8 @@ import { google, type sheets_v4 } from "googleapis";
 import { formatPersonIdPrefix } from "@/lib/google-docs";
 import { calculateAge } from "@/lib/candidate-profile";
 
-/** 書き込み先シート名 (バックアップシート、! を含む) */
-export const SYNC_SHEET_TAB_NAME = "!バックアップ!";
+/** 書き込み先シート名 (正規の DB シート) */
+export const SYNC_SHEET_TAB_NAME = "DB";
 
 /** ヘッダは 2 行目、データは 3 行目から (既存 xlsx の慣習に準拠) */
 export const HEADER_ROW = 2;
@@ -46,11 +50,11 @@ export const SYNC_HEADERS: string[] = [
   "生年月日",
   "ビザ期限",
   "特定技能経過年数",
-  "実習経験有無",
+  "実習経験\n有無",
   "日本語レベル",
   "現職の手取り額",
   "履歴書",
-  "書類フォルダリンク",
+  "書類フォルダ\nリンク",
 ];
 
 /** Google Sheets URL から Sheet ID を抜き出す */
