@@ -76,6 +76,14 @@ export async function GET(req: Request) {
           resumeFileUrl: true,
         },
       },
+      dealCandidates: {
+        select: {
+          stage: true,
+          updatedAt: true,
+          deal: { select: { company: { select: { name: true } } } },
+        },
+        orderBy: { updatedAt: "desc" },
+      },
     },
   });
   const candidates: PersonForSync[] = rawPersons;

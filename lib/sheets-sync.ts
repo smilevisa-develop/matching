@@ -9,7 +9,7 @@
  *   ※旧: 「!バックアップ!」シート → 2026-07-09 に DB へ切替
  *
  * ⚠️ 全上書きなので、DB の A〜W 列 3 行目以降に手入力データがあれば消える。
- *    特に G「推薦先企業」/ H「状況」は系にまだ列がないため、cron 実行のたびに ""。
+ *    (G「推薦先企業」/ H「状況」は DealCandidate から導出するため、系が真の情報源)
  *
  * 列構成 (23 列、既存 候補者データベース.xlsx の DB シートに準拠):
  *   A ID / B 追加日付 / C 候補者名 (英語) / D カタカナ名 / E 分野 /
@@ -137,6 +137,16 @@ export type PersonForSync = {
     remarks: string | null;
     resumeFileUrl: string | null;
   } | null;
+  /**
+   * 推薦先候補 (Person ↔ Deal の DealCandidate)。
+   * G 推薦先企業 (企業名カンマ区切り) と H 状況 (最新の stage) を導出する。
+   * Prisma のリレーション名 `dealCandidates` に合わせている。
+   */
+  dealCandidates?: {
+    stage: string;
+    updatedAt: Date;
+    deal: { company: { name: string } };
+  }[];
 };
 
 function s(v: unknown): string {
@@ -177,6 +187,15 @@ export function buildCandidateRow(p: PersonForSync): (string | number)[] {
   const folderUrl = s(p.driveFolderUrl);
   const age = birth ? calculateAge(birth) : "";
 
+  // 推薦先企業 / 状況 は DealCandidate から導出
+  const sortedCandidates = (p.dealCandidates ?? [])
+    .slice()
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  const recommendedCompanies = Array.from(
+    new Set(sortedCandidates.map((c) => c.deal.company.name).filter(Boolean)),
+  ).join(", ");
+  const latestStage = sortedCandidates[0]?.stage ?? "";
+
   return [
     idStr, // A ID
     createdAt, // B 追加日付
@@ -184,8 +203,8 @@ export function buildCandidateRow(p: PersonForSync): (string | number)[] {
     p.name, // D カタカナ名
     field, // E 分野
     partnerName, // F パートナー
-    "", // G 推薦先企業 (系に未対応、空欄)
-    "", // H 状況 (系に未対応、空欄)
+    recommendedCompanies, // G 推薦先企業 (DealCandidate → Deal → Company 名をカンマ区切り)
+    latestStage, // H 状況 (最新の DealCandidate.stage)
     gender, // I 性別
     p.nationality, // J 国籍
     p.residenceStatus, // K 在留資格
