@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { REGISTRANT_OPTIONS } from "@/lib/candidate-profile";
+import { buildPersonFolderName, ensurePersonDriveFolder } from "@/lib/google-docs";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,35 @@ export async function POST(req: Request) {
           : undefined,
       },
     });
+
+    // Drive フォルダを即時に紐づけ or 作成 (通し番号 ID で命名)
+    // 既に "{ID 4桁}_" で始まるフォルダが Drive にあればそれを再利用、無ければ新規作成。
+    // 失敗しても Person 作成自体は成功させる (後から /personnel/[id] 保存で再試行される)。
+    try {
+      const folderName = buildPersonFolderName({
+        id: person.id,
+        englishName: body.englishName ?? null,
+        name: person.name,
+      });
+      const folder = await ensurePersonDriveFolder({
+        existingFolderUrl: null,
+        personId: person.id,
+        personName: folderName,
+      });
+      if (folder.folderUrl) {
+        await prisma.person.update({
+          where: { id: person.id },
+          data: { driveFolderUrl: folder.folderUrl },
+        });
+        person.driveFolderUrl = folder.folderUrl;
+      }
+    } catch (folderError) {
+      console.warn(
+        `[personnel POST] driveFolderUrl 設定失敗 id=${person.id}:`,
+        folderError instanceof Error ? folderError.message : folderError,
+      );
+    }
+
     return Response.json({ ok: true, person });
   } catch (e) {
     return Response.json({ ok: false, error: e instanceof Error ? e.message : "error" }, { status: 500 });
