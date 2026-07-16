@@ -6,6 +6,7 @@ import {
   buildPersonFolderName,
   createResumeDocumentFromTemplate,
   ensurePersonDriveFolder,
+  uploadDataUrlToDrive,
 } from "@/lib/google-docs";
 
 export const runtime = "nodejs";
@@ -82,7 +83,40 @@ export async function POST(req: Request) {
       assetName,
     });
     // 顔写真は http(s) の公開URL のみ Google Docs に挿入できる (data: URL は不可)
-    const photoUrl = person.photoUrl && /^https?:\/\//.test(person.photoUrl) ? person.photoUrl : null;
+    // データ URL が残っている旧候補者は、この場で Drive に上げて https URL に変換 & DB も更新
+    let photoUrl: string | null = null;
+    if (person.photoUrl) {
+      if (/^https?:\/\//.test(person.photoUrl)) {
+        photoUrl = person.photoUrl;
+      } else if (person.photoUrl.startsWith("data:")) {
+        try {
+          const uploaded = await uploadDataUrlToDrive({
+            dataUrl: person.photoUrl,
+            fileName: buildPersonAssetName({
+              person: {
+                id: person.id,
+                englishName: person.onboarding?.englishName ?? null,
+                name: person.name,
+              },
+              assetName: "顔写真",
+            }),
+            folderUrl: folder.folderUrl,
+          });
+          if (uploaded?.fileUrl) {
+            photoUrl = uploaded.fileUrl;
+            await prisma.person.update({
+              where: { id: person.id },
+              data: { photoUrl: uploaded.fileUrl },
+            });
+          }
+        } catch (err) {
+          console.warn(
+            `[resumes] data URL → Drive アップロード失敗 personId=${person.id}:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+    }
     const generated = await createResumeDocumentFromTemplate({
       templateUrl: template.templateUrl,
       folderUrl: folder.folderUrl,
