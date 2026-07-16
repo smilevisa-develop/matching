@@ -11,7 +11,6 @@ import DriveActionsPanel from "./DriveActionsPanel";
 import PhotoPanel from "./PhotoPanel";
 import CreateResumeButton from "./CreateResumeButton";
 import IntakeLinkButton from "./IntakeLinkButton";
-import EditableIdBadge from "./EditableIdBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -86,9 +85,8 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
             </p>
           </div>
           <p className="shrink-0 text-[11px] text-gray-400">
-            <EditableIdBadge personId={person.id} />
-            {person.registeredBy ? <> ・ 登録者: <span className="font-medium text-gray-500">{person.registeredBy}</span></> : null}
-            {" "}・ 追加日 {new Date(person.createdAt).toLocaleDateString("ja-JP")}
+            {person.registeredBy ? <>登録者: <span className="font-medium text-gray-500">{person.registeredBy}</span> ・ </> : null}
+            追加日 {new Date(person.createdAt).toLocaleDateString("ja-JP")}
           </p>
         </div>
 

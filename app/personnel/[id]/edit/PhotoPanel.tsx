@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import PersonAvatar from "@/app/components/PersonAvatar";
+import EditableIdBadge from "./EditableIdBadge";
 
 /**
  * 候補者の顔写真パネル。
@@ -89,7 +90,10 @@ export default function PhotoPanel({
         className="rounded-2xl border border-gray-200 shadow-sm"
       />
       <div className="min-w-0 flex-1 space-y-1.5">
-        <p className="truncate text-sm font-semibold text-[var(--color-text-dark)]">{personName}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate text-sm font-semibold text-[var(--color-text-dark)]">{personName}</p>
+          <EditableIdBadge personId={personId} size="md" />
+        </div>
         <label className="inline-flex cursor-pointer items-center rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-primary-hover)]">
           {uploading ? "読み込み中..." : "写真をアップロード"}
           <input
