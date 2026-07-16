@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import SearchableSelect from "@/app/components/SearchableSelect";
 
 export type PlacementData = {
   acceptedAt: string | null;
@@ -342,16 +343,16 @@ export default function PlacementPanel({
                     <option value="PA">PA</option>
                   </SelectField>
                   {invoice.channel === "PA" ? (
-                    <SelectField
-                      label="パートナー"
-                      value={invoice.partnerId ? String(invoice.partnerId) : ""}
-                      onChange={(v) => void patchInvoice(invoice.id, { partnerId: v ? Number(v) : null })}
-                    >
-                      <option value="">未設定</option>
-                      {partners.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </SelectField>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">パートナー</label>
+                      <div className="mt-1">
+                        <SearchableSelect
+                          items={partners}
+                          value={invoice.partnerId ? String(invoice.partnerId) : ""}
+                          onChange={(v) => void patchInvoice(invoice.id, { partnerId: v ? Number(v) : null })}
+                        />
+                      </div>
+                    </div>
                   ) : null}
                 </div>
                 {invoice.channel === "PA" ? (

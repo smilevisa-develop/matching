@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CHANNELS, NATIONALITIES, RESIDENCE_STATUSES } from "@/lib/candidate-profile";
+import SearchableSelect from "@/app/components/SearchableSelect";
 
 type Partner = { id: number; name: string; country: string | null };
 
@@ -309,18 +310,16 @@ export default function BulkAddClient({ partners }: { partners: Partner[] }) {
         <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
           <div>
             <label className="text-xs font-medium text-gray-600">パートナー (全件共通の初期値)</label>
-            <select
-              value={bulkPartnerId}
-              onChange={(e) => setBulkPartnerId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm mt-1"
-            >
-              <option value="">未設定</option>
-              {partners.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} {p.country ? `(${p.country})` : ""}
-                </option>
-              ))}
-            </select>
+            <div className="mt-1">
+              <SearchableSelect
+                items={partners.map((p) => ({
+                  id: p.id,
+                  name: p.country ? `${p.name} (${p.country})` : p.name,
+                }))}
+                value={bulkPartnerId}
+                onChange={setBulkPartnerId}
+              />
+            </div>
           </div>
           <div>
             <label className="text-xs font-medium text-gray-600">主な連絡手段 (全件共通の初期値)</label>
@@ -476,18 +475,14 @@ function CandidateCard({
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div>
           <label className="text-[10px] font-medium text-gray-600">パートナー</label>
-          <select
-            value={card.partnerId ?? ""}
-            onChange={(e) => onChange({ partnerId: e.target.value ? Number(e.target.value) : null })}
-            className="w-full border border-gray-300 rounded px-2 py-1 text-xs mt-0.5"
-          >
-            <option value="">未設定</option>
-            {partners.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <div className="mt-0.5">
+            <SearchableSelect
+              items={partners}
+              value={card.partnerId ?? ""}
+              onChange={(v) => onChange({ partnerId: v ? Number(v) : null })}
+              size="sm"
+            />
+          </div>
         </div>
         <div>
           <label className="text-[10px] font-medium text-gray-600">主な連絡手段</label>

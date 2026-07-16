@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CHANNELS,
   NATIONALITIES,
@@ -9,6 +9,7 @@ import {
   RESIDENCE_STATUSES,
   inferRegistrantFromAccount,
 } from "@/lib/candidate-profile";
+import SearchableSelect from "@/app/components/SearchableSelect";
 
 export default function NewPersonnelPage() {
   const router = useRouter();
@@ -83,8 +84,8 @@ export default function NewPersonnelPage() {
           <input className={INPUT} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="グエン ヴァン アン (任意)" />
         </Field>
         <Field label="紹介パートナー">
-          <PartnerSearchSelect
-            partners={partners}
+          <SearchableSelect
+            items={partners}
             value={form.partnerId}
             onChange={(v) => set("partnerId", v)}
           />
@@ -145,104 +146,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-/** 検索できるパートナー選択。value="" は「未設定」。 */
-function PartnerSearchSelect({
-  partners,
-  value,
-  onChange,
-}: {
-  partners: { id: number; name: string }[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  const selected = useMemo(
-    () => (value ? partners.find((p) => String(p.id) === String(value)) : null),
-    [partners, value],
-  );
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return partners;
-    return partners.filter((p) => p.name.toLowerCase().includes(q));
-  }, [partners, query]);
-
-  // 外側クリックで閉じる
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (!ref.current) return;
-      if (!ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`${INPUT} flex items-center justify-between text-left`}
-      >
-        <span className={selected ? "" : "text-gray-400"}>
-          {selected ? selected.name : "未設定"}
-        </span>
-        <span className="text-xs text-gray-400">{open ? "▲" : "▼"}</span>
-      </button>
-      {open ? (
-        <div className="absolute left-0 right-0 z-10 mt-1 rounded-lg border border-gray-200 bg-white shadow-lg">
-          <div className="p-2">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="パートナー名で検索..."
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/50"
-              autoFocus
-            />
-          </div>
-          <ul className="max-h-64 overflow-y-auto border-t border-gray-100">
-            <li>
-              <button
-                type="button"
-                onClick={() => {
-                  onChange("");
-                  setOpen(false);
-                  setQuery("");
-                }}
-                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${!value ? "bg-gray-50 font-medium" : "text-gray-500"}`}
-              >
-                未設定
-              </button>
-            </li>
-            {filtered.length === 0 ? (
-              <li className="px-3 py-3 text-center text-xs text-gray-400">
-                一致するパートナーがいません
-              </li>
-            ) : (
-              filtered.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onChange(String(p.id));
-                      setOpen(false);
-                      setQuery("");
-                    }}
-                    className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${String(p.id) === String(value) ? "bg-gray-50 font-medium text-[var(--color-primary)]" : ""}`}
-                  >
-                    {p.name}
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      ) : null}
-    </div>
-  );
-}

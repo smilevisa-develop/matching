@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { SSW_INDUSTRIES } from "@/lib/company-options";
+import SearchableSelect from "@/app/components/SearchableSelect";
 
 type Option = { id: number; name: string };
 
@@ -69,11 +70,14 @@ export default function NewDealClient({
         <input className={INPUT} value={form.title} onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))} />
       </Field>
       <Field label="企業">
-        <select className={INPUT} value={form.companyId} onChange={(e) => setForm((current) => ({ ...current, companyId: e.target.value }))}>
-          {companies.map((company) => (
-            <option key={company.id} value={company.id}>{company.name}</option>
-          ))}
-        </select>
+        <SearchableSelect
+          items={companies}
+          value={form.companyId}
+          onChange={(v) => setForm((current) => ({ ...current, companyId: v }))}
+          placeholder="企業を選択"
+          searchPlaceholder="企業名で検索..."
+          allowClear={false}
+        />
       </Field>
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="分野 (特定技能16分野)">

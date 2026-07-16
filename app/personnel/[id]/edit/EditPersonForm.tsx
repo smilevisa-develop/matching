@@ -13,6 +13,7 @@ import {
   type WorkHistoryEntry,
 } from "@/lib/candidate-profile";
 import { INTERVIEW_SECTIONS } from "@/lib/interview-questions";
+import SearchableSelect from "@/app/components/SearchableSelect";
 
 type Person = {
   id: number;
@@ -463,14 +464,11 @@ export default function EditPersonForm({
               <input className={INPUT} value={form.name} onChange={(event) => setValue("name", event.target.value)} placeholder="グエン ヴァン アン" />
             </Field>
             <Field label="紹介パートナー">
-              <select className={INPUT} value={form.partnerId} onChange={(event) => setValue("partnerId", event.target.value)}>
-                <option value="">未設定</option>
-                {partners.map((partner) => (
-                  <option key={partner.id} value={partner.id}>
-                    {partner.name}
-                  </option>
-                ))}
-              </select>
+              <SearchableSelect
+                items={partners}
+                value={form.partnerId}
+                onChange={(v) => setValue("partnerId", v)}
+              />
             </Field>
             <Field label="国籍">
               <select className={INPUT} value={form.nationality} onChange={(event) => setValue("nationality", event.target.value)}>
