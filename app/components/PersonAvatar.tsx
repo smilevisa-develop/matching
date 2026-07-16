@@ -2,6 +2,19 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { extractDriveFileId } from "@/lib/drive-url";
+
+/** Drive の URL はブラウザから直接読めないので、うちの proxy 経由に書き換える。 */
+function toDisplayUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("data:")) return url;
+  if (url.startsWith("/api/photo-proxy")) return url;
+  if (url.includes("drive.google.com")) {
+    const id = extractDriveFileId(url);
+    if (id) return `/api/photo-proxy?id=${id}`;
+  }
+  return url;
+}
 
 /**
  * 候補者の写真表示。
@@ -22,7 +35,8 @@ export default function PersonAvatar({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const showImage = !!photoUrl && !failed;
+  const displayUrl = toDisplayUrl(photoUrl);
+  const showImage = !!displayUrl && !failed;
 
   const radius = Math.max(8, Math.round(size * 0.25));
   const wrapperStyle = { width: size, height: size, borderRadius: radius };
@@ -30,7 +44,7 @@ export default function PersonAvatar({
   if (showImage) {
     return (
       <Image
-        src={photoUrl!}
+        src={displayUrl!}
         alt={name ?? ""}
         width={size}
         height={size}
