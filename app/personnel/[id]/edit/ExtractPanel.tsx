@@ -4,6 +4,19 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import CloseButton from "@/app/components/CloseButton";
 import IconTooltip from "./IconTooltip";
+import { ALL_DOCUMENT_KINDS, getDocumentKindLabel } from "@/lib/file-classifier";
+
+type UploadedFileWithKind = {
+  fileName: string;
+  originalFileName?: string;
+  fileUrl: string;
+  fileId?: string | null;
+  mimeType?: string;
+  suggestedKind?: string;
+  suggestedLabel?: string;
+  confidence?: "high" | "medium" | "low";
+  source?: "filename" | "ai" | "unknown";
+};
 
 type IncomingFile = {
   id: string;
@@ -153,7 +166,9 @@ function ExtractModal({
   const [stage, setStage] = useState<"select" | "extracting" | "review">("select");
   const [extracted, setExtracted] = useState<ExtractedCandidate>({});
   const [driveFolderUrl, setDriveFolderUrl] = useState<string | null>(null);
-  const [uploaded, setUploaded] = useState<{ fileName: string; fileUrl: string }[]>([]);
+  const [uploaded, setUploaded] = useState<UploadedFileWithKind[]>([]);
+  // 各アップロードファイルに対して確定した kind (index 単位で管理、undefined ならサジェスト値)
+  const [kindChoices, setKindChoices] = useState<Record<number, string>>({});
   const [driveWarning, setDriveWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
@@ -252,6 +267,27 @@ function ExtractModal({
 
     setApplying(true);
     try {
+      // 1. 書類種別の確定 (ユーザーが変更したものだけ reclassify を呼ぶ)
+      const reclassifyPromises: Promise<unknown>[] = [];
+      for (let i = 0; i < uploaded.length; i++) {
+        const chosen = kindChoices[i];
+        const suggested = uploaded[i].suggestedKind;
+        const fileId = uploaded[i].fileId;
+        if (!chosen || !fileId) continue;
+        if (chosen === suggested) continue;
+        reclassifyPromises.push(
+          fetch(`/api/personnel/${personId}/documents/reclassify`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileId, oldKind: suggested, newKind: chosen }),
+          }).catch(() => undefined),
+        );
+      }
+      if (reclassifyPromises.length > 0) {
+        await Promise.all(reclassifyPromises);
+      }
+
+      // 2. 候補者データを apply
       const response = await fetch(`/api/personnel/${personId}/apply-extracted`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -264,10 +300,14 @@ function ExtractModal({
       }
       const u = result.updated ?? {};
       const total = (u.person ?? 0) + (u.onboarding ?? 0) + (u.resume ?? 0);
-      if (total === 0) {
+      const kindChanges = reclassifyPromises.length;
+      const msgs: string[] = [];
+      if (total > 0) msgs.push(`${total} 項目を反映`);
+      if (kindChanges > 0) msgs.push(`${kindChanges} 件の書類種別を確定`);
+      if (msgs.length === 0) {
         alert("反映する項目がありません。選択した値がすべて既存のままです。");
       } else {
-        alert(`候補者情報に ${total} 項目を反映しました`);
+        alert(`候補者情報に ${msgs.join(" / ")} しました`);
       }
       onApplied();
     } catch (err) {
@@ -402,14 +442,89 @@ function ExtractModal({
                   <p className="font-semibold">書類の保存について</p>
                   <pre className="mt-1 whitespace-pre-wrap font-sans">{driveWarning}</pre>
                 </div>
-              ) : driveFolderUrl && uploaded.length > 0 ? (
-                <p className="text-xs text-gray-500">
-                  アップロードした書類は{" "}
-                  <a href={driveFolderUrl} target="_blank" rel="noreferrer" className="text-[var(--color-primary)] underline">
-                    候補者の保管場所
-                  </a>{" "}
-                  に保存されました ({uploaded.length} ファイル)
-                </p>
+              ) : null}
+
+              {driveFolderUrl && uploaded.length > 0 ? (
+                <div>
+                  <div className="mb-2 flex items-baseline justify-between">
+                    <p className="text-sm font-semibold text-[var(--color-text-dark)]">
+                      アップロードした書類 ({uploaded.length})
+                    </p>
+                    <a
+                      href={driveFolderUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-[var(--color-primary)] underline"
+                    >
+                      保管場所を開く
+                    </a>
+                  </div>
+                  <p className="mb-2 text-[11px] text-gray-500">
+                    AI が推定した書類種別を確認してください。違うときはドロップダウンで選び直せます。「反映」時に Drive ファイル名も付け直します。
+                  </p>
+                  <div className="space-y-2">
+                    {uploaded.map((u, idx) => {
+                      const chosen = kindChoices[idx] ?? u.suggestedKind ?? "other";
+                      const isChanged =
+                        u.suggestedKind !== undefined && chosen !== u.suggestedKind;
+                      const badge =
+                        u.source === "filename"
+                          ? { text: "ファイル名判定", cls: "bg-[#DBEAFE] text-[#1D4ED8]" }
+                          : u.source === "ai"
+                            ? { text: "AI 判定", cls: "bg-[#E9D5FF] text-[#6B21A8]" }
+                            : { text: "未判定", cls: "bg-gray-200 text-gray-600" };
+                      return (
+                        <div
+                          key={u.fileId ?? idx}
+                          className="rounded-xl border border-gray-200 bg-white px-3 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <a
+                              href={u.fileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="min-w-0 flex-1 truncate text-xs text-[var(--color-primary)] underline"
+                              title={u.originalFileName ?? u.fileName}
+                            >
+                              {u.originalFileName ?? u.fileName}
+                            </a>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.cls}`}
+                            >
+                              {badge.text}
+                              {u.confidence ? ` ・ ${u.confidence}` : ""}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <span className="text-[10px] text-gray-500">書類種別</span>
+                            <select
+                              value={chosen}
+                              onChange={(e) =>
+                                setKindChoices((prev) => ({ ...prev, [idx]: e.target.value }))
+                              }
+                              className={`flex-1 rounded border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/50 ${
+                                isChanged
+                                  ? "border-[var(--color-primary)] bg-[var(--color-light)]"
+                                  : "border-gray-300 bg-white"
+                              }`}
+                            >
+                              {ALL_DOCUMENT_KINDS.map((k) => (
+                                <option key={k.kind} value={k.kind}>
+                                  {k.label}
+                                </option>
+                              ))}
+                            </select>
+                            {isChanged ? (
+                              <span className="text-[10px] text-[var(--color-primary)]">
+                                → {getDocumentKindLabel(chosen)} に変更
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               ) : null}
 
               {populated.length > 0 ? (
