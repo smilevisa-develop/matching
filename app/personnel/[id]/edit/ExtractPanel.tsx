@@ -546,10 +546,10 @@ function FieldComparisonRow({
       <div className="mt-2 grid gap-2 md:grid-cols-2">
         <label
           className={`cursor-pointer rounded-lg border-2 px-3 py-2 transition ${
-            decision === "existing" && hasExisting
+            decision === "existing"
               ? "border-[var(--color-primary)] bg-[var(--color-light)]"
               : "border-gray-200 bg-white"
-          } ${!hasExisting ? "opacity-50" : ""}`}
+          }`}
         >
           <div className="flex items-center justify-between gap-2">
             <span className="text-[10px] font-medium text-gray-500">既存</span>
@@ -557,12 +557,11 @@ function FieldComparisonRow({
               type="radio"
               checked={decision === "existing"}
               onChange={() => onDecisionChange("existing")}
-              disabled={!hasExisting}
               className="accent-[var(--color-primary)]"
             />
           </div>
           <p className="mt-1 break-words text-sm text-[var(--color-text-dark)]">
-            {hasExisting ? existingValue : <span className="text-gray-400">未入力</span>}
+            {hasExisting ? existingValue : <span className="text-gray-400">未入力のまま保持</span>}
           </p>
         </label>
 
