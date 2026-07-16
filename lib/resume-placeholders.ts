@@ -197,13 +197,13 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
   }
   while (certs.length < MAX_CERTS) certs.push({ date: "", label: "" });
 
-  // 日本就労ビザ: 在留資格が就労可能なものかどうかで「あり」/「なし」
+  // 日本就労ビザ: 在留資格が「持っていない」/空欄/未設定なら「無」、
+  // それ以外 (技能実習/特定技能/技人国/留学生/特定活動/永住/不明 など何か選択されていれば) → 「有」
   const visaTypeLabel = valueOrBlank(profile?.visaType) || valueOrBlank(person.residenceStatus);
   const visaExpiry = formatYearMonth(profile?.visaExpiryDate);
-  // 留学生 / 空欄 / 未設定 / 不明 → 「なし」、それ以外 (技能実習/特定技能/技人国/特定活動) → 「あり」
-  const NON_WORK_VISA = ["留学生", "", "未設定", "不明", "なし"];
-  const isWorkVisa = !!visaTypeLabel && !NON_WORK_VISA.includes(visaTypeLabel);
-  const visaWorkAriNashi = isWorkVisa ? "あり" : "なし";
+  const NO_VISA = ["持っていない", "", "未設定", "なし"];
+  const hasResidenceStatus = !!visaTypeLabel && !NO_VISA.includes(visaTypeLabel);
+  const visaWorkAriNashi = hasResidenceStatus ? "有" : "無";
 
   return {
     作成日: formatDateJapanese(new Date().toISOString()),
