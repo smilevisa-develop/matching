@@ -69,6 +69,10 @@ export async function GET(req: Request) {
     await requireApiAccount();
     const { searchParams } = new URL(req.url);
     const apply = searchParams.get("apply") === "1";
+    const skipCheck = searchParams.get("skipCheck") === "1";
+    const summary = searchParams.get("summary") === "1" || apply; // apply モードはデフォルトでサマリだけ
+    const limit = Math.max(1, Math.min(500, Number(searchParams.get("limit") ?? 500)));
+    const offset = Math.max(0, Number(searchParams.get("offset") ?? 0));
     const idsParam = searchParams.get("ids");
     const idFilter = idsParam
       ? idsParam
@@ -84,38 +88,41 @@ export async function GET(req: Request) {
       where,
       select: { id: true, name: true, photoUrl: true, driveFolderUrl: true },
       orderBy: { id: "asc" },
+      skip: offset,
+      take: limit,
     });
 
     const drive = await driveClient();
     const results: {
       id: number;
       name: string;
-      status: "relinked" | "still_ok" | "no_folder" | "no_photo_in_folder" | "no_current_fileid";
+      status: "relinked" | "still_ok" | "no_folder" | "no_photo_in_folder";
       oldPhotoUrl?: string | null;
       newPhotoUrl?: string;
       foundFileName?: string;
     }[] = [];
 
     for (const p of persons) {
-      // 現在の photoUrl の fileId が読めるならスキップ
-      const currentFileId = extractDriveFileId(p.photoUrl);
-      if (currentFileId) {
-        try {
-          const meta = await drive.files.get({
-            fileId: currentFileId,
-            fields: "id,trashed",
-            supportsAllDrives: true,
-          });
-          if (!meta.data.trashed) {
-            results.push({ id: p.id, name: p.name, status: "still_ok" });
-            continue;
+      // skipCheck=1 なら 現 photoUrl の生存確認をスキップ (Drive API コール節約)
+      if (!skipCheck) {
+        const currentFileId = extractDriveFileId(p.photoUrl);
+        if (currentFileId) {
+          try {
+            const meta = await drive.files.get({
+              fileId: currentFileId,
+              fields: "id,trashed",
+              supportsAllDrives: true,
+            });
+            if (!meta.data.trashed) {
+              results.push({ id: p.id, name: p.name, status: "still_ok" });
+              continue;
+            }
+          } catch {
+            // 読めない → 探し直し
           }
-        } catch {
-          // 読めない → 探し直しへ
         }
       }
 
-      // 候補者フォルダを見に行く
       const folderId = extractDriveFileId(p.driveFolderUrl);
       if (!folderId) {
         results.push({
@@ -153,13 +160,17 @@ export async function GET(req: Request) {
     }
 
     const totals = {
-      total: results.length,
+      processed: results.length,
+      offset,
+      limit,
       relinked: results.filter((r) => r.status === "relinked").length,
       still_ok: results.filter((r) => r.status === "still_ok").length,
       no_folder: results.filter((r) => r.status === "no_folder").length,
       no_photo_in_folder: results.filter((r) => r.status === "no_photo_in_folder").length,
     };
-    return Response.json({ ok: true, apply, totals, results });
+    return Response.json(
+      summary ? { ok: true, apply, totals } : { ok: true, apply, totals, results },
+    );
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "error" },
