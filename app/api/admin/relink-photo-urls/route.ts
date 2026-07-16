@@ -34,7 +34,12 @@ async function driveClient() {
   return google.drive({ version: "v3", auth });
 }
 
-/** フォルダ内から顔写真らしき画像を 1 つ探す (顔写真 > photo > face > 最初の画像) */
+/**
+ * フォルダ内から「顔写真」らしき画像を 1 つ探す。
+ * 顔写真 > photo > face のキーワードにマッチするものだけ返す。
+ * 免許証/在留カード/証明書 等を誤ってヒットさせないため、
+ * キーワードなしの画像へのフォールバックはしない。
+ */
 async function findPhotoInFolder(
   drive: drive_v3.Drive,
   folderId: string,
@@ -50,8 +55,7 @@ async function findPhotoInFolder(
   if (files.length === 0) return null;
   const byKeyword = (kw: string) =>
     files.find((f) => (f.name ?? "").toLowerCase().includes(kw.toLowerCase()));
-  const chosen =
-    byKeyword("顔写真") || byKeyword("photo") || byKeyword("face") || files[0];
+  const chosen = byKeyword("顔写真") || byKeyword("photo") || byKeyword("face");
   if (!chosen?.id) return null;
   return {
     fileId: chosen.id,
