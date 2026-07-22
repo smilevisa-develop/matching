@@ -131,16 +131,26 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
       },
       {
         key: "motivation",
-        question: "なぜこの職種を選びましたか？/ なぜ弊社の求人に応募したいと思いましたか？",
+        question: "なぜ弊社の求人に応募したいと思いましたか？",
         type: "textarea",
         existingField: "motivation",
         priority: "must",
       },
       {
+        // 「もう退職しましたか？」は employmentStatus に分離した。
+        // ここは退職 (予定) の 理由 だけを聞く
         key: "retirementReason",
-        question: "なぜ今の会社を辞めたいですか？（もう退職しましたか？）",
+        question: "なぜ今の会社を辞めたいですか？",
         type: "textarea",
         existingField: "retirementReason",
+        priority: "must",
+      },
+      {
+        key: "employmentStatus",
+        question: "もう退職しましたか？",
+        type: "select",
+        options: ["退職済み", "在職中"],
+        jsonKey: "employmentStatus",
         priority: "must",
       },
       {
