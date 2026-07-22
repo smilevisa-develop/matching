@@ -4,14 +4,19 @@ import Image from "next/image";
 import { useState } from "react";
 import { extractDriveFileId } from "@/lib/drive-url";
 
-/** Drive の URL はブラウザから直接読めないので、うちの proxy 経由に書き換える。 */
-function toDisplayUrl(url: string | null | undefined): string | null {
+/**
+ * Drive の URL はブラウザから直接読めないので、うちの proxy 経由に書き換える。
+ * 表示サイズを sz で渡し、必要な大きさのサムネイルだけ取得する
+ * (一覧には数十枚並ぶため、原本を落とすと非常に重くなる)。
+ */
+function toDisplayUrl(url: string | null | undefined, size: number): string | null {
   if (!url) return null;
   if (url.startsWith("data:")) return url;
   if (url.startsWith("/api/photo-proxy")) return url;
   if (url.includes("drive.google.com")) {
     const id = extractDriveFileId(url);
-    if (id) return `/api/photo-proxy?id=${id}`;
+    // Retina 対応で 2 倍の解像度を要求する
+    if (id) return `/api/photo-proxy?id=${id}&sz=${Math.round(size * 2)}`;
   }
   return url;
 }
@@ -35,7 +40,7 @@ export default function PersonAvatar({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const displayUrl = toDisplayUrl(photoUrl);
+  const displayUrl = toDisplayUrl(photoUrl, size);
   const showImage = !!displayUrl && !failed;
 
   const radius = Math.max(8, Math.round(size * 0.25));

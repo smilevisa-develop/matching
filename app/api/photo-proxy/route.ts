@@ -3,12 +3,21 @@
  *
  * ブラウザから直接 https://drive.google.com/thumbnail?id=... を叩いても、
  * Service Account 所有のプライベートファイルは 403 になる。
- * このエンドポイントは SA 権限で Drive API から画像バイナリを取得し、
+ * このエンドポイントは SA 権限で Drive API から画像を取得し、
  * ブラウザに Content-Type つきで返す。
+ *
+ * 配信するもの:
+ *   ① Drive 生成のサムネイル (数十 KB)。一覧に数十枚並ぶので既定はこちら
+ *   ② 取れなければ原本 (数 MB)。アップロード直後でサムネ未生成のときなど
+ *
+ * キャッシュ:
+ *   サムネイル … 24 時間 immutable (差し替え時は fileId が変わるので古い画像は残らない)
+ *   原本       … 10 分。後からサムネイルが生成されたら切り替わるように短くしている
  *
  * 使い方:
  *   GET /api/photo-proxy?id=<driveFileId>
- *   GET /api/photo-proxy?u=<encoded drive url>   (id を抽出して同じ処理)
+ *   GET /api/photo-proxy?id=<driveFileId>&sz=200   欲しい幅 (64〜1600, 既定 400)
+ *   GET /api/photo-proxy?u=<encoded drive url>     (id を抽出して同じ処理)
  */
 
 import { google } from "googleapis";
@@ -42,15 +51,50 @@ export async function GET(req: Request) {
       return new Response("missing id", { status: 400 });
     }
 
+    // ?sz=200 で欲しい幅を指定できる (既定 400)。原本を返すときは無視される
+    const size = Math.max(64, Math.min(1600, Number(searchParams.get("sz") ?? 400)));
+
     const drive = await getDriveClient();
-    // meta で mimeType を取り、alt=media でバイナリ本体を取得
     const meta = await drive.files.get({
       fileId: id,
-      fields: "id,mimeType",
+      fields: "id,mimeType,thumbnailLink",
       supportsAllDrives: true,
     });
     const mimeType = meta.data.mimeType ?? "image/jpeg";
 
+    // ① Drive が生成したサムネイルを優先。原本 (数 MB) に比べて数十 KB で済む。
+    //    thumbnailLink は末尾が =s220 のようなサイズ指定なので、欲しい幅に付け替える。
+    const thumbnailLink = meta.data.thumbnailLink;
+    if (thumbnailLink) {
+      try {
+        const sized = thumbnailLink.replace(/=s\d+(-[a-z]+)?$/i, `=s${size}`);
+        const thumbRes = await fetch(sized);
+        if (thumbRes.ok) {
+          const buf = Buffer.from(await thumbRes.arrayBuffer());
+          // 中身が空だったり HTML (エラーページ) だったら原本にフォールバック
+          const type = thumbRes.headers.get("content-type") ?? "";
+          if (buf.length > 0 && type.startsWith("image/")) {
+            return new Response(new Uint8Array(buf), {
+              status: 200,
+              headers: {
+                "Content-Type": type,
+                "Content-Length": String(buf.length),
+                "Cache-Control": "public, max-age=86400, immutable",
+                "X-Photo-Source": "thumbnail",
+              },
+            });
+          }
+        }
+      } catch (e) {
+        // サムネイル取得の失敗は致命ではない。原本にフォールバックする
+        console.warn(
+          "photo-proxy: thumbnail 取得に失敗、原本にフォールバック:",
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
+
+    // ② フォールバック: 原本をそのまま返す (アップロード直後でサムネ未生成の場合など)
     const res = await drive.files.get(
       {
         fileId: id,
@@ -67,7 +111,9 @@ export async function GET(req: Request) {
         "Content-Type": mimeType,
         "Content-Length": String(buf.length),
         // 顔写真は変わらないので長めに cache (URL が変わったら別 id なので OK)
-        "Cache-Control": "public, max-age=86400, immutable",
+        // ただし原本フォールバック時は、後でサムネが生成される可能性があるので短めにする
+        "Cache-Control": "public, max-age=600",
+        "X-Photo-Source": "original",
       },
     });
   } catch (error) {
