@@ -28,6 +28,12 @@ model Person {
   /// 公開フォームの設定 (除外する質問キー / 個別追加質問)
   ///   形式: { excludedKeys: string[], customQuestions: [{ key, label, required, type }] }
   intakeConfig    Json?
+  /// スプシ DB へ最後に反映した日時。
+  /// この候補者 (本人 / onboarding / resumeProfile / 案件紐づけ) の updatedAt が
+  /// これより新しいときだけスプシに書き込む。
+  /// null = 一度も反映していない。既存候補者は移行時に現在時刻を入れて
+  /// 「今後の変更だけ反映」する運用にしている。
+  sheetSyncedAt   DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

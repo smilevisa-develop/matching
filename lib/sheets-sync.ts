@@ -126,12 +126,17 @@ export type PersonForSync = {
   residenceStatus: string;
   driveFolderUrl: string | null;
   createdAt: Date;
+  /** 変更検知用。Person 自体の更新日時 */
+  updatedAt?: Date;
+  /** スプシへ最後に反映した日時。null なら未反映 */
+  sheetSyncedAt?: Date | null;
   partner?: { name: string } | null;
   onboarding?: {
     englishName: string | null;
     birthDate: string | null;
     postalCode: string | null;
     address: string | null;
+    updatedAt?: Date;
   } | null;
   resumeProfile?: {
     gender: string | null;
@@ -141,6 +146,7 @@ export type PersonForSync = {
     preferenceNote: string | null;
     remarks: string | null;
     resumeFileUrl: string | null;
+    updatedAt?: Date;
   } | null;
   /**
    * 推薦先候補 (Person ↔ Deal の DealCandidate)。
@@ -245,6 +251,8 @@ export type SyncResult = {
   apply: boolean;
   sheetName: string;
   candidatesConsidered: number;
+  /** システム側で変更がなく、対象外にした数 (スプシに触っていない) */
+  skippedUnchanged: number;
   /** 既存行のうち値が変わって更新した数 */
   updated: number;
   /** 新規に追記した数 */
@@ -261,6 +269,8 @@ export type SyncResult = {
   }[];
   /** 列ごとの変更件数 (どの列が原因で更新が多いのか把握する用) */
   changesByColumn: Record<string, number>;
+  /** スプシへ反映済みになった Person.id。呼び出し側で sheetSyncedAt を更新する */
+  syncedPersonIds: number[];
   warnings: string[];
 };
 
@@ -271,23 +281,68 @@ function cellStr(v: unknown): string {
 }
 
 /**
- * 系 → スプシ DB の差分同期。
+ * この候補者が「システム側で変更されたか」を判定する。
  *
- * 方針 (全上書きはしない):
- *   - スプシの A 列 (候補者 ID) と系の Person.id (4桁 0 埋め) で行を突合
- *   - 既存行: 系に値がある列だけ書き換える (系が空欄の列は既存値を残す)。
- *     変化がなければその行は一切触らない
- *   - 系にいる新規候補者: 末尾に追記
- *   - スプシにしかない行 (旧 Google フォーム由来 / 「IDなし」/「5月」等の区切り行):
- *     一切触らない
+ * 本人 / onboarding / resumeProfile / 案件紐づけ のいずれかの updatedAt が
+ * sheetSyncedAt より新しければ変更あり。sheetSyncedAt が null なら
+ * 一度も反映していない = 変更ありとして扱う。
+ */
+export function hasSystemChange(p: PersonForSync): boolean {
+  if (!p.sheetSyncedAt) return true;
+  const synced = p.sheetSyncedAt.getTime();
+  const stamps: number[] = [];
+  if (p.updatedAt) stamps.push(p.updatedAt.getTime());
+  if (p.onboarding?.updatedAt) stamps.push(p.onboarding.updatedAt.getTime());
+  if (p.resumeProfile?.updatedAt) stamps.push(p.resumeProfile.updatedAt.getTime());
+  for (const c of p.dealCandidates ?? []) stamps.push(c.updatedAt.getTime());
+  return stamps.some((t) => t > synced);
+}
+
+/**
+ * 系 → スプシ DB の 変更分のみ 反映。
+ *
+ * 方針:
+ *   - システム側で変更があった候補者 (hasSystemChange) だけを対象にする。
+ *     触られていない候補者はスプシに一切書き込まない → 古いデータは保護される
+ *   - 対象候補者のうち、スプシに ID がある行は 系に値がある列だけ 書き換える
+ *     (系が空欄の列は既存値を残す)
+ *   - スプシに ID が無い候補者は末尾に追記
+ *   - スプシにしかない行 (旧 Google フォーム由来 / 「IDなし」/「5月」等の区切り行)
+ *     およびヘッダ行、X 列より右は 一切触らない
+ *
+ * 反映に成功した候補者 ID は syncedPersonIds で返るので、呼び出し側で
+ * Person.sheetSyncedAt を更新すること。
  */
 export async function syncCandidatesUpsert(args: {
   opts: SyncOptions;
   candidates: PersonForSync[];
 }): Promise<SyncResult> {
   const warnings: string[] = [];
-  const { opts, candidates } = args;
+  const { opts } = args;
   const sheetName = opts.sheetName ?? SYNC_SHEET_TAB_NAME;
+
+  // ── システム側で変更があったものだけに絞る ──
+  const allCandidates = args.candidates;
+  const candidates = allCandidates.filter(hasSystemChange);
+  const skippedUnchanged = allCandidates.length - candidates.length;
+
+  if (candidates.length === 0) {
+    return {
+      ok: true,
+      apply: opts.apply,
+      sheetName,
+      candidatesConsidered: allCandidates.length,
+      skippedUnchanged,
+      updated: 0,
+      appended: 0,
+      unchanged: 0,
+      sampleChanges: [],
+      changesByColumn: {},
+      syncedPersonIds: [],
+      warnings,
+    };
+  }
+
   const sheets = await getSheetsClient();
 
   // シート存在確認
@@ -320,6 +375,7 @@ export async function syncCandidatesUpsert(args: {
   const sampleChanges: SyncResult["sampleChanges"] = [];
   const changesByColumn: Record<string, number> = {};
   const sampleLimit = opts.sampleLimit ?? 5;
+  const syncedPersonIds: number[] = [];
   let unchanged = 0;
 
   for (const p of candidates) {
@@ -349,6 +405,7 @@ export async function syncCandidatesUpsert(args: {
           range: `${quoteSheetName(sheetName)}!A${rowNumber}:W${rowNumber}`,
           values: [merged],
         });
+        syncedPersonIds.push(p.id);
         if (sampleChanges.length < sampleLimit) {
           sampleChanges.push({
             id: idStr,
@@ -359,10 +416,13 @@ export async function syncCandidatesUpsert(args: {
           });
         }
       } else {
+        // スプシ側と既に同値。反映済みとして sheetSyncedAt を進めてよい
         unchanged++;
+        syncedPersonIds.push(p.id);
       }
     } else {
       appends.push(systemRow);
+      syncedPersonIds.push(p.id);
       if (sampleChanges.length < sampleLimit) {
         sampleChanges.push({ id: idStr, action: "append", name: p.name });
       }
@@ -395,11 +455,14 @@ export async function syncCandidatesUpsert(args: {
     apply: opts.apply,
     sheetName,
     candidatesConsidered: candidates.length,
+    skippedUnchanged,
     updated: updates.length,
     appended: appends.length,
     unchanged,
     sampleChanges,
     changesByColumn,
+    // apply したときだけ「反映済み」として返す (ドライランでは進めない)
+    syncedPersonIds: opts.apply ? syncedPersonIds : [],
     warnings,
   };
 }

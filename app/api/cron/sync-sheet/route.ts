@@ -61,9 +61,11 @@ export async function GET(req: Request) {
       residenceStatus: true,
       driveFolderUrl: true,
       createdAt: true,
+      updatedAt: true,
+      sheetSyncedAt: true,
       partner: { select: { name: true } },
       onboarding: {
-        select: { englishName: true, birthDate: true, postalCode: true, address: true },
+        select: { englishName: true, birthDate: true, postalCode: true, address: true, updatedAt: true },
       },
       resumeProfile: {
         select: {
@@ -74,6 +76,7 @@ export async function GET(req: Request) {
           preferenceNote: true,
           remarks: true,
           resumeFileUrl: true,
+            updatedAt: true,
         },
       },
       dealCandidates: {
@@ -93,6 +96,12 @@ export async function GET(req: Request) {
       opts: { spreadsheetId, sheetName: SYNC_SHEET_TAB_NAME, apply: true },
       candidates,
     });
+    if (result.syncedPersonIds.length > 0) {
+      await prisma.person.updateMany({
+        where: { id: { in: result.syncedPersonIds } },
+        data: { sheetSyncedAt: new Date() },
+      });
+    }
     return Response.json({ ok: true, result, at: new Date().toISOString() });
   } catch (error) {
     console.error("cron/sync-sheet error:", error);

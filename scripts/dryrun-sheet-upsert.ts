@@ -35,9 +35,11 @@ async function main() {
       residenceStatus: true,
       driveFolderUrl: true,
       createdAt: true,
+      updatedAt: true,
+      sheetSyncedAt: true,
       partner: { select: { name: true } },
       onboarding: {
-        select: { englishName: true, birthDate: true, postalCode: true, address: true },
+        select: { englishName: true, birthDate: true, postalCode: true, address: true, updatedAt: true },
       },
       resumeProfile: {
         select: {
@@ -48,6 +50,7 @@ async function main() {
           preferenceNote: true,
           remarks: true,
           resumeFileUrl: true,
+          updatedAt: true,
         },
       },
       dealCandidates: {
@@ -73,6 +76,7 @@ async function main() {
   });
 
   console.log(`系の候補者: ${result.candidatesConsidered} 件`);
+  console.log(`  変更なしで対象外: ${result.skippedUnchanged} 件 (スプシに触らない)`);
   console.log(`  更新予定: ${result.updated} 件`);
   console.log(`  追記予定: ${result.appended} 件`);
   console.log(`  変更なし: ${result.unchanged} 件`);

@@ -56,6 +56,8 @@ export async function GET(req: Request) {
         residenceStatus: true,
         driveFolderUrl: true,
         createdAt: true,
+        updatedAt: true,
+        sheetSyncedAt: true,
         partner: { select: { name: true } },
         onboarding: {
           select: {
@@ -63,6 +65,7 @@ export async function GET(req: Request) {
             birthDate: true,
             postalCode: true,
             address: true,
+            updatedAt: true,
           },
         },
         resumeProfile: {
@@ -74,6 +77,7 @@ export async function GET(req: Request) {
             preferenceNote: true,
             remarks: true,
             resumeFileUrl: true,
+            updatedAt: true,
           },
         },
         dealCandidates: {
@@ -92,6 +96,15 @@ export async function GET(req: Request) {
       opts: { spreadsheetId, sheetName, apply, sampleLimit },
       candidates,
     });
+
+    // 反映できた候補者は「反映済み」として記録。
+    // 次回以降、この候補者に変更が入るまでスプシには触らない。
+    if (apply && result.syncedPersonIds.length > 0) {
+      await prisma.person.updateMany({
+        where: { id: { in: result.syncedPersonIds } },
+        data: { sheetSyncedAt: new Date() },
+      });
+    }
 
     return Response.json({
       ok: true,
