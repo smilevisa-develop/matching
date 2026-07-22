@@ -1,0 +1,70 @@
+name: スプシ同期 (毎正時)
+
+# 系で変更があった候補者だけをスプシ DB シートに反映する。
+# 変更がなければ書き込みは発生しない。
+on:
+  schedule:
+    # 毎時 0 分 (UTC)。GitHub Actions の schedule は数分ずれることがある
+    - cron: "0 * * * *"
+  # 手動でも実行できるようにしておく (Actions タブ → Run workflow)
+  workflow_dispatch:
+
+# 同時に複数走らせない (二重書き込み防止)
+concurrency:
+  group: sync-sheet
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 同期エンドポイントを呼ぶ
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${APP_URL:-}" ]; then
+            echo "::error::APP_URL secret が未設定です (例: https://matching.up.railway.app)"
+            exit 1
+          fi
+
+          # 認証ヘッダは CRON_SECRET があるときだけ付ける
+          auth_args=()
+          if [ -n "${CRON_SECRET:-}" ]; then
+            auth_args=(-H "Authorization: Bearer ${CRON_SECRET}")
+          fi
+
+          http_code=$(curl -sS -m 300 \
+            -o response.json \
+            -w '%{http_code}' \
+            "${auth_args[@]}" \
+            "${APP_URL%/}/api/cron/sync-sheet")
+
+          echo "HTTP ${http_code}"
+          echo "--- レスポンス ---"
+          cat response.json
+          echo ""
+
+          if [ "$http_code" != "200" ]; then
+            echo "::error::同期に失敗しました (HTTP ${http_code})"
+            exit 1
+          fi
+
+          # ok:false がボディで返るケースも失敗として扱う
+          if grep -q '"ok":false' response.json; then
+            echo "::error::同期エンドポイントがエラーを返しました"
+            exit 1
+          fi
+
+          # 実行サマリを Actions の画面に出す
+          {
+            echo "### スプシ同期の結果"
+            echo ""
+            echo '```json'
+            cat response.json
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
