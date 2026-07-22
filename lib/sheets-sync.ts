@@ -371,6 +371,63 @@ export function hasSystemChange(p: PersonForSync): boolean {
 }
 
 /**
+ * ID 列 (A 列) の実データを診断する。書き込みは一切しない。
+ * 数値セルと文字列セルの混在、重複 ID を洗い出す用。
+ */
+export async function inspectSheetIdColumn(args: {
+  spreadsheetId: string;
+  sheetName?: string;
+}): Promise<{
+  totalRows: number;
+  numberCells: number;
+  textCells: number;
+  duplicates: { id: string; rows: number[] }[];
+  /** 末尾 25 行の生データ */
+  tail: { row: number; value: string; type: string }[];
+}> {
+  const sheetName = args.sheetName ?? SYNC_SHEET_TAB_NAME;
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: args.spreadsheetId,
+    range: `${quoteSheetName(sheetName)}!A:A`,
+    valueRenderOption: "UNFORMATTED_VALUE",
+  });
+  const rows: unknown[][] = (res.data.values ?? []) as unknown[][];
+
+  let numberCells = 0;
+  let textCells = 0;
+  const idRows = new Map<string, number[]>();
+  const all: { row: number; value: string; type: string }[] = [];
+
+  for (let i = DATA_START_ROW - 1; i < rows.length; i++) {
+    const raw = rows[i]?.[0];
+    if (raw === undefined || raw === null || raw === "") continue;
+    const type = typeof raw === "number" ? "数値" : "文字列";
+    if (typeof raw === "number") numberCells++;
+    else textCells++;
+    const str = String(raw).trim();
+    all.push({ row: i + 1, value: str, type });
+    if (/^\d{1,6}$/.test(str)) {
+      const key = str.padStart(4, "0");
+      if (!idRows.has(key)) idRows.set(key, []);
+      idRows.get(key)!.push(i + 1);
+    }
+  }
+
+  const duplicates = [...idRows.entries()]
+    .filter(([, r]) => r.length > 1)
+    .map(([id, r]) => ({ id, rows: r }));
+
+  return {
+    totalRows: all.length,
+    numberCells,
+    textCells,
+    duplicates,
+    tail: all.slice(-25),
+  };
+}
+
+/**
  * スプシ DB に行が無い候補者の 23 列データを返す (書き込みは一切しない)。
  * 手動でスプシに貼り付けるための TSV 生成に使う。
  */

@@ -5,6 +5,7 @@
  * GET /api/admin/sheet-missing-rows           ← TSV (text/plain)。ブラウザで開いて全選択→コピー
  * GET /api/admin/sheet-missing-rows?header=1  ← 1 行目に見出しを付ける
  * GET /api/admin/sheet-missing-rows?format=json ← 件数と一覧を JSON で確認
+ * GET /api/admin/sheet-missing-rows?format=ids  ← ID 列の実データ (行番号 / 値 / 型 / 重複) を診断
  *
  * 貼り付け手順:
  *   1. この URL をブラウザで開く
@@ -16,6 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import {
   findMissingCandidateRows,
+  inspectSheetIdColumn,
   parseSheetIdFromUrl,
   SYNC_HEADERS,
   SYNC_SHEET_TAB_NAME,
@@ -36,7 +38,9 @@ export async function GET(req: Request) {
     await requireApiAccount();
     const { searchParams } = new URL(req.url);
     const withHeader = searchParams.get("header") === "1";
-    const asJson = searchParams.get("format") === "json";
+    const format = searchParams.get("format");
+    const asJson = format === "json";
+    const asIds = format === "ids";
     const sheetName = searchParams.get("sheet") ?? SYNC_SHEET_TAB_NAME;
 
     const sheetUrl = process.env.SYNC_SHEET_URL?.trim();
@@ -49,6 +53,12 @@ export async function GET(req: Request) {
         { ok: false, error: `SYNC_SHEET_URL から Sheet ID を解析できません: ${sheetUrl}` },
         { status: 500 },
       );
+    }
+
+    // ID 列の実データ診断 (DB を読まずに済むので先に返す)
+    if (asIds) {
+      const info = await inspectSheetIdColumn({ spreadsheetId, sheetName });
+      return Response.json({ ok: true, sheetName, ...info });
     }
 
     const rawPersons = await prisma.person.findMany({
