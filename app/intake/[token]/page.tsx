@@ -17,6 +17,7 @@ export default async function IntakePage({
     select: {
       id: true,
       name: true,
+      residenceStatus: true,
       intakeConfig: true,
       onboarding: { select: { englishName: true } },
       resumeProfile: {
@@ -56,6 +57,7 @@ export default async function IntakePage({
       token={token}
       personName={person.name}
       englishName={person.onboarding?.englishName ?? null}
+      residenceStatus={person.residenceStatus ?? null}
       excludedKeys={excludedKeys}
       customQuestions={customQuestions as { key: string; label: string; required: boolean; type: "text" | "textarea" }[]}
       initial={{

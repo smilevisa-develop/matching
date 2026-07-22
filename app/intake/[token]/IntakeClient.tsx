@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { INTERVIEW_SECTIONS, type InterviewQuestion } from "@/lib/interview-questions";
+import {
+  LOCATION_QUESTION_KEY,
+  buildInterviewSections,
+  parseLocationAnswer,
+  type InterviewQuestion,
+} from "@/lib/interview-questions";
 
 type ExistingFields = "motivation" | "selfIntroduction" | "japanPurpose" | "currentJob" | "retirementReason";
 
@@ -29,6 +34,7 @@ export default function IntakeClient({
   token,
   personName,
   englishName,
+  residenceStatus,
   excludedKeys,
   customQuestions,
   initial,
@@ -36,6 +42,7 @@ export default function IntakeClient({
   token: string;
   personName: string;
   englishName: string | null;
+  residenceStatus: string | null;
   excludedKeys: string[];
   customQuestions: CustomQuestion[];
   initial: InitialAnswers;
@@ -45,36 +52,85 @@ export default function IntakeClient({
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pageIdx, setPageIdx] = useState(0);
+  /** "must" = 必須のみ表示 / "all" = 任意質問も表示 */
+  const [mode, setMode] = useState<"must" | "all">("must");
 
-  // 1 ページ = 1 セクションでビルド。空セクション + カスタム質問ページを末尾に追加
-  const pages = useMemo<PageBlock[]>(() => {
-    const isAnswered = (q: InterviewQuestion): boolean => {
+  // 「今どこに住んでいますか」の回答が分岐のドライバ。
+  // 未回答なら null → 分岐条件つきの質問は隠さない (安全側)
+  const location = parseLocationAnswer(form.interviewAnswers[LOCATION_QUESTION_KEY]);
+
+  // 回答済み判定は初期値ベース。入力中の値で質問が消えるとフォームが崩れるため
+  // form ではなく initial を見る
+  const isAnswered = useMemo(() => {
+    return (q: InterviewQuestion): boolean => {
       if (q.existingField) return (initial[q.existingField] ?? "").trim().length > 0;
       return (initial.interviewAnswers[q.jsonKey ?? q.key] ?? "").trim().length > 0;
     };
-    const result: PageBlock[] = [];
-    for (const section of INTERVIEW_SECTIONS) {
-      const qs = section.questions
-        .filter((q) => !excludedKeys.includes(q.key) && !isAnswered(q))
-        .map((q) => ({ kind: "interview" as const, q }));
-      if (qs.length > 0) {
-        result.push({ title: section.title, description: section.description, questions: qs });
-      }
-    }
+  }, [initial]);
+
+  const toPageBlocks = (
+    sections: { title: string; description?: string; questions: InterviewQuestion[] }[],
+  ): PageBlock[] =>
+    sections.map((s) => ({
+      title: s.title,
+      description: s.description,
+      questions: s.questions.map((q) => ({ kind: "interview" as const, q })),
+    }));
+
+  // 必須ページ。これだけで送信できる
+  const mustPages = useMemo<PageBlock[]>(() => {
+    return toPageBlocks(
+      buildInterviewSections({
+        priority: "must",
+        ctx: { residenceStatus, location },
+        isExcluded: (q) => excludedKeys.includes(q.key),
+        isAnswered,
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [residenceStatus, location, excludedKeys, isAnswered]);
+
+  // 任意ページ。「もっと詳しく答える」で mustPages の後ろに繋がる
+  const optionalPages = useMemo<PageBlock[]>(() => {
+    const blocks = toPageBlocks(
+      buildInterviewSections({
+        priority: "optional",
+        ctx: { residenceStatus, location },
+        isExcluded: (q) => excludedKeys.includes(q.key),
+        isAnswered,
+      }),
+    );
     if (customQuestions.length > 0) {
-      result.push({
+      blocks.push({
         title: "担当者からの個別質問",
         questions: customQuestions.map((q) => ({ kind: "custom" as const, q })),
       });
     }
-    return result;
+    return blocks;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [excludedKeys, customQuestions, initial]);
+  }, [residenceStatus, location, excludedKeys, customQuestions, isAnswered]);
 
+  // 必須が全部埋まっている (AI 抽出済み等) なら、最初から任意質問を見せる
+  const effectiveMode = mustPages.length === 0 ? "all" : mode;
+  const pages = useMemo<PageBlock[]>(
+    () => (effectiveMode === "all" ? [...mustPages, ...optionalPages] : mustPages),
+    [effectiveMode, mustPages, optionalPages],
+  );
+
+  const optionalCount = useMemo(
+    () => optionalPages.reduce((sum, p) => sum + p.questions.length, 0),
+    [optionalPages],
+  );
   const totalPages = pages.length;
-  const currentPage = pages[pageIdx];
-  const isLastPage = pageIdx >= totalPages - 1;
-  const progressPct = totalPages > 0 ? Math.round(((pageIdx + 1) / totalPages) * 100) : 0;
+  // 居住地の回答で分岐が変わりページ数が減ることがあるので、必ず範囲内に丸める
+  const safeIdx = totalPages > 0 ? Math.min(pageIdx, totalPages - 1) : 0;
+  const currentPage = pages[safeIdx];
+  const isLastPage = safeIdx >= totalPages - 1;
+  const progressPct = totalPages > 0 ? Math.round(((safeIdx + 1) / totalPages) * 100) : 0;
+
+  /** 必須ページの最後にいて、まだ任意質問を開いていない状態か */
+  const atEndOfMust =
+    effectiveMode === "must" && mustPages.length > 0 && safeIdx === mustPages.length - 1;
 
   const setExisting = (key: ExistingFields, value: string) => {
     setForm((c) => ({ ...c, [key]: value }));
@@ -194,7 +250,7 @@ export default function IntakeClient({
             </div>
             <div className="shrink-0 text-right">
               <p className="text-[11px] font-medium text-gray-500">
-                {pageIdx + 1} / {totalPages}
+                {safeIdx + 1} / {totalPages}
               </p>
             </div>
           </div>
@@ -251,13 +307,43 @@ export default function IntakeClient({
           </div>
         ) : null}
 
+        {/*
+          必須ページを最後まで来たら「このまま送信」できることを明示しつつ、
+          任意質問への導線を出す。先に短いフォームを完走させてから追加を促す方が
+          途中離脱が少ない。
+        */}
+        {atEndOfMust && optionalCount > 0 ? (
+          <div className="rounded-2xl border border-[#BBF7D0] bg-[#F0FDF4] px-5 py-4">
+            <p className="text-sm font-semibold text-[#166534]">
+              必須の質問は以上です。このまま送信できます。
+              <span className="ml-1 font-normal text-[#166534]/80">
+                / That&apos;s all the required questions.
+              </span>
+            </p>
+            <p className="mt-1.5 text-xs text-[#166534]/90">
+              あと {optionalCount} 問お答えいただくと、より条件に合う求人をご紹介できます（任意）。
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("all");
+                setPageIdx(mustPages.length);
+                if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="mt-3 rounded-full border border-[#16A34A] bg-white px-4 py-1.5 text-xs font-semibold text-[#16A34A] hover:bg-[#DCFCE7]"
+            >
+              追加の質問に答える / Answer more
+            </button>
+          </div>
+        ) : null}
+
         {/* ナビゲーション (sticky 下部) */}
         <div className="sticky bottom-3 z-10 rounded-2xl bg-white px-4 py-3 shadow-xl">
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
               onClick={prev}
-              disabled={pageIdx === 0}
+              disabled={safeIdx === 0}
               className="rounded-full border border-gray-300 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-30"
             >
               ← 戻る / Back
