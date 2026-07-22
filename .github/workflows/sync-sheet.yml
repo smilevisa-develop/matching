@@ -21,21 +21,20 @@ jobs:
     steps:
       - name: 同期エンドポイントを呼ぶ
         env:
-          APP_URL: ${{ secrets.APP_URL }}
+          # 本番 URL が変わったときだけ APP_URL secret を設定すれば上書きできる
+          APP_URL: ${{ secrets.APP_URL || 'https://matching.up.railway.app' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
 
-          if [ -z "${APP_URL:-}" ]; then
-            echo "::error::APP_URL secret が未設定です (例: https://matching.up.railway.app)"
+          echo "対象: ${APP_URL}"
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::CRON_SECRET secret が未設定です。GitHub の Settings → Secrets and variables → Actions で、Railway と同じ値を登録してください"
             exit 1
           fi
 
-          # 認証ヘッダは CRON_SECRET があるときだけ付ける
-          auth_args=()
-          if [ -n "${CRON_SECRET:-}" ]; then
-            auth_args=(-H "Authorization: Bearer ${CRON_SECRET}")
-          fi
+          auth_args=(-H "Authorization: Bearer ${CRON_SECRET}")
 
           http_code=$(curl -sS -m 300 \
             -o response.json \
