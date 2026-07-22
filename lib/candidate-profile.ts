@@ -62,8 +62,20 @@ export const RESIDENCE_STATUSES = [
   "永住",
 ];
 
-// 「不明」「持っていない」のときは在留資格別の必要書類は無い
-const RESIDENCE_STATUSES_WITHOUT_DOCUMENTS = new Set(["不明", "持っていない", ""]);
+/**
+ * 在留資格が「不明」「持っていない」のときに出す書類。
+ *
+ * これから特定技能 1 号を目指す層 (海外在住者・在留資格が切れている等) なので、
+ * 顔写真と、特定技能 1 号に必要な試験の合格証を提出してもらう。
+ * 在留カードは持っていない前提なので出さない。
+ */
+const NO_VISA_DOCUMENTS = [
+  { kind: "photo", label: "顔写真" },
+  { kind: "ssw-exam-certificate", label: "特定技能1号評価試験 / 技能測定試験の合格証" },
+  { kind: "jlpt-certificate", label: "日本語試験 (JLPT / JFT-Basic) の合格証" },
+] as const;
+
+const RESIDENCE_STATUSES_WITHOUT_VISA = new Set(["不明", "持っていない", ""]);
 
 export const CHANNELS = [
   { value: "未設定", label: "未設定" },
@@ -91,10 +103,12 @@ const TRAINEE_DOCUMENTS = [
   { kind: "skill-test-certificate", label: "技能検定の合格証書" },
 ] as const;
 
-// 特定技能1号: 指定書 + 技能検定合格証書
+// 特定技能1号: 指定書 + 特定技能1号評価試験 (技能検定ではない)
+// 技能実習からの移行者は技能検定 (専門級) で代替できるため、そちらも枠を残す
 const TOKUTEI_1_DOCUMENTS = [
   { kind: "designation-letter", label: "指定書" },
-  { kind: "skill-test-certificate", label: "技能検定の合格証書" },
+  { kind: "ssw-exam-certificate", label: "特定技能1号評価試験 / 技能測定試験の合格証" },
+  { kind: "skill-test-certificate", label: "技能検定の合格証書 (技能実習からの移行者)" },
 ] as const;
 
 // 特定技能2号: 特定技能2号合格資格 + 指定書
@@ -128,8 +142,8 @@ const TOKUTEI_ACTIVITY_DOCUMENTS = [
 export const TOKUTEI_DOCUMENTS = TOKUTEI_1_DOCUMENTS;
 
 export function getDocumentDefinitions(residenceStatus: string): { kind: string; label: string }[] {
-  // 「不明」「持っていない」「(空)」のときは在留資格別の必要書類は存在しない
-  if (RESIDENCE_STATUSES_WITHOUT_DOCUMENTS.has(residenceStatus)) return [];
+  // 在留資格が無い / 不明でも、顔写真と特定技能 1 号に必要な試験の合格証は集める
+  if (RESIDENCE_STATUSES_WITHOUT_VISA.has(residenceStatus)) return [...NO_VISA_DOCUMENTS];
   switch (residenceStatus) {
     case "技能実習":
       return [...BASIC_DOCUMENTS, ...TRAINEE_DOCUMENTS];

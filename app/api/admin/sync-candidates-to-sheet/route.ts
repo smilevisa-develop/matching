@@ -104,11 +104,15 @@ export async function GET(req: Request) {
 
     // 反映できた候補者は「反映済み」として記録。
     // 次回以降、この候補者に変更が入るまでスプシには触らない。
+    //
+    // ⚠️ prisma.person.updateMany を使うと @updatedAt が発火して updatedAt が
+    //    sheetSyncedAt より後になり、毎回「変更あり」と判定され続けてしまう。
+    //    updatedAt を動かさないよう生 SQL で更新する。
     if (apply && result.syncedPersonIds.length > 0) {
-      await prisma.person.updateMany({
-        where: { id: { in: result.syncedPersonIds } },
-        data: { sheetSyncedAt: new Date() },
-      });
+      await prisma.$executeRawUnsafe(
+        `UPDATE "Person" SET "sheetSyncedAt" = NOW() WHERE id = ANY($1::int[])`,
+        result.syncedPersonIds,
+      );
     }
 
     return Response.json({

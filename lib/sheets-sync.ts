@@ -401,68 +401,89 @@ export async function repairSheetCellTypes(args: {
   // 数値で書くべき列: A ID / O 年齢
   const NUMERIC_COLUMNS = [0, 14];
 
-  const updates: { range: string; values: (string | number)[][] }[] = [];
+  // RAW で書き直すセル (ID / 年齢 の数値化)
+  const rawData: { range: string; values: (string | number)[][] }[] = [];
+  // USER_ENTERED で書き直すセル (日付列)。Sheets に日付として解釈させ書式も付ける
+  const dateData: { range: string; values: (string | number)[][] }[] = [];
   const details: { row: number; id: string; cells: { column: string; from: string; to: string }[] }[] = [];
+  const changedRows = new Set<number>();
   let changedCells = 0;
 
   for (let i = DATA_START_ROW - 1; i < rows.length; i++) {
     const row = rows[i] ?? [];
     const idCell = row[0];
-    // ID が文字列の数字 ("0269") の行だけが修復対象
-    if (typeof idCell !== "string") continue;
-    const idStr = idCell.trim();
+    const idStr = cellStr(idCell);
+    // 数字の ID を持つ行だけが対象 (「IDなし」「5月」等の区切り行は触らない)
     if (!/^\d{1,6}$/.test(idStr)) continue;
 
+    const rowNo = i + 1;
     const cells: { column: string; from: string; to: string }[] = [];
-    const newRow: (string | number)[] = [];
+
     for (let col = 0; col < SYNC_HEADERS.length; col++) {
       const cur = row[col];
+      if (cur === undefined || cur === null || cur === "") continue;
       const label = (SYNC_HEADERS[col] ?? `列${col + 1}`).replace(/\n/g, "");
-      let next: string | number = (cur ?? "") as string | number;
+      const colLetter = String.fromCharCode("A".charCodeAt(0) + col);
 
-      if (typeof cur === "string" && cur.trim() !== "") {
-        const t = cur.trim();
-        if ((DATE_COLUMN_INDEXES as readonly number[]).includes(col)) {
-          const serial = dateStringToSerial(t);
-          if (serial !== null) next = serial;
-        } else if (NUMERIC_COLUMNS.includes(col) && /^\d+$/.test(t)) {
-          next = Number(t);
-        }
-      }
-      newRow.push(next);
-
-      if (typeof cur !== typeof next && String(cur ?? "") !== String(next)) {
-        cells.push({
-          column: label,
-          from: `${typeof cur === "string" ? "文字列" : typeof cur} "${String(cur ?? "")}"`,
-          to: `${typeof next === "number" ? "数値" : "文字列"} ${JSON.stringify(next)}`,
+      if ((DATE_COLUMN_INDEXES as readonly number[]).includes(col)) {
+        // 日付列: 数値 (シリアル値) も文字列も "YYYY/MM/DD" に直して書き直す。
+        // 日付書式が無く 37318 のような生の数値が見えている状態を直すのが目的
+        const asDate =
+          typeof cur === "number" ? serialToDateString(cur) : toSheetDate(String(cur).trim());
+        if (!asDate) continue;
+        const display = typeof cur === "number" ? String(cur) : String(cur).trim();
+        // 既に "YYYY/MM/DD" の文字列で、かつ数値でもないなら日付型にしたいので書き直す。
+        // 表示が同じでも型が違う可能性があるため、日付として解釈できるものは全て書き直す
+        dateData.push({
+          range: `${quoteSheetName(sheetName)}!${colLetter}${rowNo}`,
+          values: [[asDate]],
         });
+        if (display !== asDate) {
+          cells.push({ column: label, from: `"${display}"`, to: `日付 ${asDate}` });
+          changedCells++;
+          changedRows.add(rowNo);
+        }
+        continue;
+      }
+
+      // ID / 年齢: 文字列の数字を数値に直す
+      if (NUMERIC_COLUMNS.includes(col) && typeof cur === "string") {
+        const t = cur.trim();
+        if (!/^\d+$/.test(t)) continue;
+        rawData.push({
+          range: `${quoteSheetName(sheetName)}!${colLetter}${rowNo}`,
+          values: [[Number(t)]],
+        });
+        cells.push({ column: label, from: `文字列 "${t}"`, to: `数値 ${Number(t)}` });
+        changedCells++;
+        changedRows.add(rowNo);
       }
     }
 
-    if (cells.length === 0) continue;
-    changedCells += cells.length;
-    details.push({ row: i + 1, id: idStr.padStart(4, "0"), cells });
-    updates.push({
-      range: `${quoteSheetName(sheetName)}!A${i + 1}:W${i + 1}`,
-      values: [newRow],
-    });
+    if (cells.length > 0) {
+      details.push({ row: rowNo, id: idStr.padStart(4, "0"), cells });
+    }
   }
 
-  if (args.apply && updates.length > 0) {
-    await sheets.spreadsheets.values.batchUpdate({
-      spreadsheetId: args.spreadsheetId,
-      requestBody: {
-        valueInputOption: "RAW",
-        data: updates.map((u) => ({ range: u.range, values: u.values })),
-      },
-    });
+  if (args.apply) {
+    if (rawData.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: args.spreadsheetId,
+        requestBody: { valueInputOption: "RAW", data: rawData },
+      });
+    }
+    if (dateData.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: args.spreadsheetId,
+        requestBody: { valueInputOption: "USER_ENTERED", data: dateData },
+      });
+    }
   }
 
   return {
     sheetName,
     apply: args.apply,
-    targetRows: updates.length,
+    targetRows: changedRows.size,
     changedCells,
     details,
   };
@@ -661,12 +682,12 @@ export async function syncCandidatesUpsert(args: {
     const sys = cellStr(sysValue);
     if (sys === "") return "";
     const existedNumber = typeof existingCell === "number";
-    const existedEmpty = existingCell === undefined || existingCell === null || existingCell === "";
 
+    // 日付列は必ず "YYYY/MM/DD" の文字列で組み立て、あとから USER_ENTERED で
+    // 書き直して Sheets に日付として解釈させる。
+    // (シリアル値を RAW で書くと、日付書式が無いセルでは 37318 のような
+    //  生の数値が表示されてしまう)
     if ((DATE_COLUMN_INDEXES as readonly number[]).includes(col)) {
-      const serial = dateStringToSerial(sys);
-      // 既存が日付セル、または空セル → シリアル値で書いて日付として扱わせる
-      if (serial !== null && (existedNumber || existedEmpty)) return serial;
       return toSheetDate(sys);
     }
     if (existedNumber && /^\d+$/.test(sys)) return Number(sys);
@@ -733,8 +754,6 @@ export async function syncCandidatesUpsert(args: {
         syncedPersonIds.push(p.id);
       }
     } else {
-      // 新規行には合わせる既存セルが無い。日付だけはシリアル値で書いて
-      // 日付セルとして扱わせる (既存行と同じ見え方にするため)
       appends.push(systemRow.map((v, col) => toWriteValue(v, col, undefined)));
       syncedPersonIds.push(p.id);
       if (sampleChanges.length < sampleLimit) {
@@ -744,10 +763,9 @@ export async function syncCandidatesUpsert(args: {
   }
 
   if (opts.apply) {
+    // 行全体は RAW で書く。ID の "0056" が 56 に化けないようにするため
+    // USER_ENTERED は使えない。日付列だけこの後 USER_ENTERED で書き直す。
     if (updates.length > 0) {
-      // RAW で書く。数値は数値、文字列は文字列としてそのまま入るため、
-      // toWriteValue で決めた型 (日付=シリアル値 / ID・年齢=数値 / 他=文字列) が保たれる。
-      // USER_ENTERED だと "0056" が 56 に化けるので使わない。
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: opts.spreadsheetId,
         requestBody: {
@@ -756,13 +774,47 @@ export async function syncCandidatesUpsert(args: {
         },
       });
     }
+
+    let appendedStartRow = 0;
     if (appends.length > 0) {
-      await sheets.spreadsheets.values.append({
+      const appendRes = await sheets.spreadsheets.values.append({
         spreadsheetId: opts.spreadsheetId,
         range: `${quoteSheetName(sheetName)}!A:W`,
         valueInputOption: "RAW",
         insertDataOption: "INSERT_ROWS",
         requestBody: { values: appends },
+      });
+      // 追記された範囲の開始行を取り出す ("'DB'!A272:W273" → 272)
+      const updatedRange = appendRes.data.updates?.updatedRange ?? "";
+      appendedStartRow = Number(updatedRange.match(/![A-Z]+(\d+)/)?.[1] ?? 0);
+    }
+
+    // 日付列を USER_ENTERED で書き直し、Sheets に日付として解釈させる。
+    // これをしないと、日付書式が無いセルでは 37318 のような生の数値が残る。
+    const dateData: { range: string; values: (string | number)[][] }[] = [];
+    const pushDateCells = (rowNo: number, row: (string | number)[]) => {
+      if (!rowNo) return;
+      for (const col of DATE_COLUMN_INDEXES) {
+        const value = cellStr(row[col]);
+        if (!value) continue;
+        const colLetter = String.fromCharCode("A".charCodeAt(0) + col);
+        dateData.push({
+          range: `${quoteSheetName(sheetName)}!${colLetter}${rowNo}`,
+          values: [[value]],
+        });
+      }
+    };
+    for (const u of updates) {
+      const rowNo = Number(u.range.match(/!A(\d+):W\d+$/)?.[1] ?? 0);
+      pushDateCells(rowNo, u.values[0] ?? []);
+    }
+    if (appendedStartRow > 0) {
+      appends.forEach((row, i) => pushDateCells(appendedStartRow + i, row));
+    }
+    if (dateData.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: opts.spreadsheetId,
+        requestBody: { valueInputOption: "USER_ENTERED", data: dateData },
       });
     }
   }

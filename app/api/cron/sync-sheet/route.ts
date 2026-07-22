@@ -113,11 +113,12 @@ export async function GET(req: Request) {
       opts: { spreadsheetId, sheetName: SYNC_SHEET_TAB_NAME, apply: true },
       candidates,
     });
+    // updatedAt を動かさないよう生 SQL で更新する (理由は admin 側と同じ)
     if (result.syncedPersonIds.length > 0) {
-      await prisma.person.updateMany({
-        where: { id: { in: result.syncedPersonIds } },
-        data: { sheetSyncedAt: new Date() },
-      });
+      await prisma.$executeRawUnsafe(
+        `UPDATE "Person" SET "sheetSyncedAt" = NOW() WHERE id = ANY($1::int[])`,
+        result.syncedPersonIds,
+      );
     }
     return Response.json({ ok: true, result, at: new Date().toISOString() });
   } catch (error) {

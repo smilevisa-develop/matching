@@ -31,6 +31,7 @@ export const ALL_DOCUMENT_KINDS: DocumentKindDef[] = [
   // 技能実習
   { kind: "trainee-evaluation", label: "実習生評価書 / 終了証明書 / 専門級・随時3級" },
   // 特定技能 共通
+  { kind: "ssw-exam-certificate", label: "特定技能1号評価試験 / 技能測定試験の合格証" },
   { kind: "skill-test-certificate", label: "技能検定の合格証書" },
   { kind: "designation-letter", label: "指定書" },
   { kind: "tokutei-2-certificate", label: "特定技能2号 合格資格" },
@@ -99,8 +100,18 @@ const FILENAME_RULES: {
     patterns: [/実習生評価/, /専門級/, /随時[123]級/, /終了証明/, /trainee[-_ ]?evaluation/i],
   },
   {
+    // 特定技能1号評価試験 / 技能測定試験。技能検定より先に判定する
+    kind: "ssw-exam-certificate",
+    patterns: [
+      /特定技能.*(評価試験|測定試験)/,
+      /技能測定試験/,
+      /ssw.*(exam|test)/i,
+      /prometric/i,
+    ],
+  },
+  {
     kind: "skill-test-certificate",
-    patterns: [/技能検定/, /技能試験.*合格/, /skill[-_ ]?test/i, /特定技能.*(評価|試験)/],
+    patterns: [/技能検定/, /技能試験.*合格/, /skill[-_ ]?test/i, /専門級/],
   },
   {
     kind: "designation-letter",
