@@ -208,6 +208,12 @@ export default function IntakeFormBuilderModal({
                   まだ埋まっていない質問です。<span className="font-medium text-[var(--color-primary)]">右上の ✕</span>
                   で除外できます (候補者には聞きません)。
                 </p>
+                <p className="mt-1.5 rounded-lg bg-[var(--color-light)] px-3 py-2 text-[11px] leading-relaxed text-gray-600">
+                  候補者フォームは 2 段階制です:
+                  緑バッジの<span className="mx-0.5 inline-block rounded-full bg-[#DCFCE7] px-1.5 text-[10px] font-semibold text-[#166534]">必須</span>
+                  だけ先に表示され、それだけで送信できます。残りは候補者が「追加の質問に答える」を押したときだけ表示されます。
+                  また、居住地 (日本/海外) や在留資格によって一部の質問は自動で出し分けられます。
+                </p>
                 {unfilled.length === 0 ? (
                   <p className="mt-3 rounded-2xl border border-dashed border-gray-200 px-4 py-4 text-center text-sm text-gray-400">
                     未入力項目はありません
@@ -232,6 +238,11 @@ export default function IntakeFormBuilderModal({
                                 }`}
                                 title={q.question}
                               >
+                                {(q.priority ?? "optional") === "must" ? (
+                                  <span className="shrink-0 rounded-full bg-[#DCFCE7] px-1.5 text-[10px] font-semibold text-[#166534]">
+                                    必須
+                                  </span>
+                                ) : null}
                                 <span className="max-w-[18rem] truncate">{q.question}</span>
                                 <button
                                   type="button"
