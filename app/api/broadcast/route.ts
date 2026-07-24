@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { AuthError, requireApiAccount } from "@/lib/auth";
 import {
   expandTemplate,
   dealToBroadcast,
@@ -90,8 +91,17 @@ async function loadDealSnapshot(): Promise<{
   };
 }
 
+/** WhatsApp テンプレの本文パラメータで「ログインアカウントの姓」を差す特殊ソース */
+const ACCOUNT_LASTNAME_SOURCE = "account:姓";
+/** フルネームから姓 (先頭の語) を取り出す。スペースが無ければ全体を姓とみなす。 */
+function deriveLastName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name.trim();
+}
+
 export async function POST(req: Request) {
   try {
+    const account = await requireApiAccount();
+    const senderLastName = deriveLastName(account.name);
     const body = await req.json();
     const {
       mode,
@@ -164,16 +174,19 @@ export async function POST(req: Request) {
     const tmpl = templateId
       ? await prisma.messageTemplate.findUnique({ where: { id: templateId } })
       : null;
+    // whatsappTemplateParams は各 {{n}} の指定を並べた JSON 配列:
+    //   { auto: "パートナー名" | "担当者名" | "account:姓" } … 送信時に自動解決
+    //   { value: "介護" }                                   … テンプレに保存した固定値
+    let paramSpecs: Array<{ auto?: string; value?: string }> = [];
+    try {
+      const parsed = JSON.parse(tmpl?.whatsappTemplateParams ?? "[]");
+      if (Array.isArray(parsed)) paramSpecs = parsed;
+    } catch {
+      paramSpecs = [];
+    }
     const waTemplate =
       tmpl?.whatsappTemplateName && tmpl?.whatsappTemplateLang
-        ? {
-            name: tmpl.whatsappTemplateName,
-            lang: tmpl.whatsappTemplateLang,
-            paramKeys: (tmpl.whatsappTemplateParams ?? "")
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean),
-          }
+        ? { name: tmpl.whatsappTemplateName, lang: tmpl.whatsappTemplateLang, specs: paramSpecs }
         : null;
 
     // 対象パートナー取得
@@ -300,7 +313,7 @@ export async function POST(req: Request) {
     let sentMessenger = 0;
     let sentEmail = 0;
     let failedCount = 0;
-    let skippedCount = 0;
+    const skippedCount = 0;
     const failures: { name: string; channel: string; error: string }[] = [];
 
     /** ヘルパー: 1 受信者ぶんの WhatsApp テンプレ用パラメータを組み立てる */
@@ -312,10 +325,22 @@ export async function POST(req: Request) {
         country: t.country,
         introducibleFields: t.introducibleFields,
       };
-      // 変数キー (例: "急ぎ案件一覧") を {{xxx}} 文字列にラップして expandTemplate で 1 個ずつ展開
-      return waTemplate.paramKeys.map((key) =>
-        expandTemplate(`{{${key}}}`, { partner, openDeals, urgentDeals })
-      );
+      // 各 {{n}} を値に解決する:
+      //   { value } → テンプレに保存した固定値
+      //   { auto: "account:姓" } → ログイン中アカウントの姓
+      //   { auto: 配信変数 }     → {{xxx}} を expandTemplate で展開 (パートナーごと)
+      // WhatsApp テンプレ本文パラメータは改行・タブ・5 連続スペース禁止のため、必ず 1 行へ正規化する。
+      return waTemplate.specs.map((spec) => {
+        let raw = "";
+        if (spec.value !== undefined) {
+          raw = spec.value;
+        } else if (spec.auto === ACCOUNT_LASTNAME_SOURCE) {
+          raw = senderLastName;
+        } else if (spec.auto) {
+          raw = expandTemplate(`{{${spec.auto}}}`, { partner, openDeals, urgentDeals });
+        }
+        return raw.replace(/\s+/g, " ").trim();
+      });
     };
 
     /**
@@ -625,6 +650,9 @@ export async function POST(req: Request) {
       attachmentSkipped,
     });
   } catch (e) {
-    return Response.json({ ok: false, error: e instanceof Error ? e.message : "error" }, { status: 500 });
+    return Response.json(
+      { ok: false, error: e instanceof Error ? e.message : "error" },
+      { status: e instanceof AuthError ? e.status : 500 }
+    );
   }
 }
