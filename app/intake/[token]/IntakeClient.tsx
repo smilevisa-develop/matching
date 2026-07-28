@@ -121,6 +121,15 @@ export default function IntakeClient({
 
   const recordedKeys = useMemo(() => new Set(recordings.map((r) => r.key)), [recordings]);
   const allRecorded = JAPANESE_CHECK_QUESTIONS.every((q) => recordedKeys.has(q.key));
+  const recordingRemaining = JAPANESE_CHECK_QUESTIONS.filter((q) => !recordedKeys.has(q.key)).length;
+
+  // 日本語チェックページで「あと何をすればいいか」を示すヒント
+  const japaneseHint = (() => {
+    if (!currentPage?.japaneseCheck) return null;
+    if (recordingRemaining > 0) return `あと ${recordingRemaining} 問、録音してください`;
+    if (!audioConsent) return "下の「同意します」にチェックを入れてください";
+    return null;
+  })();
 
   // 必須の未充足チェック (現ページ分)
   const currentPageInvalid = useMemo(() => {
@@ -147,11 +156,11 @@ export default function IntakeClient({
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 録音を Gemini 判定エンドポイントに送る (失敗しても本送信は止めない)
-  const uploadRecordings = async () => {
-    if (recordings.length === 0) return;
+  // 録音を判定エンドポイントに送る。成否を返す (失敗時は完了扱いにしない)
+  const uploadRecordings = async (): Promise<boolean> => {
+    if (recordings.length === 0) return true;
     try {
-      setUploadNote("日本語チェックを送信中...");
+      setUploadNote("録音を送信しています… / Sending your recordings…");
       const res = await fetch(`/api/intake/${token}/japanese-check`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,12 +170,14 @@ export default function IntakeClient({
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        setUploadNote(`日本語チェックの送信に失敗しました: ${data.error ?? res.statusText}`);
-      } else {
         setUploadNote(null);
+        return false;
       }
-    } catch (e) {
-      setUploadNote(`日本語チェックの送信に失敗しました: ${e instanceof Error ? e.message : "error"}`);
+      setUploadNote(null);
+      return true;
+    } catch {
+      setUploadNote(null);
+      return false;
     }
   };
   const prev = () => {
@@ -192,8 +203,15 @@ export default function IntakeClient({
         setError(data.error ?? "送信に失敗しました");
         return;
       }
-      // フォーム送信が成功したら、録音も送る (判定に時間がかかっても完了扱いにする)
-      await uploadRecordings();
+      // フォーム送信が成功したら、録音も送る。録音の保存に失敗したら完了にしない
+      // (候補者が「送れたつもり」で分析側に届かない事故を防ぐ)
+      const uploaded = await uploadRecordings();
+      if (!uploaded) {
+        setError(
+          "録音の送信に失敗しました。通信環境の良い場所で、もう一度「送信する」を押してください。 / Failed to send recordings. Please try again.",
+        );
+        return;
+      }
       setSubmitted(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "error");
@@ -345,6 +363,12 @@ export default function IntakeClient({
 
         {/* ナビゲーション (sticky 下部) */}
         <div className="sticky bottom-3 z-10 rounded-2xl bg-white px-4 py-3 shadow-xl">
+          {japaneseHint ? (
+            <p className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-amber-700">
+              <span aria-hidden>👉</span>
+              {japaneseHint}
+            </p>
+          ) : null}
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
@@ -358,8 +382,8 @@ export default function IntakeClient({
               <button
                 type="button"
                 onClick={() => void submit()}
-                disabled={submitting}
-                className="rounded-full bg-[var(--color-primary)] px-6 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+                disabled={submitting || (currentPage.japaneseCheck === true && currentPageInvalid)}
+                className="rounded-full bg-[var(--color-primary)] px-6 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {submitting ? "送信中..." : "送信する / Submit"}
               </button>
