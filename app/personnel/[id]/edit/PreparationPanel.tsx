@@ -63,7 +63,11 @@ export default function PreparationPanel({
           active={!state.resumeImported}
           title="1. 履歴書取込"
           doneNote={`AI 読み取り済み${state.extractedFieldCount > 0 ? ` ・ ${state.extractedFieldCount} 項目` : ""}`}
-          pendingNote="上の ✨ ボタンから履歴書を AI 取込み"
+          pendingNote={
+            <>
+              上の <SparkleChip /> ボタンから履歴書を AI 取込み
+            </>
+          }
         />
 
         {/* Step 2: フォーム送信 */}
@@ -72,7 +76,11 @@ export default function PreparationPanel({
           active={state.resumeImported && !state.intakeIssued}
           title="2. フォーム送信"
           doneNote={`URL 発行済み ・ 必須 ${state.mustTotal} 問`}
-          pendingNote="上の ✈ ボタンからフォーム URL を発行"
+          pendingNote={
+            <>
+              上の <PaperPlaneChip /> ボタンからフォーム URL を発行
+            </>
+          }
         />
 
         {/* Step 3: 本人の回答 */}
@@ -139,7 +147,7 @@ function StepCard({
   active: boolean;
   title: string;
   doneNote: string;
-  pendingNote: string;
+  pendingNote: React.ReactNode;
   extra?: React.ReactNode;
 }) {
   return (
@@ -175,5 +183,40 @@ function StepCard({
       </p>
       {extra}
     </div>
+  );
+}
+
+/** 実際の「AI 取込」ボタン (グラデ枠 + スパークル) を小さく再現 */
+function SparkleChip() {
+  return (
+    <span className="mx-0.5 inline-flex h-[18px] w-[18px] translate-y-[3px] items-center justify-center rounded-md bg-gradient-to-br from-[#A78BFA] via-[#F472B6] to-[#F59E0B] text-white shadow-sm align-baseline">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z" fill="currentColor" />
+        <path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13z" fill="currentColor" />
+        <path d="M5 16l.6 1.6L7.2 18l-1.6.4L5 20l-.6-1.6L2.8 18l1.6-.4L5 16z" fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
+
+/** 実際の「フォーム送信」ボタン (白地 + 紙飛行機) を小さく再現 */
+function PaperPlaneChip() {
+  return (
+    <span className="mx-0.5 inline-flex h-[18px] w-[18px] translate-y-[3px] items-center justify-center rounded-md border border-gray-200 bg-white text-[var(--color-primary)] shadow-sm align-baseline">
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <line x1="22" y1="2" x2="11" y2="13" />
+        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+      </svg>
+    </span>
   );
 }
