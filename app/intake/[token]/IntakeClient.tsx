@@ -305,6 +305,35 @@ export default function IntakeClient({
 
   return (
     <div className="min-h-screen bg-[var(--color-light)] py-6 px-4">
+      {/* 送信中の全画面ローディング (離脱防止) */}
+      {submitting ? (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm px-6 text-center">
+          <div className="h-16 w-16 animate-spin rounded-full border-4 border-[var(--color-primary)]/20 border-t-[var(--color-primary)]" />
+          <p className="mt-6 text-lg font-bold text-[var(--color-text-dark)]">
+            送信しています
+            <span className="inline-flex w-6 justify-start">
+              <span className="animate-pulse">…</span>
+            </span>
+          </p>
+          <p className="mt-1 text-sm text-gray-500">Submitting your answers…</p>
+          <p className="mt-4 max-w-xs text-xs leading-relaxed text-gray-500">
+            {uploadNote ?? "音声やファイルの送信に少し時間がかかることがあります。"}
+            <br />
+            <span className="font-medium text-[var(--color-primary)]">
+              この画面を閉じずにお待ちください。
+            </span>
+            <br />
+            Please keep this screen open.
+          </p>
+          {/* 動きのあるドット */}
+          <div className="mt-5 flex gap-1.5" aria-hidden>
+            <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-[var(--color-primary)] [animation-delay:-0.3s]" />
+            <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-[var(--color-primary)] [animation-delay:-0.15s]" />
+            <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-[var(--color-primary)]" />
+          </div>
+        </div>
+      ) : null}
+
       <div className="max-w-2xl mx-auto space-y-4">
         {/* ヘッダー (常時表示) */}
         <div className="rounded-2xl bg-white p-5 shadow-md">
