@@ -534,9 +534,10 @@ export async function POST(req: Request) {
       }
     };
 
-    // 一斉メールの返信先 (担当者集約用)。BROADCAST_REPLY_TO 未設定なら
-    // lib/email.ts 側の GMAIL_REPLY_TO 既定にフォールバックする。
-    const broadcastReplyTo = process.env.BROADCAST_REPLY_TO?.trim() || undefined;
+    // 一斉メールの返信先。パートナーの「返信」が必ず担当者にも届くよう固定。
+    // (設定不要。変更が必要になったらここを編集する)
+    const broadcastReplyTo =
+      "株式会社CROSLAN-人材紹介事業部 <recruit@croslan.co.jp>, chindy_rohi@croslan.co.jp, thuy@croslan.co.jp";
 
     const sendViaEmail = async (t: Target, personalizedMessage: string) => {
       const emailOk = Boolean(t.email && /@/.test(t.email));
@@ -563,8 +564,7 @@ export async function POST(req: Request) {
         subject,
         text: personalizedMessage,
         html: textToBasicHtml(personalizedMessage),
-        // 一斉メールの返信先を担当者に集約する (パートナーの「返信」が担当者に直接届く)。
-        // Railway の環境変数 BROADCAST_REPLY_TO に設定 (未設定なら GMAIL_REPLY_TO 既定を使う)。
+        // 一斉メールの返信先を担当者に固定 (パートナーの「返信」が担当者に届く)。
         replyTo: broadcastReplyTo,
         attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
       });

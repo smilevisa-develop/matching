@@ -12,8 +12,13 @@ type CustomQuestion = {
   key: string;
   label: string;
   required: boolean;
-  type: "text" | "textarea";
+  type: "text" | "textarea" | "file";
 };
+
+/** select の値を安全に型へ変換 */
+function toQuestionType(v: string): "text" | "textarea" | "file" {
+  return v === "textarea" ? "textarea" : v === "file" ? "file" : "text";
+}
 
 type Props = {
   personId: number;
@@ -40,7 +45,7 @@ export default function IntakeFormBuilderModal({
   const [customQuestions, setCustomQuestions] = useState<CustomQuestion[]>([]);
   const [japaneseCheckEnabled, setJapaneseCheckEnabled] = useState(true);
   const [newLabel, setNewLabel] = useState("");
-  const [newType, setNewType] = useState<"text" | "textarea">("text");
+  const [newType, setNewType] = useState<"text" | "textarea" | "file">("text");
   const [newRequired, setNewRequired] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [issuedUrl, setIssuedUrl] = useState<string | null>(null);
@@ -76,7 +81,7 @@ export default function IntakeFormBuilderModal({
                   key: q.key,
                   label: q.label,
                   required: q.required ?? false,
-                  type: q.type === "textarea" ? "textarea" : "text",
+                  type: toQuestionType(String(q.type)),
                 }))
               : []
           );
@@ -348,15 +353,16 @@ export default function IntakeFormBuilderModal({
                           setCustomQuestions((c) =>
                             c.map((it) =>
                               it.key === q.key
-                                ? { ...it, type: e.target.value === "textarea" ? "textarea" : "text" }
+                                ? { ...it, type: toQuestionType(e.target.value) }
                                 : it
                             )
                           )
                         }
                         className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs focus:border-[var(--color-primary)] focus:outline-none"
                       >
-                        <option value="text">テキスト</option>
-                        <option value="textarea">テキストエリア</option>
+                        <option value="text">短文</option>
+                        <option value="textarea">長文</option>
+                        <option value="file">ファイル</option>
                       </select>
                       <label className="flex items-center gap-1 text-xs text-gray-600">
                         <input
@@ -392,11 +398,12 @@ export default function IntakeFormBuilderModal({
                   />
                   <select
                     value={newType}
-                    onChange={(e) => setNewType(e.target.value === "textarea" ? "textarea" : "text")}
+                    onChange={(e) => setNewType(toQuestionType(e.target.value))}
                     className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs focus:border-[var(--color-primary)] focus:outline-none"
                   >
-                    <option value="text">テキスト</option>
-                    <option value="textarea">テキストエリア</option>
+                    <option value="text">短文</option>
+                    <option value="textarea">長文</option>
+                    <option value="file">ファイル</option>
                   </select>
                   <label className="flex items-center gap-1 text-xs text-gray-600">
                     <input

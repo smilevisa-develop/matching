@@ -47,7 +47,7 @@ export default async function IntakePage({
           key: typeof q.key === "string" ? q.key : "",
           label: typeof q.label === "string" ? q.label : "",
           required: q.required === true,
-          type: q.type === "textarea" ? "textarea" : "text",
+          type: q.type === "textarea" ? "textarea" : q.type === "file" ? "file" : "text",
         }))
         .filter((q) => q.key && q.label)
     : [];
@@ -61,7 +61,7 @@ export default async function IntakePage({
       englishName={person.onboarding?.englishName ?? null}
       residenceStatus={person.residenceStatus ?? null}
       excludedKeys={excludedKeys}
-      customQuestions={customQuestions as { key: string; label: string; required: boolean; type: "text" | "textarea" }[]}
+      customQuestions={customQuestions as { key: string; label: string; required: boolean; type: "text" | "textarea" | "file" }[]}
       japaneseCheckEnabled={japaneseCheckEnabled}
       initial={{
         motivation: person.resumeProfile?.motivation ?? "",

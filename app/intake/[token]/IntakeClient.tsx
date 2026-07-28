@@ -20,7 +20,7 @@ type CustomQuestion = {
   key: string;
   label: string;
   required: boolean;
-  type: "text" | "textarea";
+  type: "text" | "textarea" | "file";
 };
 
 type PageBlock = {
@@ -62,6 +62,8 @@ export default function IntakeClient({
   const [recordings, setRecordings] = useState<Recorded[]>([]);
   const [audioConsent, setAudioConsent] = useState(false);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
+  // ファイル型の個別質問: 選択されたファイル (key → dataUrl/fileName)
+  const [customFiles, setCustomFiles] = useState<Record<string, { dataUrl: string; fileName: string }>>({});
 
   // 「今どこに住んでいますか」の回答が分岐のドライバ。
   // 未回答なら null → 分岐条件つきの質問は隠さない (安全側)
@@ -144,12 +146,16 @@ export default function IntakeClient({
     }
     for (const item of currentPage.questions) {
       if (item.kind === "custom" && item.q.required) {
-        const v = form.interviewAnswers[item.q.key] ?? "";
-        if (!v.trim()) return true;
+        if (item.q.type === "file") {
+          if (!customFiles[item.q.key]) return true;
+        } else {
+          const v = form.interviewAnswers[item.q.key] ?? "";
+          if (!v.trim()) return true;
+        }
       }
     }
     return false;
-  }, [currentPage, form, allRecorded, audioConsent]);
+  }, [currentPage, form, allRecorded, audioConsent, customFiles]);
 
   const next = () => {
     if (currentPageInvalid) {
@@ -197,10 +203,40 @@ export default function IntakeClient({
     setSubmitting(true);
     setError(null);
     try {
+      // ファイル型の個別質問があれば先に Drive へアップロードし、
+      // その URL を回答 (interviewAnswers) に載せてから本送信する
+      let mergedForm = form;
+      const fileEntries = Object.entries(customFiles);
+      if (fileEntries.length > 0) {
+        setUploadNote("ファイルを送信しています… / Uploading files…");
+        const urls: Record<string, string> = {};
+        for (const [key, f] of fileEntries) {
+          const up = await fetch(`/api/intake/${token}/custom-file`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileName: f.fileName, dataUrl: f.dataUrl }),
+          });
+          const upData = await up.json().catch(() => ({}));
+          if (!up.ok || !upData.ok || !upData.url) {
+            setUploadNote(null);
+            setError(
+              "ファイルの送信に失敗しました。通信環境の良い場所で、もう一度お試しください。 / Failed to upload file.",
+            );
+            return;
+          }
+          urls[key] = upData.url as string;
+        }
+        setUploadNote(null);
+        mergedForm = {
+          ...form,
+          interviewAnswers: { ...form.interviewAnswers, ...urls },
+        };
+      }
+
       const res = await fetch(`/api/intake/${token}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(mergedForm),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -345,6 +381,20 @@ export default function IntakeClient({
                       else setAnswer(item.q.jsonKey ?? item.q.key, v);
                     }}
                   />
+                ) : item.q.type === "file" ? (
+                  <CustomFileField
+                    key={`c_${item.q.key}`}
+                    label={item.q.label + (item.q.required ? " *" : "")}
+                    file={customFiles[item.q.key] ?? null}
+                    onPick={(f) =>
+                      setCustomFiles((prev) => {
+                        const next = { ...prev };
+                        if (f) next[item.q.key] = f;
+                        else delete next[item.q.key];
+                        return next;
+                      })
+                    }
+                  />
                 ) : (
                   <QuestionField
                     key={`c_${item.q.key}`}
@@ -453,6 +503,67 @@ function QuestionField({
           placeholder={hint}
         />
       )}
+    </div>
+  );
+}
+
+/** ファイル型の個別質問。選択したファイルを dataURL で親に渡す */
+function CustomFileField({
+  label,
+  file,
+  onPick,
+}: {
+  label: string;
+  file: { dataUrl: string; fileName: string } | null;
+  onPick: (f: { dataUrl: string; fileName: string } | null) => void;
+}) {
+  const [reading, setReading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const handle = (input: HTMLInputElement) => {
+    const f = input.files?.[0];
+    if (!f) return;
+    // 上限 20MB (Apps Script / Drive 経由の実用上限を考慮)
+    if (f.size > 20 * 1024 * 1024) {
+      setErr("ファイルが大きすぎます（20MBまで）。/ File too large (max 20MB).");
+      input.value = "";
+      return;
+    }
+    setErr(null);
+    setReading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setReading(false);
+      onPick({ dataUrl: String(reader.result ?? ""), fileName: f.name });
+    };
+    reader.onerror = () => {
+      setReading(false);
+      setErr("ファイルの読み込みに失敗しました。/ Failed to read file.");
+    };
+    reader.readAsDataURL(f);
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-[var(--color-text-dark)] mb-1.5">{label}</label>
+      {file ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-3 py-2">
+          <span className="truncate text-sm text-[#166534]">📎 {file.fileName}</span>
+          <button
+            type="button"
+            onClick={() => onPick(null)}
+            className="shrink-0 text-xs font-medium text-gray-500 underline"
+          >
+            変更 / Change
+          </button>
+        </div>
+      ) : (
+        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-white px-3 py-3 text-sm text-gray-500 hover:bg-gray-50">
+          <span>{reading ? "読み込み中…" : "ファイルを選ぶ / Choose file"}</span>
+          <input type="file" className="hidden" onChange={(e) => handle(e.currentTarget)} />
+        </label>
+      )}
+      {err ? <p className="mt-1 text-[11px] text-red-600">{err}</p> : null}
     </div>
   );
 }

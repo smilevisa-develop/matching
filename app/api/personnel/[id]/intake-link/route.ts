@@ -10,7 +10,7 @@ type CustomQuestion = {
   key: string;
   label: string;
   required?: boolean;
-  type?: "text" | "textarea";
+  type?: "text" | "textarea" | "file";
 };
 
 /**
@@ -48,7 +48,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           if (!label) return [];
           const key = typeof q?.key === "string" && q.key ? String(q.key) : `c_${Math.random().toString(36).slice(2, 10)}`;
           const required = q?.required === true;
-          const type = q?.type === "textarea" ? "textarea" : "text";
+          const type =
+            q?.type === "textarea" ? "textarea" : q?.type === "file" ? "file" : "text";
           return [{ key, label, required, type } as CustomQuestion];
         })
       : [];
