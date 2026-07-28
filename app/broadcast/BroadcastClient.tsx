@@ -40,7 +40,14 @@ type Partner = {
   introducibleFields: string | null;
   introducibleResidenceStatuses: string | null;
 };
-type Template = { id: number; name: string; content: string; emailSubject: string | null };
+type Template = {
+  id: number;
+  name: string;
+  content: string;
+  emailSubject: string | null;
+  whatsappTemplateName: string | null;
+  whatsappTemplateParams: string | null;
+};
 
 /**
  * 「主な連絡手段」(channel) を基準に、配信可能なパートナーか判定する。
@@ -126,6 +133,31 @@ export default function BroadcastClient({
   const [message, setMessage] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
+  /** WhatsApp 承認テンプレの「input:ラベル」型パラメータへ流し込む値 (全対象パートナー共通) */
+  /** 承認済み UT の本文テキスト (name → 本文) — WhatsApp プレビュー描画に使う */
+  const [waBodies, setWaBodies] = useState<Record<string, string>>({});
+  useEffect(() => {
+    fetch("/api/whatsapp/templates")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d?.ok) return;
+        const map: Record<string, string> = {};
+        for (const t of d.templates ?? []) map[t.name] = t.bodyText ?? "";
+        setWaBodies(map);
+      })
+      .catch(() => {});
+  }, []);
+  /** ログイン中アカウントの姓 (WhatsApp テンプレの {{姓}} プレビュー用) */
+  const [senderLastName, setSenderLastName] = useState("");
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        const name: string = d?.account?.name ?? "";
+        setSenderLastName(name.trim().split(/\s+/)[0] ?? "");
+      })
+      .catch(() => {});
+  }, []);
 
   /** 添付画像: アップロード済みファイル (LINE image message + メール添付に使う) */
   const [attachedImages, setAttachedImages] = useState<
@@ -305,6 +337,47 @@ export default function BroadcastClient({
     setSelectedTemplate(id);
   };
 
+  const selectedTmplObj = templates.find((t) => String(t.id) === selectedTemplate);
+
+  /**
+   * WhatsApp 承認テンプレのプレビュー。本文の {{1}}..{{n}} を、テンプレに保存された指定で差し込む:
+   *   { value }              → 保存済みの固定値
+   *   { auto: "account:姓" } → ログイン中アカウントの姓
+   *   { auto: 配信変数 }     → 1 件目のパートナー (無ければサンプル) で展開
+   */
+  const waPreview = useMemo(() => {
+    const utName = selectedTmplObj?.whatsappTemplateName;
+    if (!utName) return null;
+    const body = waBodies[utName];
+    if (!body) return null;
+    const samplePartner: PartnerForBroadcast =
+      targetPartners.length > 0
+        ? {
+            name: targetPartners[0].name,
+            contactName: targetPartners[0].contactName,
+            country: targetPartners[0].country,
+            introducibleFields: targetPartners[0].introducibleFields,
+          }
+        : PREVIEW_PARTNER;
+    let specs: Array<{ auto?: string; value?: string }> = [];
+    try {
+      const parsed = JSON.parse(selectedTmplObj?.whatsappTemplateParams ?? "[]");
+      if (Array.isArray(parsed)) specs = parsed;
+    } catch {
+      specs = [];
+    }
+    const values = specs.map((spec) => {
+      if (spec.value !== undefined) return String(spec.value).replace(/\s+/g, " ").trim();
+      if (spec.auto === "account:姓") return senderLastName || "（担当者姓）";
+      if (spec.auto)
+        return expandTemplate(`{{${spec.auto}}}`, { partner: samplePartner, openDeals, urgentDeals })
+          .replace(/\s+/g, " ")
+          .trim();
+      return "";
+    });
+    return body.replace(/\{\{(\d+)\}\}/g, (_, n) => values[Number(n) - 1] ?? "");
+  }, [selectedTmplObj, waBodies, targetPartners, openDeals, urgentDeals, senderLastName]);
+
   /** カーソル位置に変数を挿入 */
   const insertVariable = (variable: string) => {
     const el = textareaRef.current;
@@ -343,8 +416,8 @@ export default function BroadcastClient({
 
   /** 「配信」「予約」ボタン → まず確認モーダルを開く */
   const requestSend = (scheduled: boolean) => {
-    if (!message.trim()) {
-      alert("メッセージを入力してください");
+    if (!message.trim() && !selectedTmplObj?.whatsappTemplateName) {
+      alert("メッセージを入力するか、WhatsApp テンプレを選択してください");
       return;
     }
     if (scheduled && !scheduleDate) {
@@ -359,8 +432,8 @@ export default function BroadcastClient({
   };
 
   const handleSend = async (scheduled = false) => {
-    if (!message.trim()) {
-      alert("メッセージを入力してください");
+    if (!message.trim() && !selectedTmplObj?.whatsappTemplateName) {
+      alert("メッセージを入力するか、WhatsApp テンプレを選択してください");
       return;
     }
     if (scheduled && !scheduleDate) {
@@ -510,6 +583,18 @@ export default function BroadcastClient({
             options={["", ...templates.map((t) => String(t.id))]}
             labels={["テンプレートを選択", ...templates.map((t) => t.name)]}
           />
+
+          {/* WhatsApp 送信プレビュー (テンプレに保存された内容で届く文面) */}
+          {waPreview !== null && (
+            <div className="mt-3 rounded-lg border border-gray-200 bg-[#E7F7EE] p-3">
+              <p className="mb-2 text-[10px] font-semibold text-[#15803D]">
+                WhatsApp プレビュー（{previewPartnerName} 宛の例）
+              </p>
+              <div className="rounded-lg bg-white px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap text-[var(--color-text-dark)] shadow-sm">
+                {waPreview}
+              </div>
+            </div>
+          )}
           <div className="mt-3">
             <label className="block text-xs font-medium text-gray-500 mb-1">
               メール件名{" "}

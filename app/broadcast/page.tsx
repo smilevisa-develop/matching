@@ -78,6 +78,8 @@ export default async function BroadcastPage() {
           name: t.name,
           content: t.content,
           emailSubject: t.emailSubject,
+          whatsappTemplateName: t.whatsappTemplateName,
+          whatsappTemplateParams: t.whatsappTemplateParams,
         }))}
         groups={groups.map((g) => ({
           id: g.id,
