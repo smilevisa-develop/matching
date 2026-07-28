@@ -129,11 +129,13 @@ export default function EditPersonForm({
   partners,
   customTabContent,
   placementTabContent,
+  japaneseCheckContent,
 }: {
   person: Person;
   partners: PartnerOption[];
   customTabContent?: React.ReactNode;
   placementTabContent?: React.ReactNode;
+  japaneseCheckContent?: React.ReactNode;
 }) {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<(typeof SECTION_ITEMS)[number]["id"]>("basic");
@@ -872,6 +874,9 @@ export default function EditPersonForm({
       {/* 詳細情報 タブ: 事前面接の内容 (履歴書に載らない interview-only 質問) + 個別質問 */}
       {activeSection === "visa" ? (
         <section className="space-y-5">
+          {/* 詳細情報タブの最上部に 日本語チェック(AI) を表示 */}
+          {japaneseCheckContent}
+
           <div className="rounded-2xl border border-[var(--color-primary)]/20 bg-[var(--color-light)] p-5">
             <p className="text-base font-semibold text-[var(--color-text-dark)]">💬 事前面接の内容</p>
             <p className="mt-1 text-xs text-gray-500">

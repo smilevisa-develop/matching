@@ -3,15 +3,14 @@
 import { useState } from "react";
 
 /**
- * 候補者詳細の 日本語チェック パネル。
+ * 候補者詳細「詳細情報」タブ最上部の 日本語チェック パネル。
  *
  * intake フォームで候補者が録音 → Gemini が判定した結果を面接官向けに表示する。
- *   - 推定レベル (N1〜N5 相当) を大きく
+ * 初期は折りたたみ状態で「推定レベル」だけを見せ、展開すると:
  *   - 発音 / 流暢さ / 語彙 / 文法 の 4 観点スコア (1〜5)
  *   - AI 所見 (どの業種なら通用するか)
  *   - 各設問の文字起こし + 録音の再生 (Drive はプライベートなので audio-proxy 経由)
- *
- * 判定に失敗して録音だけ保存されている場合 (assessedAt=null) は「再判定」できる。
+ *   - 判定に失敗して録音だけの場合 (assessedAt=null) は「再判定」
  */
 
 export type JapaneseCheckRecordingView = {
@@ -51,23 +50,29 @@ export default function JapaneseCheckPanel({
   initial: JapaneseCheckView | null;
 }) {
   const [data, setData] = useState<JapaneseCheckView | null>(initial);
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  // まだ一度も録音されていない
+  // まだ一度も録音されていない → 折りたたみ不要の最小表示
   if (!data) {
     return (
-      <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">日本語チェック</p>
-        <p className="mt-2 text-sm text-gray-500">
-          まだ実施されていません。フォーム（intake リンク）の最後で、候補者が 3 問を録音すると
-          AI が日本語レベルを判定します。
+      <section className="rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            日本語チェック(AI)
+          </p>
+          <span className="text-[12px] text-gray-400">未実施</span>
+        </div>
+        <p className="mt-1.5 text-[12px] text-gray-500">
+          フォーム（intake リンク）の最後で候補者が 3 問を録音すると、AI が日本語レベルを判定します。
         </p>
       </section>
     );
   }
 
   const assessed = Boolean(data.assessedAt);
+  const lv = levelStyle(data.estimatedLevel);
 
   const rejudge = async () => {
     setBusy(true);
@@ -90,94 +95,141 @@ export default function JapaneseCheckPanel({
     }
   };
 
-  const lv = levelStyle(data.estimatedLevel);
-
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">日本語チェック</p>
-        <button
-          type="button"
-          onClick={() => void rejudge()}
-          disabled={busy}
-          className="rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-        >
-          {busy ? "判定中..." : "再判定"}
-        </button>
-      </div>
-
-      {!assessed ? (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          録音は保存されていますが、AI 判定がまだ完了していません。「再判定」を押してください。
-        </div>
-      ) : null}
-
-      {/* 推定レベル + 4 観点スコア */}
-      <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-stretch">
-        <div
-          className="flex min-w-[140px] flex-col items-center justify-center rounded-xl border px-4 py-3 text-center"
-          style={{ backgroundColor: lv.bg, borderColor: lv.border }}
-        >
-          <span className="text-[11px] font-medium" style={{ color: lv.text }}>
-            推定レベル
+    <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      {/* 折りたたみヘッダー (常に表示 = 最低限) */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left hover:bg-gray-50"
+        aria-expanded={open}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            日本語チェック(AI)
           </span>
-          <span className="mt-0.5 text-2xl font-bold" style={{ color: lv.text }}>
-            {data.estimatedLevel ?? "—"}
-          </span>
+          {assessed ? (
+            <span
+              className="rounded-full border px-3 py-0.5 text-sm font-bold"
+              style={{ backgroundColor: lv.bg, color: lv.text, borderColor: lv.border }}
+            >
+              {data.estimatedLevel ?? "—"}
+            </span>
+          ) : (
+            <span className="rounded-full bg-amber-50 px-3 py-0.5 text-[12px] font-medium text-amber-700">
+              判定待ち
+            </span>
+          )}
         </div>
+        <span className="flex items-center gap-1 text-[12px] text-gray-400">
+          {open ? "閉じる" : "詳細を見る"}
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`transition-transform ${open ? "rotate-180" : ""}`}
+            aria-hidden
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </span>
+      </button>
 
-        <div className="grid flex-1 grid-cols-2 gap-2.5">
-          <ScoreBar label="発音" value={data.pronunciation} />
-          <ScoreBar label="流暢さ" value={data.fluency} />
-          <ScoreBar label="語彙" value={data.vocabulary} />
-          <ScoreBar label="文法" value={data.grammar} />
-        </div>
-      </div>
+      {/* 展開部 */}
+      {open ? (
+        <div className="border-t border-gray-100 px-5 py-4">
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => void rejudge()}
+              disabled={busy}
+              className="rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {busy ? "判定中..." : "再判定"}
+            </button>
+          </div>
 
-      {/* AI 所見 */}
-      {data.summary ? (
-        <div className="mt-4 rounded-xl bg-[var(--color-light)] px-4 py-3">
-          <p className="text-[11px] font-semibold text-gray-500">AI 所見</p>
-          <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-dark)]">{data.summary}</p>
-        </div>
-      ) : null}
-
-      {/* 各設問の文字起こし + 録音再生 */}
-      {data.recordings.length > 0 ? (
-        <div className="mt-4 space-y-3">
-          <p className="text-[11px] font-semibold text-gray-500">録音と文字起こし</p>
-          {data.recordings.map((r, idx) => (
-            <div key={r.key} className="rounded-xl border border-gray-200 px-4 py-3">
-              <p className="text-[12px] font-medium text-gray-600">
-                {idx + 1}. {r.question || r.key}
-              </p>
-              {r.transcript ? (
-                <p className="mt-1 text-sm text-[var(--color-text-dark)]">{r.transcript}</p>
-              ) : (
-                <p className="mt-1 text-sm text-gray-400">（文字起こしなし）</p>
-              )}
-              {r.driveFileId ? (
-                <audio
-                  controls
-                  preload="none"
-                  src={`/api/audio-proxy?id=${encodeURIComponent(r.driveFileId)}`}
-                  className="mt-2 w-full"
-                  aria-label={`録音 ${idx + 1} の再生`}
-                />
-              ) : null}
+          {!assessed ? (
+            <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              録音は保存されていますが、AI 判定がまだ完了していません。「再判定」を押してください。
             </div>
-          ))}
+          ) : null}
+
+          {/* 推定レベル + 4 観点スコア */}
+          <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-stretch">
+            <div
+              className="flex min-w-[140px] flex-col items-center justify-center rounded-xl border px-4 py-3 text-center"
+              style={{ backgroundColor: lv.bg, borderColor: lv.border }}
+            >
+              <span className="text-[11px] font-medium" style={{ color: lv.text }}>
+                推定レベル
+              </span>
+              <span className="mt-0.5 text-2xl font-bold" style={{ color: lv.text }}>
+                {data.estimatedLevel ?? "—"}
+              </span>
+            </div>
+
+            <div className="grid flex-1 grid-cols-2 gap-2.5">
+              <ScoreBar label="発音" value={data.pronunciation} />
+              <ScoreBar label="流暢さ" value={data.fluency} />
+              <ScoreBar label="語彙" value={data.vocabulary} />
+              <ScoreBar label="文法" value={data.grammar} />
+            </div>
+          </div>
+
+          {/* AI 所見 */}
+          {data.summary ? (
+            <div className="mt-4 rounded-xl bg-[var(--color-light)] px-4 py-3">
+              <p className="text-[11px] font-semibold text-gray-500">AI 所見</p>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-dark)]">
+                {data.summary}
+              </p>
+            </div>
+          ) : null}
+
+          {/* 各設問の文字起こし + 録音再生 */}
+          {data.recordings.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-[11px] font-semibold text-gray-500">録音と文字起こし</p>
+              {data.recordings.map((r, idx) => (
+                <div key={r.key} className="rounded-xl border border-gray-200 px-4 py-3">
+                  <p className="text-[12px] font-medium text-gray-600">
+                    {idx + 1}. {r.question || r.key}
+                  </p>
+                  {r.transcript ? (
+                    <p className="mt-1 text-sm text-[var(--color-text-dark)]">{r.transcript}</p>
+                  ) : (
+                    <p className="mt-1 text-sm text-gray-400">（文字起こしなし）</p>
+                  )}
+                  {r.driveFileId ? (
+                    <audio
+                      controls
+                      preload="none"
+                      src={`/api/audio-proxy?id=${encodeURIComponent(r.driveFileId)}`}
+                      className="mt-2 w-full"
+                      aria-label={`録音 ${idx + 1} の再生`}
+                    />
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-3 flex items-center justify-between">
+            <p className="text-[11px] text-gray-400">
+              {assessed && data.assessedAt
+                ? `判定日時 ${new Date(data.assessedAt).toLocaleString("ja-JP")}`
+                : ""}
+            </p>
+            {note ? <p className="text-[11px] text-gray-500">{note}</p> : null}
+          </div>
         </div>
       ) : null}
-
-      <div className="mt-3 flex items-center justify-between">
-        <p className="text-[11px] text-gray-400">
-          {assessed && data.assessedAt
-            ? `判定日時 ${new Date(data.assessedAt).toLocaleString("ja-JP")}`
-            : ""}
-        </p>
-        {note ? <p className="text-[11px] text-gray-500">{note}</p> : null}
-      </div>
     </section>
   );
 }

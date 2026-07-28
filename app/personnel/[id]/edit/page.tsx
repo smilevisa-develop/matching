@@ -280,12 +280,13 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
 
           <PreparationPanel personName={person.name} state={preparationState} />
 
-          <JapaneseCheckPanel personId={person.id} initial={japaneseCheckView} />
-
           <EditPersonForm
             person={person}
             partners={partners}
             customTabContent={<CustomQuestionsList />}
+            japaneseCheckContent={
+              <JapaneseCheckPanel personId={person.id} initial={japaneseCheckView} />
+            }
             placementTabContent={
               <PlacementPanel
                 personId={person.id}
