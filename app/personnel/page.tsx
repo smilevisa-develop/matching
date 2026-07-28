@@ -36,6 +36,7 @@ export default async function PersonnelPage() {
           universityEndDate: true,
         },
       },
+      japaneseCheck: { select: { estimatedLevel: true, assessedAt: true } },
     },
     // ID 降順 (新しい候補者ほど上)
     orderBy: { id: "desc" },
@@ -77,6 +78,9 @@ export default async function PersonnelPage() {
           visaExpiryDate: person.resumeProfile?.visaExpiryDate ?? null,
           japaneseLevel: person.resumeProfile?.japaneseLevel ?? null,
           japaneseLevelDate: person.resumeProfile?.japaneseLevelDate ?? null,
+          japaneseCheckLevel: person.japaneseCheck?.assessedAt
+            ? person.japaneseCheck.estimatedLevel ?? null
+            : null,
           licenseName: person.resumeProfile?.licenseName ?? null,
           licenseExpiryDate: person.resumeProfile?.licenseExpiryDate ?? null,
           otherQualificationName: person.resumeProfile?.otherQualificationName ?? null,

@@ -22,6 +22,7 @@ export type PersonnelColumnKey =
   | "visaExpiryDate"
   | "japaneseLevel"
   | "japaneseLevelDate"
+  | "japaneseCheckLevel"
   | "licenseName"
   | "licenseExpiryDate"
   | "otherQualificationName"
@@ -70,6 +71,7 @@ export const PERSONNEL_COLUMN_SECTIONS: {
       { key: "visaExpiryDate", label: "在留資格の有効期限" },
       { key: "japaneseLevel", label: "日本語検定" },
       { key: "japaneseLevelDate", label: "日本語検定取得日" },
+      { key: "japaneseCheckLevel", label: "日本語チェック(AI)" },
       { key: "licenseName", label: "免許" },
       { key: "licenseExpiryDate", label: "免許の有効期限" },
       { key: "otherQualificationName", label: "その他の資格" },

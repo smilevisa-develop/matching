@@ -37,6 +37,7 @@ type PersonRow = {
   visaExpiryDate: string | null;
   japaneseLevel: string | null;
   japaneseLevelDate: string | null;
+  japaneseCheckLevel: string | null;
   licenseName: string | null;
   licenseExpiryDate: string | null;
   otherQualificationName: string | null;
@@ -277,7 +278,27 @@ function renderColumn(person: PersonRow, key: PersonnelColumnKey, isFirst: boole
       </span>
     );
   }
+  if (key === "japaneseCheckLevel") {
+    if (!person.japaneseCheckLevel) return <span className="text-gray-300">-</span>;
+    const s = japaneseCheckBadgeStyle(person.japaneseCheckLevel);
+    return (
+      <span
+        className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold"
+        style={{ backgroundColor: s.bg, color: s.text }}
+      >
+        {person.japaneseCheckLevel}
+      </span>
+    );
+  }
   return text;
+}
+
+/** 日本語チェック(AI) 推定レベルのバッジ色 */
+function japaneseCheckBadgeStyle(level: string): { bg: string; text: string } {
+  if (/N1|N2/.test(level)) return { bg: "#DCFCE7", text: "#15803D" };
+  if (/N3/.test(level)) return { bg: "#DBEAFE", text: "#1D4ED8" };
+  if (/N4/.test(level)) return { bg: "#FEF3C7", text: "#B45309" };
+  return { bg: "#F3F4F6", text: "#6B7280" };
 }
 
 function getColumnText(person: PersonRow, key: PersonnelColumnKey) {
@@ -326,6 +347,8 @@ function getColumnText(person: PersonRow, key: PersonnelColumnKey) {
       return person.japaneseLevel ?? "-";
     case "japaneseLevelDate":
       return person.japaneseLevelDate ?? "-";
+    case "japaneseCheckLevel":
+      return person.japaneseCheckLevel ?? "-";
     case "licenseName":
       return person.licenseName ?? "-";
     case "licenseExpiryDate":

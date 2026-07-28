@@ -12,6 +12,10 @@ import PhotoPanel from "./PhotoPanel";
 import CreateResumeButton from "./CreateResumeButton";
 import IntakeLinkButton from "./IntakeLinkButton";
 import PreparationPanel, { type PreparationState } from "./PreparationPanel";
+import JapaneseCheckPanel, {
+  type JapaneseCheckView,
+  type JapaneseCheckRecordingView,
+} from "./JapaneseCheckPanel";
 import {
   LOCATION_QUESTION_KEY,
   buildInterviewSections,
@@ -31,6 +35,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
         onboarding: true,
         documents: true,
         resumeProfile: true,
+        japaneseCheck: true,
       },
     }),
     prisma.partner.findMany({
@@ -117,6 +122,31 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
     rp?.selfIntroduction,
     rp?.currentJob,
   ].filter((v) => typeof v === "string" && v.trim().length > 0).length;
+
+  // ── 日本語チェックの表示用データ ──
+  const jc = person.japaneseCheck;
+  const japaneseCheckView: JapaneseCheckView | null = jc
+    ? {
+        estimatedLevel: jc.estimatedLevel,
+        pronunciation: jc.pronunciation,
+        fluency: jc.fluency,
+        vocabulary: jc.vocabulary,
+        grammar: jc.grammar,
+        summary: jc.summary,
+        assessedAt: toDate(jc.assessedAt),
+        recordings: (Array.isArray(jc.recordings) ? jc.recordings : []).map((r) => {
+          const o = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+          return {
+            key: typeof o.key === "string" ? o.key : "",
+            question: typeof o.question === "string" ? o.question : "",
+            transcript: typeof o.transcript === "string" ? o.transcript : "",
+            driveFileId: typeof o.driveFileId === "string" ? o.driveFileId : null,
+            driveFileUrl: typeof o.driveFileUrl === "string" ? o.driveFileUrl : null,
+            mimeType: typeof o.mimeType === "string" ? o.mimeType : "",
+          } satisfies JapaneseCheckRecordingView;
+        }),
+      }
+    : null;
 
   const preparationState: PreparationState = {
     resumeImported: Boolean(rp?.resumeFileUrl) || extractedFieldCount >= 5,
@@ -249,6 +279,8 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
           />
 
           <PreparationPanel personName={person.name} state={preparationState} />
+
+          <JapaneseCheckPanel personId={person.id} initial={japaneseCheckView} />
 
           <EditPersonForm
             person={person}
