@@ -6,6 +6,7 @@ import {
   calculateAge,
   CHANNELS,
   GENDERS,
+  SPOUSE_OPTIONS,
   getDocumentDefinitions,
   NATIONALITIES,
   normalizeWorkHistories,
@@ -504,10 +505,38 @@ export default function EditPersonForm({
               <input className={INPUT} value={form.postalCode} onChange={(event) => setValue("postalCode", event.target.value)} />
             </Field>
             <Field label="配偶者">
-              <input className={INPUT} value={form.spouseStatus} onChange={(event) => setValue("spouseStatus", event.target.value)} placeholder="有 / 無" />
+              <select
+                className={INPUT}
+                value={form.spouseStatus}
+                onChange={(event) => setValue("spouseStatus", event.target.value)}
+              >
+                <option value="">未設定</option>
+                {SPOUSE_OPTIONS.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+                {/* 旧データが選択肢外でも表示・保持できるように */}
+                {form.spouseStatus && !SPOUSE_OPTIONS.includes(form.spouseStatus) ? (
+                  <option value={form.spouseStatus}>{form.spouseStatus}</option>
+                ) : null}
+              </select>
             </Field>
             <Field label="子供">
-              <input className={INPUT} value={form.childrenCount} onChange={(event) => setValue("childrenCount", event.target.value)} placeholder="0" />
+              {/* 数字だけ入力・単位「人」は固定表示で入力ムラを防ぐ */}
+              <div className="relative">
+                <input
+                  className={`${INPUT} pr-10`}
+                  type="text"
+                  inputMode="numeric"
+                  value={form.childrenCount.replace(/[^0-9]/g, "")}
+                  onChange={(event) =>
+                    setValue("childrenCount", event.target.value.replace(/[^0-9]/g, ""))
+                  }
+                  placeholder="0"
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-400">
+                  人
+                </span>
+              </div>
             </Field>
             {/* 志望動機/自己紹介/来日目的/現在の仕事/退職理由 は下の「事前質問」セクションに統合 */}
           </div>

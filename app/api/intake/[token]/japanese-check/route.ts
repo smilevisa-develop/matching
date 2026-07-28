@@ -18,6 +18,7 @@ import {
   buildPersonAssetName,
   buildPersonFolderName,
   ensurePersonDriveFolder,
+  ensureSubFolder,
   uploadDataUrlToDrive,
 } from "@/lib/google-docs";
 import { extractDriveFileId } from "@/lib/drive-url";
@@ -105,6 +106,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       });
     }
 
+    // 候補者フォルダ内に「日本語チェック音声」サブフォルダを確保し、録音はそこにまとめる
+    const audioFolder = await ensureSubFolder({
+      parentFolderUrl: folder.folderUrl!,
+      folderName: "日本語チェック音声",
+    });
+
     // 各録音を Drive に保存
     const stored: {
       key: string;
@@ -118,7 +125,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       const uploaded = await uploadDataUrlToDrive({
         dataUrl: r.dataUrl,
         fileName: `${buildPersonAssetName({ person: personForName, assetName })}${extForMime(r.mimeType)}`,
-        folderUrl: folder.folderUrl!,
+        folderUrl: audioFolder.folderUrl,
       });
       stored.push({
         key: r.key,

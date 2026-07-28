@@ -87,6 +87,9 @@ export const CHANNELS = [
 
 export const GENDERS = ["男性", "女性", "その他"];
 
+/** 配偶者の有無 (入力ムラを防ぐため選択式) */
+export const SPOUSE_OPTIONS = ["無", "有"];
+
 // 全在留資格に共通する書類 (常に提出)
 // 「residence-card」は旧 kind で「在留カード」と呼んでいた。後方互換のため
 //  そのまま「在留カード (表面)」として扱い、新たに「在留カード (裏面)」と

@@ -631,6 +631,23 @@ export async function findFolderByPrefix({
   };
 }
 
+/**
+ * 親フォルダ内に指定名のサブフォルダを確保する (あれば再利用・なければ作成)。
+ * 例: 候補者フォルダの中に「日本語チェック音声」フォルダを作ってまとめる用途。
+ */
+export async function ensureSubFolder({
+  parentFolderUrl,
+  folderName,
+}: {
+  parentFolderUrl: string;
+  folderName: string;
+}): Promise<{ folderId: string | null; folderUrl: string }> {
+  const found = await findFolderByPrefix({ parentFolderUrl, namePrefix: folderName });
+  if (found) return found;
+  const { drive } = await getGoogleClients();
+  return getOrCreateFolder({ drive, parentFolderUrl, folderName });
+}
+
 export async function ensurePersonDriveFolder({
   existingFolderUrl,
   personName,
