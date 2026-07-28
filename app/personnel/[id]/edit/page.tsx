@@ -12,6 +12,7 @@ import PhotoPanel from "./PhotoPanel";
 import CreateResumeButton from "./CreateResumeButton";
 import IntakeLinkButton from "./IntakeLinkButton";
 import PreparationPanel, { type PreparationState } from "./PreparationPanel";
+import TestResetPanel from "./TestResetPanel";
 import JapaneseCheckPanel, {
   type JapaneseCheckView,
   type JapaneseCheckRecordingView,
@@ -175,6 +176,8 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
           </p>
         </div>
 
+        {/* テスト用候補者 (ID:280) だけに表示するリセット/投入ツール */}
+        {person.id === 280 ? <TestResetPanel personId={person.id} /> : null}
 
         <CustomQuestionsProvider
           personId={person.id}
