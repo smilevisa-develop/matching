@@ -211,7 +211,7 @@ export default function BroadcastClient({
   const [sendingStartedAt, setSendingStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  /** 今月の チャネル別 送信通数 + 上限 (LINE フリープラン 200通/月 警告用) */
+  /** 今月の チャネル別 送信通数 + 上限 (LINE ライトプラン 5000通/月 警告用) */
   const [usage, setUsage] = useState<
     { channel: string; used: number; limit: number | null }[] | null
   >(null);
@@ -766,68 +766,31 @@ export default function BroadcastClient({
       {/* グリッド下: ボタン + 予約フォーム (左カラム幅に合わせる) */}
       <div className="grid grid-cols-2 gap-6">
         <div className="space-y-5">
-          {/* 送信前のチャネル別 通数 / 上限 表示 */}
-          {usage ? (
-            <div
-              className={`rounded-xl border p-4 text-xs ${
-                lineOverLimit
-                  ? "bg-red-50 border-red-300 text-red-900"
-                  : "bg-amber-50 border-amber-200 text-amber-900"
-              }`}
-            >
+          {/* LINE がライトプランの上限 (5000通/月) を超える見込みのときだけ警告表示 */}
+          {usage && lineOverLimit ? (
+            <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-xs text-red-900">
               <div className="font-semibold mb-2 flex items-center gap-1.5">
-                <span>📊 今月の利用 + この配信の予測</span>
-                {lineOverLimit && (
-                  <span className="rounded bg-red-600 text-white px-1.5 py-0.5 text-[10px]">
-                    LINE 上限超過!
-                  </span>
-                )}
+                <span>📊 今月の LINE 利用 + この配信の予測</span>
+                <span className="rounded bg-red-600 text-white px-1.5 py-0.5 text-[10px]">
+                  LINE 上限超過!
+                </span>
               </div>
               <ul className="space-y-1">
                 <li className="flex items-center gap-2">
                   <span className="font-medium w-20">LINE:</span>
-                  <span className={lineOverLimit ? "font-semibold" : ""}>
+                  <span className="font-semibold">
                     {lineUsage?.used ?? 0} 通 + 今回 {plannedUsage.line} 通
                     {" = "}
-                    <span className={lineOverLimit ? "text-red-700 font-bold" : "font-semibold"}>
-                      {lineAfter}
-                    </span>
-                    {lineUsage?.limit ? <> / {lineUsage.limit} 通 (フリープラン)</> : null}
+                    <span className="text-red-700 font-bold">{lineAfter}</span>
+                    {lineUsage?.limit ? <> / {lineUsage.limit} 通 (ライトプラン)</> : null}
                   </span>
                 </li>
-                {plannedUsage.email > 0 && (
-                  <li className="flex items-center gap-2">
-                    <span className="font-medium w-20">メール:</span>
-                    <span>
-                      {usage.find((u) => u.channel === "Email")?.used ?? 0} 通 + 今回 {plannedUsage.email} 通
-                    </span>
-                  </li>
-                )}
-                {plannedUsage.messenger > 0 && (
-                  <li className="flex items-center gap-2">
-                    <span className="font-medium w-20">Messenger:</span>
-                    <span>
-                      {usage.find((u) => u.channel === "Messenger")?.used ?? 0} 通 + 今回 {plannedUsage.messenger} 通
-                    </span>
-                  </li>
-                )}
-                {plannedUsage.whatsapp > 0 && (
-                  <li className="flex items-center gap-2">
-                    <span className="font-medium w-20">WhatsApp:</span>
-                    <span>
-                      {usage.find((u) => u.channel === "WhatsApp")?.used ?? 0} 通 + 今回 {plannedUsage.whatsapp} 通
-                    </span>
-                  </li>
-                )}
               </ul>
-              {lineOverLimit && (
-                <p className="mt-2 pt-2 border-t border-red-200 text-[11px] leading-relaxed">
-                  ⚠️ LINE フリープランの月 200 通を超えるため、超過分は <strong>送信されません</strong>。
-                  ライトプラン (¥5,000/月, 5000通) へアップグレード推奨。
-                  <br />
-                  画像 1 枚 = +1 通、4 枚 = +4 通カウントされます。
-                </p>
-              )}
+              <p className="mt-2 pt-2 border-t border-red-200 text-[11px] leading-relaxed">
+                ⚠️ LINE ライトプランの月 5000 通を超えるため、超過分は <strong>送信されません</strong>。
+                <br />
+                画像 1 枚 = +1 通、4 枚 = +4 通カウントされます。
+              </p>
             </div>
           ) : null}
 

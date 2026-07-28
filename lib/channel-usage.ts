@@ -1,5 +1,5 @@
 /**
- * チャネル別 月次送信通数 (LINE フリープラン 200通/月 等の警告用)。
+ * チャネル別 月次送信通数 (LINE ライトプラン 5000通/月 等の警告用)。
  *
  *   - 月初切り替え時刻は UTC ベースの "YYYY-MM"。
  *     LINE 公式 (JST) と数時間ズレるが、実用上の警告には十分。
@@ -14,9 +14,9 @@ import { prisma } from "@/lib/prisma";
 
 export type Channel = "LINE" | "Messenger" | "Email" | "WhatsApp";
 
-/** 各チャネルの推奨 / 既定の月間上限 (フリープラン基準) */
+/** 各チャネルの推奨 / 既定の月間上限 */
 export const CHANNEL_FREE_LIMIT: Record<Channel, number | null> = {
-  LINE: 200, // LINE Official Account コミュニケーションプラン (フリー)
+  LINE: 5000, // LINE Official Account ライトプラン (¥5,000/月, 5000通)
   Messenger: null, // 上限なし (24h 内応答 + Recurring Notifications)
   Email: 1500, // Workspace ユーザーの 1 日上限。1 日換算では大きいが目安に
   WhatsApp: null, // Cloud API はカテゴリー別の従量課金、月次上限なし

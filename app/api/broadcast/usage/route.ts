@@ -1,7 +1,7 @@
 /**
  * 今月の チャネル別 送信通数 + プラン上限 を返す。
  *
- * /broadcast 画面で「今月の LINE 利用: X/200」を表示するため。
+ * /broadcast 画面で「今月の LINE 利用: X/5000」を表示するため。
  */
 
 import { AuthError, requireApiAccount } from "@/lib/auth";
