@@ -94,37 +94,8 @@ export default function JapaneseCheckSection({
     );
   }
 
-  const doneCount = questions.filter((q) => recorded[q.key]).length;
-  const allDone = doneCount === questions.length;
-
   return (
     <div className="space-y-4">
-      {/* 進捗ドット */}
-      <div
-        className={`flex items-center justify-between rounded-xl border px-4 py-3 ${
-          allDone ? "border-[#BBF7D0] bg-[#F0FDF4]" : "border-gray-200 bg-gray-50"
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          {questions.map((q, i) => (
-            <span
-              key={q.key}
-              className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${
-                recorded[q.key]
-                  ? "bg-[#16A34A] text-white"
-                  : "border border-gray-300 bg-white text-gray-400"
-              }`}
-              aria-hidden
-            >
-              {recorded[q.key] ? "✓" : i + 1}
-            </span>
-          ))}
-        </div>
-        <span className={`text-[12px] font-semibold ${allDone ? "text-[#15803D]" : "text-gray-500"}`}>
-          {allDone ? "録音そろいました" : `${doneCount} / ${questions.length} 録音ずみ`}
-        </span>
-      </div>
-
       {questions.map((q, idx) => (
         <RecorderCard
           key={q.key}
