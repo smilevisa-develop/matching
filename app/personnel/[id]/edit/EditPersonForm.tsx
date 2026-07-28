@@ -874,16 +874,8 @@ export default function EditPersonForm({
       {/* 詳細情報 タブ: 事前面接の内容 (履歴書に載らない interview-only 質問) + 個別質問 */}
       {activeSection === "visa" ? (
         <section className="space-y-5">
-          {/* 詳細情報タブの最上部に 日本語チェック(AI) を表示 */}
+          {/* 詳細情報タブの最上部に 日本語チェック を表示 */}
           {japaneseCheckContent}
-
-          <div className="rounded-2xl border border-[var(--color-primary)]/20 bg-[var(--color-light)] p-5">
-            <p className="text-base font-semibold text-[var(--color-text-dark)]">💬 事前面接の内容</p>
-            <p className="mt-1 text-xs text-gray-500">
-              希望勤務地・希望勤務年数・将来など、履歴書には載らないが 事前面接時に確認する情報。
-              企業推薦後の擦り合わせでも参照。
-            </p>
-          </div>
 
           {interviewOnlySections.map((section, sectionIdx) => (
             <div key={sectionIdx} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
