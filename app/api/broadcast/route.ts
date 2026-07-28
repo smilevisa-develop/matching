@@ -534,6 +534,10 @@ export async function POST(req: Request) {
       }
     };
 
+    // 一斉メールの返信先 (担当者集約用)。BROADCAST_REPLY_TO 未設定なら
+    // lib/email.ts 側の GMAIL_REPLY_TO 既定にフォールバックする。
+    const broadcastReplyTo = process.env.BROADCAST_REPLY_TO?.trim() || undefined;
+
     const sendViaEmail = async (t: Target, personalizedMessage: string) => {
       const emailOk = Boolean(t.email && /@/.test(t.email));
       if (!emailOk || !t.email) {
@@ -559,6 +563,9 @@ export async function POST(req: Request) {
         subject,
         text: personalizedMessage,
         html: textToBasicHtml(personalizedMessage),
+        // 一斉メールの返信先を担当者に集約する (パートナーの「返信」が担当者に直接届く)。
+        // Railway の環境変数 BROADCAST_REPLY_TO に設定 (未設定なら GMAIL_REPLY_TO 既定を使う)。
+        replyTo: broadcastReplyTo,
         attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
       });
       if (r.ok) {
