@@ -14,6 +14,9 @@ model Person {
   driveFolderUrl  String?
   nationality     String
   department      String?
+  /// 推薦先企業の手動上書き。設定時はスプシ「推薦先企業」に優先反映する。
+  /// 空(null)なら案件(DealCandidate→Deal→Company)から自動導出する。
+  recommendedCompany String?
   residenceStatus String
   partnerId       Int?
   channel         String

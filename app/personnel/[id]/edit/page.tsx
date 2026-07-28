@@ -13,6 +13,7 @@ import CreateResumeButton from "./CreateResumeButton";
 import IntakeLinkButton from "./IntakeLinkButton";
 import PreparationPanel, { type PreparationState } from "./PreparationPanel";
 import TestResetPanel from "./TestResetPanel";
+import RecommendedCompanySelect from "./RecommendedCompanySelect";
 import JapaneseCheckPanel, {
   type JapaneseCheckView,
   type JapaneseCheckRecordingView,
@@ -29,7 +30,7 @@ export const dynamic = "force-dynamic";
 export default async function EditPersonPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const personId = Number(id);
-  const [person, partners, customQuestions, placement, invoices, deals] = await Promise.all([
+  const [person, partners, customQuestions, placement, invoices, deals, companies] = await Promise.all([
     prisma.person.findUnique({
       where: { id: personId },
       include: {
@@ -37,6 +38,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
         documents: true,
         resumeProfile: true,
         japaneseCheck: true,
+        dealCandidates: { select: { deal: { select: { company: { select: { name: true } } } } } },
       },
     }),
     prisma.partner.findMany({
@@ -60,8 +62,15 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
       orderBy: { updatedAt: "desc" },
       select: { id: true, title: true, company: { select: { name: true } } },
     }),
+    prisma.company.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
   ]);
   if (!person) notFound();
+
+  // 推薦先企業: 案件から導出した企業名 (紐づけ済み) と、選択肢になる全企業名
+  const dealCompanies = Array.from(
+    new Set(person.dealCandidates.map((dc) => dc.deal.company.name).filter(Boolean)),
+  );
+  const companyOptions = companies.map((c) => c.name).filter(Boolean);
 
   const toDate = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
@@ -216,6 +225,14 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
             personId={person.id}
             personName={person.name}
             initialPhotoUrl={person.photoUrl}
+            extraControl={
+              <RecommendedCompanySelect
+                personId={person.id}
+                initial={person.recommendedCompany}
+                companyOptions={companyOptions}
+                dealCompanies={dealCompanies}
+              />
+            }
             iconActions={
               <>
                 <ExtractPanel

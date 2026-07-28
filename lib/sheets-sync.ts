@@ -191,6 +191,8 @@ export type PersonForSync = {
   nationality: string;
   residenceStatus: string;
   driveFolderUrl: string | null;
+  /** 推薦先企業の手動上書き。設定時はこちらを優先。 */
+  recommendedCompany?: string | null;
   createdAt: Date;
   /** 変更検知用。Person 自体の更新日時 */
   updatedAt?: Date;
@@ -268,9 +270,14 @@ export function buildCandidateRow(p: PersonForSync): (string | number)[] {
   const sortedCandidates = (p.dealCandidates ?? [])
     .slice()
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-  const recommendedCompanies = Array.from(
+  const derivedCompanies = Array.from(
     new Set(sortedCandidates.map((c) => c.deal.company.name).filter(Boolean)),
   ).join(", ");
+  // 手動上書き (recommendedCompany) があれば優先、なければ案件から導出
+  const recommendedCompanies =
+    p.recommendedCompany && p.recommendedCompany.trim().length > 0
+      ? p.recommendedCompany.trim()
+      : derivedCompanies;
   const latestStage = sortedCandidates[0]?.stage ?? "";
 
   return [

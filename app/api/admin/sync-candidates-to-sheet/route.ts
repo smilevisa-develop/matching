@@ -60,6 +60,7 @@ export async function GET(req: Request) {
         nationality: true,
         residenceStatus: true,
         driveFolderUrl: true,
+        recommendedCompany: true,
         createdAt: true,
         updatedAt: true,
         sheetSyncedAt: true,

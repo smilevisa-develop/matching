@@ -16,11 +16,14 @@ export default function PhotoPanel({
   personName,
   initialPhotoUrl,
   iconActions,
+  extraControl,
 }: {
   personId: number;
   personName: string;
   initialPhotoUrl: string | null;
   iconActions?: ReactNode;
+  /** 名前の下に表示する追加コントロール (推薦先企業の選択など) */
+  extraControl?: ReactNode;
 }) {
   const router = useRouter();
   const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl);
@@ -83,35 +86,42 @@ export default function PhotoPanel({
 
   return (
     <section className="flex w-full items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-      <PersonAvatar
-        photoUrl={photoUrl}
-        name={personName}
-        size={80}
-        className="rounded-2xl border border-gray-200 shadow-sm"
-      />
+      {/* アバター自体をクリックで写真変更 (目立つアップロードボタンは廃止) */}
+      <label
+        className="group relative shrink-0 cursor-pointer"
+        title="クリックで写真を変更"
+      >
+        <PersonAvatar
+          photoUrl={photoUrl}
+          name={personName}
+          size={80}
+          className="rounded-2xl border border-gray-200 shadow-sm"
+        />
+        <span className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/45 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+          {uploading ? "読み込み中…" : "写真を変更"}
+        </span>
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => void handleUpload(event.target.files?.[0] ?? null)}
+        />
+      </label>
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <p className="truncate text-sm font-semibold text-[var(--color-text-dark)]">{personName}</p>
           <EditableIdBadge personId={personId} size="md" />
+          {photoUrl ? (
+            <button
+              type="button"
+              onClick={() => void removePhoto()}
+              className="text-[11px] text-gray-400 hover:text-gray-600 hover:underline"
+            >
+              写真を削除
+            </button>
+          ) : null}
         </div>
-        <label className="inline-flex cursor-pointer items-center rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-primary-hover)]">
-          {uploading ? "読み込み中..." : "写真をアップロード"}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(event) => void handleUpload(event.target.files?.[0] ?? null)}
-          />
-        </label>
-        {photoUrl ? (
-          <button
-            type="button"
-            onClick={() => void removePhoto()}
-            className="block text-[11px] text-gray-500 hover:underline"
-          >
-            写真を削除
-          </button>
-        ) : null}
+        {extraControl}
       </div>
       {iconActions ? (
         <div className="ml-auto flex shrink-0 items-center gap-3">{iconActions}</div>
