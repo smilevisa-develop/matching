@@ -74,12 +74,16 @@ async function getGoogleClients() {
 }
 
 function parseDataUrl(dataUrl: string) {
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  // MIME に codecs 等のパラメータが付く場合がある
+  //   例: "data:audio/webm;codecs=opus;base64,..." (Android Chrome の録音など)
+  // ";base64," が MIME 直後とは限らないので、最後の ";base64," で分割する。
+  const match = dataUrl.match(/^data:([^,]+);base64,(.+)$/);
   if (!match) {
     throw new Error("アップロード用データが不正です");
   }
   return {
-    mimeType: match[1],
+    // codecs 等のパラメータを落として基本 MIME (例: audio/webm) にする
+    mimeType: match[1].split(";")[0].trim(),
     buffer: Buffer.from(match[2], "base64"),
   };
 }

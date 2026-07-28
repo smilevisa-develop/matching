@@ -166,9 +166,9 @@ export default function IntakeClient({
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 録音を判定エンドポイントに送る。成否を返す (失敗時は完了扱いにしない)
-  const uploadRecordings = async (): Promise<boolean> => {
-    if (recordings.length === 0) return true;
+  // 録音を判定エンドポイントに送る。成否 + エラー詳細を返す
+  const uploadRecordings = async (): Promise<{ ok: boolean; error?: string }> => {
+    if (recordings.length === 0) return { ok: true };
     try {
       setUploadNote("録音を送信しています… / Sending your recordings…");
       const res = await fetch(`/api/intake/${token}/japanese-check`, {
@@ -178,16 +178,15 @@ export default function IntakeClient({
           recordings: recordings.map((r) => ({ key: r.key, dataUrl: r.dataUrl })),
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      setUploadNote(null);
       if (!res.ok || !data.ok) {
-        setUploadNote(null);
-        return false;
+        return { ok: false, error: data.error ?? `HTTP ${res.status}` };
       }
+      return { ok: true };
+    } catch (e) {
       setUploadNote(null);
-      return true;
-    } catch {
-      setUploadNote(null);
-      return false;
+      return { ok: false, error: e instanceof Error ? e.message : "通信エラー" };
     }
   };
   const prev = () => {
@@ -246,9 +245,11 @@ export default function IntakeClient({
       // フォーム送信が成功したら、録音も送る。録音の保存に失敗したら完了にしない
       // (候補者が「送れたつもり」で分析側に届かない事故を防ぐ)
       const uploaded = await uploadRecordings();
-      if (!uploaded) {
+      if (!uploaded.ok) {
         setError(
-          "録音の送信に失敗しました。通信環境の良い場所で、もう一度「送信する」を押してください。 / Failed to send recordings. Please try again.",
+          `録音の送信に失敗しました。もう一度「送信する」を押してください。 / Failed to send recordings.${
+            uploaded.error ? `（${uploaded.error}）` : ""
+          }`,
         );
         return;
       }

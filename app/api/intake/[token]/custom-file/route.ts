@@ -21,9 +21,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 function parseDataUrl(dataUrl: string): { mimeType: string } | null {
-  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  // MIME に codecs 等のパラメータが付くことがあるので、最後の ";base64," で分割する
+  const m = dataUrl.match(/^data:([^,]+);base64,(.+)$/);
   if (!m) return null;
-  return { mimeType: m[1] };
+  return { mimeType: m[1].split(";")[0].trim() };
 }
 
 /** ファイル名の拡張子を安全に取り出す (無ければ空) */

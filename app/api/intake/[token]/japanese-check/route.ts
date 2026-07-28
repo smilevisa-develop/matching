@@ -32,9 +32,14 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 function parseDataUrl(dataUrl: string): { mimeType: string; base64: string } | null {
-  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  // MIME に codecs 等のパラメータが付く場合がある
+  //   例: "data:audio/webm;codecs=opus;base64,...." (Android Chrome など)
+  // ";base64," が MIME 直後とは限らないので、最後の ";base64," で分割する。
+  const m = dataUrl.match(/^data:([^,]+);base64,(.+)$/);
   if (!m) return null;
-  return { mimeType: m[1], base64: m[2] };
+  // codecs 等のパラメータを落として基本 MIME (例: audio/webm) にする
+  const mimeType = m[1].split(";")[0].trim();
+  return { mimeType, base64: m[2] };
 }
 
 /** 音声 MIME → ファイル拡張子 */
