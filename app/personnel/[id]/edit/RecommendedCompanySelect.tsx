@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import SearchableSelect from "@/app/components/SearchableSelect";
 
 /**
  * 推薦先企業の選択 (候補者詳細ヘッダー)。
@@ -82,19 +83,16 @@ export default function RecommendedCompanySelect({
     <div className="min-w-0">
       <label className="block text-[11px] font-medium text-gray-500">推薦先企業</label>
       <div className="mt-0.5 flex items-center gap-2">
-        <select
-          value={value}
-          disabled={saving}
-          onChange={(e) => void handleChange(e.target.value)}
-          className="min-w-0 max-w-[220px] flex-1 truncate rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
-        >
-          <option value="">未設定</option>
-          {options.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        <div className="max-w-[240px] flex-1">
+          <SearchableSelect
+            items={options.map((c) => ({ id: c, name: c }))}
+            value={value}
+            onChange={(v) => void handleChange(v)}
+            placeholder="未設定（企業を選択）"
+            emptyValueLabel="未設定"
+            searchPlaceholder="企業名で検索…"
+          />
+        </div>
         {saving ? (
           <span className="text-[11px] text-gray-400">保存中…</span>
         ) : saved ? (

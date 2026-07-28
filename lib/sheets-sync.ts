@@ -42,6 +42,8 @@ export const DATA_START_ROW = 3;
  * 書式を YYYY/MM/DD に揃えたうえで USER_ENTERED で書き込み、日付型を維持する。
  */
 export const DATE_COLUMN_INDEXES = [1, 15, 16] as const;
+/** 数値として書き込む列 (A ID / O 年齢)。右寄せ・数値書式を維持する。 */
+export const NUMBER_COLUMN_INDEXES = [0, 14] as const;
 
 /**
  * "2026-04-04" / "2026-4-4" → "2026/04/04" に揃える。
@@ -922,7 +924,11 @@ export async function syncCandidatesUpsert(args: {
     if ((DATE_COLUMN_INDEXES as readonly number[]).includes(col)) {
       return toSheetDate(sys);
     }
-    if (existedNumber && /^\d+$/.test(sys)) return Number(sys);
+    // 数値列 (ID / 年齢) は、既存が数値でも / 新規行 (既存セル無し) でも数値で書く。
+    //   → 新規追加分が文字列 (左寄せ) にならず、既存の数値セル (右寄せ) と揃う。
+    //   ID の "0289" は数値 289 で書き、表示は列書式 (0000) で 0289 にする。
+    const isNumberCol = (NUMBER_COLUMN_INDEXES as readonly number[]).includes(col);
+    if ((existedNumber || isNumberCol) && /^\d+$/.test(sys)) return Number(sys);
     return sysValue;
   };
 
@@ -1072,6 +1078,23 @@ export async function syncCandidatesUpsert(args: {
         spreadsheetId: opts.spreadsheetId,
         requestBody: { valueInputOption: "USER_ENTERED", data: dateData },
       });
+    }
+
+    // 新規追加があった場合、列書式 (ID=0000, 年齢=0, 日付列=yyyy/mm/dd) を
+    // データ範囲全体に再適用して、新規行を既存行と同じ表示 (右寄せ・0289) に揃える。
+    // (新規行はセル書式を継承しないため、これをしないと左寄せ・書式なしになる)
+    if (appends.length > 0) {
+      try {
+        await applySheetColumnFormats({
+          spreadsheetId: opts.spreadsheetId,
+          sheetName,
+          apply: true,
+        });
+      } catch (e) {
+        warnings.push(
+          `列書式の自動適用に失敗しました (値は反映済み): ${e instanceof Error ? e.message : "error"}`,
+        );
+      }
     }
   }
 
