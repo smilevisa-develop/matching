@@ -41,6 +41,7 @@ export default function IntakeClient({
   residenceStatus,
   excludedKeys,
   customQuestions,
+  japaneseCheckEnabled = true,
   initial,
 }: {
   token: string;
@@ -49,6 +50,7 @@ export default function IntakeClient({
   residenceStatus: string | null;
   excludedKeys: string[];
   customQuestions: CustomQuestion[];
+  japaneseCheckEnabled?: boolean;
   initial: InitialAnswers;
 }) {
   const [form, setForm] = useState<InitialAnswers>(initial);
@@ -93,17 +95,19 @@ export default function IntakeClient({
         questions: customQuestions.map((q) => ({ kind: "custom" as const, q })),
       });
     }
-    // 最後に日本語チェック (録音) ページを付ける
-    blocks.push({
-      title: "日本語チェック / Japanese check",
-      description:
-        "3 つの質問に声で答えてください。ボタンを押して話し、もう一度押すと止まります。/ Please answer 3 questions by voice.",
-      japaneseCheck: true,
-      questions: [],
-    });
+    // 最後に日本語チェック (録音) ページを付ける (設定で ON のときだけ)
+    if (japaneseCheckEnabled) {
+      blocks.push({
+        title: "日本語チェック / Japanese check",
+        description:
+          "3 つの質問に声で答えてください。ボタンを押して話し、もう一度押すと止まります。/ Please answer 3 questions by voice.",
+        japaneseCheck: true,
+        questions: [],
+      });
+    }
     return blocks;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [residenceStatus, location, excludedKeys, customQuestions, isAnswered]);
+  }, [residenceStatus, location, excludedKeys, customQuestions, isAnswered, japaneseCheckEnabled]);
 
   const totalPages = pages.length;
   // 居住地の回答で分岐が変わりページ数が減ることがあるので、必ず範囲内に丸める

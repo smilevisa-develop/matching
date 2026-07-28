@@ -38,6 +38,7 @@ export default function IntakeFormBuilderModal({
 }: Props) {
   const [excludedKeys, setExcludedKeys] = useState<string[]>([]);
   const [customQuestions, setCustomQuestions] = useState<CustomQuestion[]>([]);
+  const [japaneseCheckEnabled, setJapaneseCheckEnabled] = useState(true);
   const [newLabel, setNewLabel] = useState("");
   const [newType, setNewType] = useState<"text" | "textarea">("text");
   const [newRequired, setNewRequired] = useState(false);
@@ -79,6 +80,7 @@ export default function IntakeFormBuilderModal({
                 }))
               : []
           );
+          setJapaneseCheckEnabled(d.japaneseCheckEnabled !== false);
           if (d.path) setIssuedUrl(`${window.location.origin}${d.path}`);
         }
       })
@@ -117,7 +119,7 @@ export default function IntakeFormBuilderModal({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ excludedKeys, customQuestions }),
+          body: JSON.stringify({ excludedKeys, customQuestions, japaneseCheckEnabled }),
         }
       );
       const data = await res.json();
@@ -267,6 +269,51 @@ export default function IntakeFormBuilderModal({
                     除外中: {excludedKeys.length} 件 (取り消し線のチップ ↺ で復活)
                   </p>
                 ) : null}
+              </div>
+
+              {/* 日本語簡易調査の ON/OFF */}
+              <div
+                className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${
+                  japaneseCheckEnabled
+                    ? "border-[var(--color-primary)]/30 bg-[var(--color-light)]"
+                    : "border-gray-200 bg-white"
+                }`}
+              >
+                <div>
+                  <p className="text-sm font-semibold text-[var(--color-text-dark)]">
+                    🎙️ 日本語の簡易調査（録音）
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    フォームの最後で 3 問を声で回答してもらい、AI が日本語レベルを判定します。
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span
+                    className={`text-xs font-bold ${
+                      japaneseCheckEnabled ? "text-[var(--color-primary)]" : "text-gray-400"
+                    }`}
+                  >
+                    {japaneseCheckEnabled ? "ON" : "OFF"}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={japaneseCheckEnabled}
+                    onClick={() => setJapaneseCheckEnabled((v) => !v)}
+                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                      japaneseCheckEnabled ? "bg-[var(--color-primary)]" : "bg-gray-300"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        japaneseCheckEnabled ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                    <span className="sr-only">
+                      日本語の簡易調査を{japaneseCheckEnabled ? "オフ" : "オン"}にする
+                    </span>
+                  </button>
+                </div>
               </div>
 
               <div>

@@ -51,6 +51,8 @@ export default async function IntakePage({
         }))
         .filter((q) => q.key && q.label)
     : [];
+  // 日本語簡易調査を含めるか (未指定は既定で ON)
+  const japaneseCheckEnabled = cfg.japaneseCheckEnabled !== false;
 
   return (
     <IntakeClient
@@ -60,6 +62,7 @@ export default async function IntakePage({
       residenceStatus={person.residenceStatus ?? null}
       excludedKeys={excludedKeys}
       customQuestions={customQuestions as { key: string; label: string; required: boolean; type: "text" | "textarea" }[]}
+      japaneseCheckEnabled={japaneseCheckEnabled}
       initial={{
         motivation: person.resumeProfile?.motivation ?? "",
         selfIntroduction: person.resumeProfile?.selfIntroduction ?? "",
