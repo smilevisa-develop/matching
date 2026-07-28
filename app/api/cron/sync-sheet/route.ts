@@ -19,6 +19,11 @@ import {
   SYNC_SHEET_TAB_NAME,
   type PersonForSync,
 } from "@/lib/sheets-sync";
+import {
+  readCompanyMasterFromSheet,
+  resolveCompanyMasterSpreadsheetId,
+  upsertCompanyMaster,
+} from "@/lib/company-master-sync";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,6 +74,21 @@ export async function GET(req: Request) {
     );
   }
 
+  // 候補者同期の前に、企業マスタ (スプシ) を Company に反映する。
+  // (推薦先の「企業ID_企業名」を常に最新の企業マスタに追従させるため)
+  // 失敗しても候補者同期は続行する。
+  let companyMaster: { updated: number; created: number } | null = null;
+  try {
+    const masterId = resolveCompanyMasterSpreadsheetId();
+    if (masterId) {
+      const master = await readCompanyMasterFromSheet(masterId);
+      const r = await upsertCompanyMaster(master, true);
+      companyMaster = { updated: r.updated.length, created: r.created.length };
+    }
+  } catch (e) {
+    console.warn("企業マスタ同期に失敗 (候補者同期は継続):", e instanceof Error ? e.message : e);
+  }
+
   const rawPersons = await prisma.person.findMany({
     orderBy: { id: "asc" },
     select: {
@@ -77,6 +97,7 @@ export async function GET(req: Request) {
       nationality: true,
       residenceStatus: true,
       driveFolderUrl: true,
+      recommendedCompany: true,
       createdAt: true,
       updatedAt: true,
       sheetSyncedAt: true,
@@ -120,7 +141,7 @@ export async function GET(req: Request) {
         result.syncedPersonIds,
       );
     }
-    return Response.json({ ok: true, result, at: new Date().toISOString() });
+    return Response.json({ ok: true, result, companyMaster, at: new Date().toISOString() });
   } catch (error) {
     console.error("cron/sync-sheet error:", error);
     return Response.json(
