@@ -60,12 +60,12 @@ export default function JapaneseCheckPanel({
       <section className="rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-            日本語チェック(AI)
+            日本語チェック
           </p>
           <span className="text-[12px] text-gray-400">未実施</span>
         </div>
         <p className="mt-1.5 text-[12px] text-gray-500">
-          フォーム（intake リンク）の最後で候補者が 3 問を録音すると、AI が日本語レベルを判定します。
+          フォームの最後で候補者が 3 問を録音すると、AI が日本語レベルを判定します。
         </p>
       </section>
     );
@@ -106,7 +106,7 @@ export default function JapaneseCheckPanel({
       >
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-            日本語チェック(AI)
+            日本語チェック
           </span>
           {assessed ? (
             <span
