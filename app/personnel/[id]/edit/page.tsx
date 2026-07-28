@@ -14,6 +14,7 @@ import IntakeLinkButton from "./IntakeLinkButton";
 import PreparationPanel, { type PreparationState } from "./PreparationPanel";
 import TestResetPanel from "./TestResetPanel";
 import RecommendedCompanySelect from "./RecommendedCompanySelect";
+import { companyLabel } from "@/lib/company-label";
 import JapaneseCheckPanel, {
   type JapaneseCheckView,
   type JapaneseCheckRecordingView,
@@ -38,7 +39,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
         documents: true,
         resumeProfile: true,
         japaneseCheck: true,
-        dealCandidates: { select: { deal: { select: { company: { select: { name: true } } } } } },
+        dealCandidates: { select: { deal: { select: { company: { select: { name: true, externalId: true } } } } } },
       },
     }),
     prisma.partner.findMany({
@@ -62,15 +63,21 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
       orderBy: { updatedAt: "desc" },
       select: { id: true, title: true, company: { select: { name: true } } },
     }),
-    prisma.company.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    prisma.company.findMany({ orderBy: { name: "asc" }, select: { name: true, externalId: true } }),
   ]);
   if (!person) notFound();
 
-  // 推薦先企業: 案件から導出した企業名 (紐づけ済み) と、選択肢になる全企業名
+  // 推薦先企業は「企業ID_企業名」の合体形で扱う (内定者/請求が企業IDを引ける形)
   const dealCompanies = Array.from(
-    new Set(person.dealCandidates.map((dc) => dc.deal.company.name).filter(Boolean)),
+    new Set(
+      person.dealCandidates
+        .map((dc) => companyLabel(dc.deal.company.externalId, dc.deal.company.name))
+        .filter(Boolean),
+    ),
   );
-  const companyOptions = companies.map((c) => c.name).filter(Boolean);
+  const companyOptions = companies
+    .map((c) => companyLabel(c.externalId, c.name))
+    .filter(Boolean);
 
   const toDate = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 

@@ -27,6 +27,7 @@
 import { google, type sheets_v4 } from "googleapis";
 import { formatPersonIdPrefix } from "@/lib/google-docs";
 import { calculateAge } from "@/lib/candidate-profile";
+import { companyLabel } from "@/lib/company-label";
 
 /** 書き込み先シート名 (正規の DB シート) */
 export const SYNC_SHEET_TAB_NAME = "DB";
@@ -226,7 +227,7 @@ export type PersonForSync = {
   dealCandidates?: {
     stage: string;
     updatedAt: Date;
-    deal: { company: { name: string } };
+    deal: { company: { name: string; externalId: string | null } };
   }[];
 };
 
@@ -272,8 +273,13 @@ export function buildCandidateRow(p: PersonForSync): (string | number)[] {
   const sortedCandidates = (p.dealCandidates ?? [])
     .slice()
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  // 推薦先は「企業ID_企業名」の合体形で書き出す (内定者/請求が企業IDを引ける形)
   const derivedCompanies = Array.from(
-    new Set(sortedCandidates.map((c) => c.deal.company.name).filter(Boolean)),
+    new Set(
+      sortedCandidates
+        .map((c) => companyLabel(c.deal.company.externalId, c.deal.company.name))
+        .filter(Boolean),
+    ),
   ).join(", ");
   // 手動上書き (recommendedCompany) があれば優先、なければ案件から導出
   const recommendedCompanies =

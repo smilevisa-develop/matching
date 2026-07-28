@@ -100,7 +100,7 @@ export async function GET(req: Request) {
         select: {
           stage: true,
           updatedAt: true,
-          deal: { select: { company: { select: { name: true } } } },
+          deal: { select: { company: { select: { name: true, externalId: true } } } },
         },
         orderBy: { updatedAt: "desc" },
       },
