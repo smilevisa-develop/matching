@@ -27,7 +27,9 @@ export default function RecommendedCompanySelect({
   dealCompanies: string[];
 }) {
   const router = useRouter();
-  const [value, setValue] = useState(initial ?? "");
+  // 案件から導出した企業 (紐づけ済み)。手動上書きが無ければこれを自動表示する。
+  const autoValue = dealCompanies.join(", ");
+  const [value, setValue] = useState(initial ?? autoValue);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -71,12 +73,15 @@ export default function RecommendedCompanySelect({
       if (!ok) return; // キャンセル → 変更しない
     }
     setValue(next);
-    await save(next);
+    // 案件由来の値と同じなら手動上書きは保存しない (自動反映のまま = 空)
+    await save(next && next === autoValue ? "" : next);
   };
 
   // 選択肢: 企業一覧 + (案件由来だが一覧に無い企業も念のため足す)
   const options = Array.from(
-    new Set([...companyOptions, ...dealCompanies, ...(initial ? [initial] : [])].filter(Boolean)),
+    new Set(
+      [...companyOptions, ...dealCompanies, autoValue, initial ?? "", value].filter(Boolean),
+    ),
   ).sort((a, b) => a.localeCompare(b, "ja"));
 
   return (
@@ -99,13 +104,6 @@ export default function RecommendedCompanySelect({
           <span className="text-[11px] font-medium text-[#15803D]">保存しました</span>
         ) : null}
       </div>
-      {/* 案件から導出された企業 (参考表示) */}
-      {dealCompanies.length > 0 ? (
-        <p className="mt-1 text-[11px] text-gray-400">
-          案件から: {dealCompanies.join("・")}
-          {!value ? "（未設定なら自動でこれを反映）" : null}
-        </p>
-      ) : null}
     </div>
   );
 }
