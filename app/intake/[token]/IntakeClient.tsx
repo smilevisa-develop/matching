@@ -7,6 +7,8 @@ import {
   parseLocationAnswer,
   type InterviewQuestion,
 } from "@/lib/interview-questions";
+import { JAPANESE_CHECK_QUESTIONS } from "@/lib/japanese-check-questions";
+import JapaneseCheckSection, { type Recorded } from "./JapaneseCheckSection";
 
 type ExistingFields = "motivation" | "selfIntroduction" | "japanPurpose" | "currentJob" | "retirementReason";
 
@@ -24,6 +26,8 @@ type CustomQuestion = {
 type PageBlock = {
   title: string;
   description?: string;
+  /** 日本語チェック (録音) ページなら true。この場合 questions は空 */
+  japaneseCheck?: boolean;
   questions: (
     | { kind: "interview"; q: InterviewQuestion }
     | { kind: "custom"; q: CustomQuestion }
@@ -52,6 +56,10 @@ export default function IntakeClient({
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pageIdx, setPageIdx] = useState(0);
+  // 日本語チェック: 録音と同意
+  const [recordings, setRecordings] = useState<Recorded[]>([]);
+  const [audioConsent, setAudioConsent] = useState(false);
+  const [uploadNote, setUploadNote] = useState<string | null>(null);
 
   // 「今どこに住んでいますか」の回答が分岐のドライバ。
   // 未回答なら null → 分岐条件つきの質問は隠さない (安全側)
@@ -85,6 +93,14 @@ export default function IntakeClient({
         questions: customQuestions.map((q) => ({ kind: "custom" as const, q })),
       });
     }
+    // 最後に日本語チェック (録音) ページを付ける
+    blocks.push({
+      title: "日本語チェック / Japanese check",
+      description:
+        "3 つの質問に声で答えてください。ボタンを押して話し、もう一度押すと止まります。/ Please answer 3 questions by voice.",
+      japaneseCheck: true,
+      questions: [],
+    });
     return blocks;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [residenceStatus, location, excludedKeys, customQuestions, isAnswered]);
@@ -103,9 +119,16 @@ export default function IntakeClient({
     setForm((c) => ({ ...c, interviewAnswers: { ...c.interviewAnswers, [key]: value } }));
   };
 
-  // 必須カスタム質問の充足チェック (現ページ分)
+  const recordedKeys = useMemo(() => new Set(recordings.map((r) => r.key)), [recordings]);
+  const allRecorded = JAPANESE_CHECK_QUESTIONS.every((q) => recordedKeys.has(q.key));
+
+  // 必須の未充足チェック (現ページ分)
   const currentPageInvalid = useMemo(() => {
     if (!currentPage) return false;
+    if (currentPage.japaneseCheck) {
+      // 全問録音 + 同意 が揃うまで進めない
+      return !allRecorded || !audioConsent;
+    }
     for (const item of currentPage.questions) {
       if (item.kind === "custom" && item.q.required) {
         const v = form.interviewAnswers[item.q.key] ?? "";
@@ -113,7 +136,7 @@ export default function IntakeClient({
       }
     }
     return false;
-  }, [currentPage, form]);
+  }, [currentPage, form, allRecorded, audioConsent]);
 
   const next = () => {
     if (currentPageInvalid) {
@@ -122,6 +145,29 @@ export default function IntakeClient({
     }
     setPageIdx((i) => Math.min(i + 1, totalPages - 1));
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // 録音を Gemini 判定エンドポイントに送る (失敗しても本送信は止めない)
+  const uploadRecordings = async () => {
+    if (recordings.length === 0) return;
+    try {
+      setUploadNote("日本語チェックを送信中...");
+      const res = await fetch(`/api/intake/${token}/japanese-check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recordings: recordings.map((r) => ({ key: r.key, dataUrl: r.dataUrl })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setUploadNote(`日本語チェックの送信に失敗しました: ${data.error ?? res.statusText}`);
+      } else {
+        setUploadNote(null);
+      }
+    } catch (e) {
+      setUploadNote(`日本語チェックの送信に失敗しました: ${e instanceof Error ? e.message : "error"}`);
+    }
   };
   const prev = () => {
     setPageIdx((i) => Math.max(i - 1, 0));
@@ -146,6 +192,8 @@ export default function IntakeClient({
         setError(data.error ?? "送信に失敗しました");
         return;
       }
+      // フォーム送信が成功したら、録音も送る (判定に時間がかかっても完了扱いにする)
+      await uploadRecordings();
       setSubmitted(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "error");
@@ -233,36 +281,60 @@ export default function IntakeClient({
           {currentPage.description ? (
             <p className="mt-1 text-xs text-gray-500">{currentPage.description}</p>
           ) : null}
-          <div className="mt-5 space-y-5">
-            {currentPage.questions.map((item) =>
-              item.kind === "interview" ? (
-                <QuestionField
-                  key={`i_${item.q.key}`}
-                  label={item.q.question}
-                  hint={item.q.hint}
-                  type={item.q.type === "textarea" ? "textarea" : item.q.type === "select" ? "select" : "text"}
-                  options={item.q.options}
-                  value={
-                    item.q.existingField
-                      ? form[item.q.existingField]
-                      : form.interviewAnswers[item.q.jsonKey ?? item.q.key] ?? ""
-                  }
-                  onChange={(v) => {
-                    if (item.q.existingField) setExisting(item.q.existingField, v);
-                    else setAnswer(item.q.jsonKey ?? item.q.key, v);
-                  }}
+          {currentPage.japaneseCheck ? (
+            <div className="mt-5 space-y-4">
+              <JapaneseCheckSection
+                questions={JAPANESE_CHECK_QUESTIONS}
+                onChange={setRecordings}
+              />
+              <label className="flex items-start gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={audioConsent}
+                  onChange={(e) => setAudioConsent(e.target.checked)}
+                  className="mt-0.5 accent-[var(--color-primary)]"
                 />
-              ) : (
-                <QuestionField
-                  key={`c_${item.q.key}`}
-                  label={item.q.label + (item.q.required ? " *" : "")}
-                  type={item.q.type}
-                  value={form.interviewAnswers[item.q.key] ?? ""}
-                  onChange={(v) => setAnswer(item.q.key, v)}
-                />
-              )
-            )}
-          </div>
+                <span>
+                  録音した音声を、選考のために保存・利用することに同意します。<br />
+                  I agree that my voice recordings may be stored and used for screening.
+                </span>
+              </label>
+              {uploadNote ? (
+                <p className="text-[11px] text-amber-600">{uploadNote}</p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-5 space-y-5">
+              {currentPage.questions.map((item) =>
+                item.kind === "interview" ? (
+                  <QuestionField
+                    key={`i_${item.q.key}`}
+                    label={item.q.question}
+                    hint={item.q.hint}
+                    type={item.q.type === "textarea" ? "textarea" : item.q.type === "select" ? "select" : "text"}
+                    options={item.q.options}
+                    value={
+                      item.q.existingField
+                        ? form[item.q.existingField]
+                        : form.interviewAnswers[item.q.jsonKey ?? item.q.key] ?? ""
+                    }
+                    onChange={(v) => {
+                      if (item.q.existingField) setExisting(item.q.existingField, v);
+                      else setAnswer(item.q.jsonKey ?? item.q.key, v);
+                    }}
+                  />
+                ) : (
+                  <QuestionField
+                    key={`c_${item.q.key}`}
+                    label={item.q.label + (item.q.required ? " *" : "")}
+                    type={item.q.type}
+                    value={form.interviewAnswers[item.q.key] ?? ""}
+                    onChange={(v) => setAnswer(item.q.key, v)}
+                  />
+                )
+              )}
+            </div>
+          )}
         </section>
 
         {error ? (
