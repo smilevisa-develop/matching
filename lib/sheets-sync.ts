@@ -352,6 +352,31 @@ function cellStr(v: unknown): string {
   return String(v).trim();
 }
 
+/** ID ブロックが途切れたとみなす連続空行数。これ以上空くと「取り残し」扱い */
+const STRAND_GAP_THRESHOLD = 30;
+
+/**
+ * 候補者 ID の「本体ブロックの終端行 (1-based)」を求める。
+ *
+ * ブロック内には数行の空行が散在するので、単に「最初の空行まで」では駄目。
+ * ID 行の間隔が STRAND_GAP_THRESHOLD を超えたら、そこから先は取り残しとみなし、
+ * 直前の ID 行を終端とする。ID が 1 つも無ければヘッダ直後 (DATA_START_ROW-1)。
+ */
+function findBlockEndRow(rows: unknown[][]): number {
+  let blockEnd = DATA_START_ROW - 1;
+  let prevIdRow = DATA_START_ROW - 1;
+  for (let i = DATA_START_ROW - 1; i < rows.length; i++) {
+    if (!/^\d{1,6}$/.test(cellStr(rows[i]?.[0]))) continue;
+    const rowNo = i + 1;
+    if (blockEnd !== DATA_START_ROW - 1 && rowNo - prevIdRow > STRAND_GAP_THRESHOLD) {
+      break; // 大きな隙間 → ここから先は取り残し
+    }
+    blockEnd = rowNo;
+    prevIdRow = rowNo;
+  }
+  return blockEnd;
+}
+
 /**
  * この候補者が「システム側で変更されたか」を判定する。
  *
@@ -565,6 +590,125 @@ export async function repairSheetCellTypes(args: {
 }
 
 /**
+ * DB シートの行レイアウトを診断する。書き込みは一切しない。
+ *
+ * values.append が取り残しデータの下に飛ぶ問題を調べる用。
+ *   - 候補者ブロックの最後の ID 行
+ *   - その後に空行が続いたあと、離れた位置に取り残された行 (stranded)
+ */
+export async function inspectSheetLayout(args: {
+  spreadsheetId: string;
+  sheetName?: string;
+}): Promise<{
+  sheetName: string;
+  lastIdRow: number;
+  strandedRows: { row: number; a: string; c: string; d: string }[];
+}> {
+  const sheetName = args.sheetName ?? SYNC_SHEET_TAB_NAME;
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: args.spreadsheetId,
+    range: `${quoteSheetName(sheetName)}!A:W`,
+    valueRenderOption: "UNFORMATTED_VALUE",
+  });
+  const rows: unknown[][] = (res.data.values ?? []) as unknown[][];
+
+  // 本体ブロックの終端 (大きな隙間の手前)
+  const blockEnd = findBlockEndRow(rows);
+
+  // ブロック終端より下で、何か値のある行 = 取り残し
+  const strandedRows: { row: number; a: string; c: string; d: string }[] = [];
+  for (let i = blockEnd; i < rows.length; i++) {
+    const row = rows[i] ?? [];
+    if (row.some((c) => cellStr(c) !== "")) {
+      strandedRows.push({
+        row: i + 1,
+        a: cellStr(row[0]),
+        c: cellStr(row[2]),
+        d: cellStr(row[3]),
+      });
+    }
+  }
+
+  return { sheetName, lastIdRow: blockEnd, strandedRows };
+}
+
+/**
+ * 取り残された候補者行を、ブロック直後の空行に詰め直す。
+ * 元の行はクリアする。値・型はそのまま保つ (再構築しない)。
+ *
+ * strandedOnly=true (既定) なら、連続ブロックの下に離れて存在する
+ * ID 行だけを対象にする。区切り行 (数字でない ID) は動かさない。
+ */
+export async function compactStrandedRows(args: {
+  spreadsheetId: string;
+  sheetName?: string;
+  apply: boolean;
+}): Promise<{
+  sheetName: string;
+  apply: boolean;
+  moved: { id: string; from: number; to: number }[];
+  cleared: number[];
+}> {
+  const sheetName = args.sheetName ?? SYNC_SHEET_TAB_NAME;
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: args.spreadsheetId,
+    range: `${quoteSheetName(sheetName)}!A:W`,
+    valueRenderOption: "UNFORMATTED_VALUE",
+  });
+  const rows: unknown[][] = (res.data.values ?? []) as unknown[][];
+
+  // 本体ブロックの終端 (大きな隙間の手前)
+  const blockEnd = findBlockEndRow(rows);
+
+  // ブロックより下にある ID 行 (取り残し) を集める
+  const stranded: { rowNo: number; id: string; values: (string | number)[] }[] = [];
+  for (let i = blockEnd; i < rows.length; i++) {
+    const row = rows[i] ?? [];
+    if (/^\d{1,6}$/.test(cellStr(row[0]))) {
+      stranded.push({
+        rowNo: i + 1,
+        id: cellStr(row[0]).padStart(4, "0"),
+        values: row.slice(0, SYNC_HEADERS.length).map((c) => (c ?? "") as string | number),
+      });
+    }
+  }
+
+  const moved: { id: string; from: number; to: number }[] = [];
+  const cleared: number[] = [];
+  const writeData: { range: string; values: (string | number)[][] }[] = [];
+
+  let target = blockEnd + 1;
+  for (const s of stranded) {
+    moved.push({ id: s.id, from: s.rowNo, to: target });
+    // 移動先に書き込み (元の値・型のまま)
+    writeData.push({
+      range: `${quoteSheetName(sheetName)}!A${target}:W${target}`,
+      values: [s.values],
+    });
+    // 元の行をクリア (空配列で全列を消す)
+    writeData.push({
+      range: `${quoteSheetName(sheetName)}!A${s.rowNo}:W${s.rowNo}`,
+      values: [Array(SYNC_HEADERS.length).fill("")],
+    });
+    cleared.push(s.rowNo);
+    target++;
+  }
+
+  if (args.apply && writeData.length > 0) {
+    // 移動先 (ブロック直後の空行) と 元の行 (ずっと下) は重ならないので
+    // 1 回のバッチでまとめて書き込み + クリアしてよい
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: args.spreadsheetId,
+      requestBody: { valueInputOption: "RAW", data: writeData },
+    });
+  }
+
+  return { sheetName, apply: args.apply, moved, cleared };
+}
+
+/**
  * ID 列 (A 列) の実データを診断する。書き込みは一切しない。
  * 数値セルと文字列セルの混在、重複 ID を洗い出す用。
  */
@@ -747,6 +891,12 @@ export async function syncCandidatesUpsert(args: {
     }
   }
 
+  // 新規候補者の追記先 = 本体ブロックの終端の直後。
+  // values.append は "データがある最後の行の次" に書くため、シート下部に
+  // 取り残しデータがあると新規候補者がそこ (例 1005 行目) に飛んでしまう。
+  // これを避けるため、本体ブロックの終端を自前で求めて明示的に書き込む。
+  const lastIdRow = findBlockEndRow(existingRows);
+
   /**
    * 系の値を、既存セルの型に合わせた書き込み値に変換する。
    *   - 日付列: 既存が数値 (=日付セル) ならシリアル値で書く → 日付型を維持
@@ -852,16 +1002,40 @@ export async function syncCandidatesUpsert(args: {
 
     let appendedStartRow = 0;
     if (appends.length > 0) {
-      const appendRes = await sheets.spreadsheets.values.append({
-        spreadsheetId: opts.spreadsheetId,
-        range: `${quoteSheetName(sheetName)}!A:W`,
-        valueInputOption: "RAW",
-        insertDataOption: "INSERT_ROWS",
-        requestBody: { values: appends },
-      });
-      // 追記された範囲の開始行を取り出す ("'DB'!A272:W273" → 272)
-      const updatedRange = appendRes.data.updates?.updatedRange ?? "";
-      appendedStartRow = Number(updatedRange.match(/![A-Z]+(\d+)/)?.[1] ?? 0);
+      // 追記先は「最後の ID 行の次」。ただしそこから必要行数ぶんが本当に空か確認する。
+      // 空でなければ (取り残しデータ等) 安全のため values.append にフォールバック。
+      const targetStart = lastIdRow + 1;
+      const targetRowsEmpty = (() => {
+        for (let r = targetStart; r < targetStart + appends.length; r++) {
+          const row = existingRows[r - 1];
+          if (row && row.some((c) => cellStr(c) !== "")) return false;
+        }
+        return true;
+      })();
+
+      if (targetRowsEmpty) {
+        // ID ブロックの直後に詰めて書く (下部の取り残し行に飛ばない)
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: opts.spreadsheetId,
+          range: `${quoteSheetName(sheetName)}!A${targetStart}:W${targetStart + appends.length - 1}`,
+          valueInputOption: "RAW",
+          requestBody: { values: appends },
+        });
+        appendedStartRow = targetStart;
+      } else {
+        warnings.push(
+          `候補者ブロック直後 (${targetStart} 行目〜) が空でないため、末尾に追記しました。DB シート下部の余分な行を整理してください。`,
+        );
+        const appendRes = await sheets.spreadsheets.values.append({
+          spreadsheetId: opts.spreadsheetId,
+          range: `${quoteSheetName(sheetName)}!A:W`,
+          valueInputOption: "RAW",
+          insertDataOption: "INSERT_ROWS",
+          requestBody: { values: appends },
+        });
+        const updatedRange = appendRes.data.updates?.updatedRange ?? "";
+        appendedStartRow = Number(updatedRange.match(/![A-Z]+(\d+)/)?.[1] ?? 0);
+      }
     }
 
     // 日付列を USER_ENTERED で書き直し、Sheets に日付として解釈させる。
