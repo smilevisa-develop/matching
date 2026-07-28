@@ -7,7 +7,8 @@
  * 本番環境でフォーム送信テストを繰り返すための道具。
  *   - clear: プロフィール情報を消して「追加したて」の空状態に戻す
  *            (onboarding / resumeProfile / japaneseCheck を削除, 顔写真をクリア)
- *   - fill : サンプル情報を投入して「入力済み」の状態にする
+ *   - fill : サンプル情報 (基本情報・詳細情報すべて + 日本語チェックのデモ) を投入して
+ *            「入力済み」の状態にする
  *
  * 安全のため ID:280 以外では動作しない (誤操作で実候補者を消さないため)。
  * name / intakeToken / 連絡先紐づけ / パートナー等の identity は保持する。
@@ -15,6 +16,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
+import { JAPANESE_CHECK_QUESTIONS } from "@/lib/japanese-check-questions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,33 +55,75 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     if (action === "fill") {
-      // サンプル情報を投入 (顔写真・日本語チェックは実データが要るので投入しない)
+      // ── 基本情報 (onboarding) をすべて投入 ──
+      const onboardingData = {
+        englishName: "Test Taro",
+        fullNameKana: "テスト タロウ",
+        birthDate: "1998/05/10",
+        phoneNumber: "090-1234-5678",
+        postalCode: "123-4567",
+        address: "東京都新宿区テスト1-2-3 テストマンション101",
+        emergencyContactName: "テスト ハナコ",
+        emergencyContactPhone: "090-8765-4321",
+        emergencyRelationship: "姉",
+      };
       await prisma.personOnboarding.upsert({
         where: { personId },
-        create: {
-          personId,
-          englishName: "Test Taro",
-          fullNameKana: "テスト タロウ",
-          birthDate: "1998/05/10",
-          phoneNumber: "090-1234-5678",
-          postalCode: "123-4567",
-          address: "東京都新宿区テスト1-2-3 テストマンション101",
-          status: "draft",
-        },
-        update: {
-          englishName: "Test Taro",
-          fullNameKana: "テスト タロウ",
-          birthDate: "1998/05/10",
-          phoneNumber: "090-1234-5678",
-          postalCode: "123-4567",
-          address: "東京都新宿区テスト1-2-3 テストマンション101",
-        },
+        create: { personId, status: "draft", ...onboardingData },
+        update: onboardingData,
       });
 
+      // ── 詳細情報タブの面接項目をすべて投入 (interviewAnswers) ──
+      const interviewAnswers: Record<string, string> = {
+        currentLocation: "海外",
+        japanArrivalDate: "2025/09 予定",
+        employmentStatus: "在職中",
+        desiredWorkYears: "5年以上",
+        futurePlan: "現場のリーダーを目指したいです。",
+        preferredLocation: "関東（東京・神奈川・埼玉）",
+        sameJobExperience: "はい、3年あります。",
+        workChallenge: "納期に間に合わせるため作業手順を工夫しました。",
+        teamworkExperience: "5人のチームで協力して生産目標を達成しました。",
+        physicalConfidence: "はい、体力には自信があります。",
+        overtimeAcceptable: "はい、可能です。",
+        currentSalary: "月 250,000円",
+        currentOvertimeHours: "月 20時間",
+        currentTakeHome: "月 210,000円",
+        desiredTakeHome: "月 200,000円以上",
+        drivingLicensePlan: "取得予定",
+        japaneseLearningDuration: "2年",
+        japaneseLearningMethod: "学校とアプリで勉強しています。",
+        kanaReading: "ひらがな・カタカナは読めます。",
+        tokuteiTestStatus: "特定技能1号評価試験 合格",
+        pastJapanWorkExperience: "なし",
+        longTermIntent: "はい、長く働きたいです。",
+        homeReturnPlan: "当面は帰国予定はありません。",
+        strengths: "真面目で、最後まで責任を持ってやり遂げます。",
+        weaknesses: "慎重すぎることがありますが、確認を徹底しています。",
+        mistakeResponse: "すぐに報告して、原因を確認し再発を防ぎます。",
+        stressManagement: "運動と睡眠でリフレッシュします。",
+        exerciseHabit: "週2回ジョギングをしています。",
+        jobUnderstanding: "製造ラインでの組み立て・検査だと理解しています。",
+        movingCostReady: "はい、準備できます。",
+        noMovingSupportOk: "はい、問題ありません。",
+        flightCostSelf: "はい、自己負担できます。",
+        availableStartDate: "2025/10 から可能",
+        childPlan: "当面は予定なし",
+        familySupport: "家族は応援してくれています。",
+        interviewAvailability: "平日午後が希望です。",
+        inPersonInterview: "オンライン希望",
+        otherInterviews: "なし",
+        companyInquiry: "寮の有無を知りたいです。",
+        candidateQuestions: "配属先はどこになりますか？",
+      };
+
+      // ── 履歴書プロフィール (resumeProfile) をすべて投入 ──
       const resumeData = {
         gender: "男性",
+        country: "ミャンマー",
         spouseStatus: "未婚",
         childrenCount: "0",
+        visaType: "特定技能1号",
         visaExpiryDate: "2027/03/31",
         japaneseLevel: "N3",
         japaneseLevelDate: "2024/12",
@@ -90,16 +134,50 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         currentJob: "工場での製造・組み立て作業",
         retirementReason: "より専門的な仕事に挑戦したいため。",
         preferenceNote: "製造・農業を希望。夜勤も可能です。",
+        licenseName: "普通自動車免許（母国）",
         highSchoolName: "テスト高等学校",
-        interviewAnswers: {
-          desiredWorkLocation: "関東（東京・神奈川・埼玉）",
-          desiredWorkYears: "5年以上",
-        },
+        highSchoolStartDate: "2013/06",
+        highSchoolEndDate: "2016/03",
+        universityName: "テスト大学",
+        universityStartDate: "2016/06",
+        universityEndDate: "2020/03",
+        interviewAnswers,
       };
       await prisma.resumeProfile.upsert({
         where: { personId },
         create: { personId, ...resumeData },
         update: resumeData,
+      });
+
+      // ── 日本語チェックのデモ結果を投入 (録音音声なしのダミー判定) ──
+      const demoTranscripts: Record<string, string> = {
+        read_aloud: "私は日本で働きたいです。毎日、日本語を勉強しています。仕事では、安全に気をつけて頑張ります。",
+        self_intro: "はじめまして。テスト タロウです。ミャンマーから来ました。工場で三年、働きました。",
+        motivation: "日本の技術を勉強したいです。家族のために、長く働きたいです。",
+      };
+      const demoRecordings = JAPANESE_CHECK_QUESTIONS.map((q) => ({
+        key: q.key,
+        question: q.prompt,
+        transcript: demoTranscripts[q.key] ?? "",
+        driveFileId: null,
+        driveFileUrl: null,
+        mimeType: "audio/webm",
+      }));
+      const jcDemo = {
+        estimatedLevel: "N3 相当",
+        pronunciation: 3,
+        fluency: 3,
+        vocabulary: 4,
+        grammar: 3,
+        summary:
+          "【デモ】発音は概ね明瞭で、自己紹介・志望動機は問題なく伝わる。長文や敬語はやや不安。製造・農業なら十分通用、接客はやや練習が必要。",
+        recordings: demoRecordings,
+        assessedAt: new Date(),
+      };
+      await prisma.personJapaneseCheck.upsert({
+        where: { personId },
+        create: { personId, ...jcDemo },
+        update: jcDemo,
       });
 
       return Response.json({ ok: true, action: "fill" });

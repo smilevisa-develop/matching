@@ -48,9 +48,12 @@ export default function TestResetPanel({ personId }: { personId: number }) {
     <section className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50 px-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-amber-800">🧪 テスト用（ID:280 専用）</p>
+          <p className="text-sm font-bold text-amber-800">
+            🧪 テスト用（ID:280 専用）・土田のテストデータ
+          </p>
           <p className="mt-0.5 text-[12px] text-amber-700">
-            フォーム送信テスト用。状態を空/入力済みに切り替えられます。
+            土田がフォーム送信テストに使う候補者です。<span className="font-semibold">他の方は触らないでください。</span>
+            状態を空/入力済みに切り替えられます。
           </p>
         </div>
         <div className="flex items-center gap-2">
