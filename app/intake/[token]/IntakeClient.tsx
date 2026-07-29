@@ -23,11 +23,15 @@ type CustomQuestion = {
   type: "text" | "textarea" | "file";
 };
 
+type BasicInfo = { englishName: string; birthDate: string; address: string };
+
 type PageBlock = {
   title: string;
   description?: string;
   /** 日本語チェック (録音) ページなら true。この場合 questions は空 */
   japaneseCheck?: boolean;
+  /** 基本情報 (氏名・生年月日・住所) ページなら true */
+  basicInfo?: boolean;
   questions: (
     | { kind: "interview"; q: InterviewQuestion }
     | { kind: "custom"; q: CustomQuestion }
@@ -42,6 +46,7 @@ export default function IntakeClient({
   excludedKeys,
   customQuestions,
   japaneseCheckEnabled = true,
+  basic,
   initial,
 }: {
   token: string;
@@ -51,9 +56,18 @@ export default function IntakeClient({
   excludedKeys: string[];
   customQuestions: CustomQuestion[];
   japaneseCheckEnabled?: boolean;
+  basic?: BasicInfo;
   initial: InitialAnswers;
 }) {
   const [form, setForm] = useState<InitialAnswers>(initial);
+  const [basicForm, setBasicForm] = useState<BasicInfo>(() => {
+    const b = basic ?? { englishName: "", birthDate: "", address: "" };
+    // <input type=date> 用に YYYY-MM-DD へ寄せる ("1998/05/10" → "1998-05-10")
+    const bd = /^\d{4}\D\d{2}\D\d{2}$/.test(b.birthDate)
+      ? b.birthDate.replace(/\D/g, "-")
+      : b.birthDate;
+    return { ...b, birthDate: bd };
+  });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +95,16 @@ export default function IntakeClient({
   // 面談前に最低限必要な質問 (must) + 担当者の個別質問だけを出す。
   // 任意 (optional) の質問はフォームには含めない (面談で聞く)。
   const pages = useMemo<PageBlock[]>(() => {
-    const blocks: PageBlock[] = buildInterviewSections({
+    // 先頭に「基本情報」ページ (氏名・年齢・住所)
+    const blocks: PageBlock[] = [
+      {
+        title: "基本情報 / Basic info",
+        description: "はじめに、あなたのことを教えてください。 / Please tell us about yourself.",
+        basicInfo: true,
+        questions: [],
+      },
+    ];
+    blocks.push(...buildInterviewSections({
       priority: "must",
       ctx: { residenceStatus, location },
       isExcluded: (q) => excludedKeys.includes(q.key),
@@ -90,7 +113,7 @@ export default function IntakeClient({
       title: s.title,
       description: s.description,
       questions: s.questions.map((q) => ({ kind: "interview" as const, q })),
-    }));
+    })));
     if (customQuestions.length > 0) {
       blocks.push({
         title: "担当者からの個別質問",
@@ -235,7 +258,7 @@ export default function IntakeClient({
       const res = await fetch(`/api/intake/${token}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(mergedForm),
+        body: JSON.stringify({ ...mergedForm, basic: basicForm }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -369,7 +392,35 @@ export default function IntakeClient({
           {currentPage.description ? (
             <p className="mt-1 text-xs text-gray-500">{currentPage.description}</p>
           ) : null}
-          {currentPage.japaneseCheck ? (
+          {currentPage.basicInfo ? (
+            <div className="mt-5 space-y-5">
+              <QuestionField
+                label="お名前（ローマ字） / Full name (Roman letters)"
+                type="text"
+                hint="例：NGUYEN THI HUONG"
+                value={basicForm.englishName}
+                onChange={(v) => setBasicForm((b) => ({ ...b, englishName: v }))}
+              />
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-dark)] mb-1.5">
+                  生年月日 / Date of birth
+                </label>
+                <input
+                  type="date"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
+                  value={basicForm.birthDate}
+                  onChange={(e) => setBasicForm((b) => ({ ...b, birthDate: e.target.value }))}
+                />
+              </div>
+              <QuestionField
+                label="現在のお住まい（住所） / Current address"
+                type="textarea"
+                hint="例：東京都新宿区○○1-2-3 ○○マンション101"
+                value={basicForm.address}
+                onChange={(v) => setBasicForm((b) => ({ ...b, address: v }))}
+              />
+            </div>
+          ) : currentPage.japaneseCheck ? (
             <div className="mt-5 space-y-4">
               <JapaneseCheckSection
                 questions={JAPANESE_CHECK_QUESTIONS}

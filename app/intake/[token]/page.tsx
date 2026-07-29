@@ -19,7 +19,7 @@ export default async function IntakePage({
       name: true,
       residenceStatus: true,
       intakeConfig: true,
-      onboarding: { select: { englishName: true } },
+      onboarding: { select: { englishName: true, birthDate: true, address: true } },
       resumeProfile: {
         select: {
           motivation: true,
@@ -63,6 +63,11 @@ export default async function IntakePage({
       excludedKeys={excludedKeys}
       customQuestions={customQuestions as { key: string; label: string; required: boolean; type: "text" | "textarea" | "file" }[]}
       japaneseCheckEnabled={japaneseCheckEnabled}
+      basic={{
+        englishName: person.onboarding?.englishName ?? "",
+        birthDate: person.onboarding?.birthDate ?? "",
+        address: person.onboarding?.address ?? "",
+      }}
       initial={{
         motivation: person.resumeProfile?.motivation ?? "",
         selfIntroduction: person.resumeProfile?.selfIntroduction ?? "",

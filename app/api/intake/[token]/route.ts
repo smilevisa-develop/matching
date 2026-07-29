@@ -82,7 +82,11 @@ export async function PUT(req: Request, ctx: { params: Promise<{ token: string }
     }
     const person = await prisma.person.findUnique({
       where: { intakeToken: token },
-      select: { id: true, resumeProfile: { select: { id: true } } },
+      select: {
+        id: true,
+        resumeProfile: { select: { id: true } },
+        onboarding: { select: { id: true } },
+      },
     });
     if (!person) {
       return Response.json({ ok: false, error: "リンクが無効です" }, { status: 404 });
@@ -91,6 +95,28 @@ export async function PUT(req: Request, ctx: { params: Promise<{ token: string }
     const body = await req.json();
     const cleanStr = (v: unknown) =>
       typeof v === "string" ? v.trim() || null : null;
+
+    // 基本情報 (氏名・生年月日・住所)。空欄は既存を消さないため送らない。
+    const basic = body?.basic && typeof body.basic === "object" ? body.basic : {};
+    const onboardingData: Record<string, string> = {};
+    const bEnglishName = cleanStr(basic.englishName);
+    const bBirthDate = cleanStr(basic.birthDate);
+    const bAddress = cleanStr(basic.address);
+    if (bEnglishName) onboardingData.englishName = bEnglishName;
+    if (bBirthDate) onboardingData.birthDate = bBirthDate;
+    if (bAddress) onboardingData.address = bAddress;
+    if (Object.keys(onboardingData).length > 0) {
+      if (person.onboarding) {
+        await prisma.personOnboarding.update({
+          where: { personId: person.id },
+          data: onboardingData,
+        });
+      } else {
+        await prisma.personOnboarding.create({
+          data: { personId: person.id, status: "draft", ...onboardingData },
+        });
+      }
+    }
 
     // 既存履歴書カラム
     const dataExisting = {
