@@ -6,7 +6,7 @@
  * 文字起こし + JLPT/JFT 相当レベル + 4 観点スコア + 所見 を返す。
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { generateContentRotating } from "./gemini-keys";
 import { JAPANESE_CHECK_QUESTIONS } from "./japanese-check-questions";
 
 export { JAPANESE_CHECK_QUESTIONS };
@@ -111,14 +111,10 @@ function clampScore(v: unknown): number {
 export async function judgeJapaneseFromAudio(
   recordings: JapaneseCheckRecording[],
 ): Promise<JapaneseCheckResult> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) throw new Error("GEMINI_API_KEY が未設定です");
-
   const usable = recordings.filter((r) => isSupportedAudio(r.mimeType) && r.base64);
   if (usable.length === 0) throw new Error("判定できる音声がありません");
 
   const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
-  const client = new GoogleGenAI({ apiKey });
 
   // 各録音の前に「どの問か」を示すテキストを挟んでから音声を渡す
   const parts: { text?: string; inlineData?: { mimeType: string; data: string } }[] = [
@@ -133,7 +129,7 @@ export async function judgeJapaneseFromAudio(
   }
   parts.push({ text: "以上の音声を評価し、指定スキーマの JSON を 1 つだけ返してください。" });
 
-  const response = await client.models.generateContent({
+  const response = await generateContentRotating({
     model,
     contents: [{ role: "user", parts }],
     config: {

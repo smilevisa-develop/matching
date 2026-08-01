@@ -12,7 +12,7 @@
  * - JSON parse 失敗時は null 返却 + raw を debug に渡す
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { generateContentRotating } from "./gemini-keys";
 
 export const SECTION_PROMPT_HEADER = `あなたは帳票抽出器です。
 出力は JSON のみ。コードブロックや説明文は禁止。
@@ -38,12 +38,6 @@ export type GeminiSectionDebug = {
 };
 
 const MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
-
-function getClient() {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) throw new Error("GEMINI_API_KEY が未設定です");
-  return new GoogleGenAI({ apiKey });
-}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -81,13 +75,12 @@ export async function geminiExtractSection<T>({
     .filter(Boolean)
     .join("\n");
 
-  const client = getClient();
   let attempts = 0;
   let lastError = "";
   for (let i = 0; i < 3; i++) {
     attempts++;
     try {
-      const response = await client.models.generateContent({
+      const response = await generateContentRotating({
         model: MODEL,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: { responseMimeType: "application/json", temperature: 0.1 },
