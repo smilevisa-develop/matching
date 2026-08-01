@@ -26,6 +26,8 @@ export type PreparationState = {
   checklistSent: boolean;
   checklistOpened: boolean;
   checklistCompleted: boolean;
+  /** 最新配信のトークン (発行済みならカードにコピーボタンを出す) */
+  checklistToken: string | null;
 };
 
 export default function PreparationPanel({
@@ -40,6 +42,19 @@ export default function PreparationPanel({
 }) {
   const [copied, setCopied] = useState(false);
   const [checklistOpen, setChecklistOpen] = useState(false);
+  const [checklistCopied, setChecklistCopied] = useState(false);
+
+  const copyChecklistLink = async () => {
+    if (!state.checklistToken) return;
+    const url = `${window.location.origin}/checklist/${state.checklistToken}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setChecklistCopied(true);
+      setTimeout(() => setChecklistCopied(false), 2000);
+    } catch {
+      prompt("コピーできませんでした。以下を手動でコピーしてください:", url);
+    }
+  };
 
   const step3Done = state.mustTotal > 0 && state.mustAnswered >= state.mustTotal;
   const answering = state.intakeIssued && !step3Done;
@@ -122,6 +137,20 @@ export default function PreparationPanel({
           title="4. 求人票確認"
           doneNote="候補者が確認済み"
           onClick={checklistContent ? () => setChecklistOpen(true) : undefined}
+          extra={
+            state.checklistToken ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void copyChecklistLink();
+                }}
+                className="mt-2 w-full rounded-lg border border-[var(--color-primary)] bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+              >
+                {checklistCopied ? "コピーしました" : "🔗 リンクをコピー"}
+              </button>
+            ) : null
+          }
           pendingNote={
             state.checklistCompleted
               ? "候補者が確認済み"

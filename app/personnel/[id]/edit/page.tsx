@@ -219,6 +219,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
     checklistSent: checklistDeliveries.some((d) => d.sentAt),
     checklistOpened: checklistDeliveries.some((d) => d.openedAt),
     checklistCompleted: checklistDeliveries.some((d) => d.completedAt),
+    checklistToken: checklistDeliveries[0]?.token ?? null,
   };
 
   return (
