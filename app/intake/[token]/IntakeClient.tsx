@@ -82,6 +82,8 @@ export default function IntakeClient({
   // 「今どこに住んでいますか」の回答が分岐のドライバ。
   // 未回答なら null → 分岐条件つきの質問は隠さない (安全側)
   const location = parseLocationAnswer(form.interviewAnswers[LOCATION_QUESTION_KEY]);
+  // 就業状況 (在職中/退職済み)。給与欄などの表示分岐に使う (ライブ)
+  const employmentStatus = form.interviewAnswers.employmentStatus ?? null;
 
   // 回答済み判定は初期値ベース。入力中の値で質問が消えるとフォームが崩れるため
   // form ではなく initial を見る
@@ -106,7 +108,7 @@ export default function IntakeClient({
     ];
     blocks.push(...buildInterviewSections({
       priority: "must",
-      ctx: { residenceStatus, location },
+      ctx: { residenceStatus, location, employmentStatus },
       isExcluded: (q) => excludedKeys.includes(q.key),
       isAnswered,
     }).map((s) => ({
@@ -132,7 +134,7 @@ export default function IntakeClient({
     }
     return blocks;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [residenceStatus, location, excludedKeys, customQuestions, isAnswered, japaneseCheckEnabled]);
+  }, [residenceStatus, location, employmentStatus, excludedKeys, customQuestions, isAnswered, japaneseCheckEnabled]);
 
   const totalPages = pages.length;
   // 居住地の回答で分岐が変わりページ数が減ることがあるので、必ず範囲内に丸める

@@ -30,6 +30,8 @@ export type QuestionCondition = {
   residenceStatusNotIn?: string[];
   /** 居住地がこのいずれかのときだけ表示 */
   locationIn?: CandidateLocation[];
+  /** 就業状況 (在職中/退職済み) がこのいずれかのときだけ表示 */
+  employmentStatusIn?: string[];
 };
 
 export type InterviewQuestion = {
@@ -68,6 +70,8 @@ export type InterviewSection = {
 export type QuestionContext = {
   residenceStatus?: string | null;
   location?: CandidateLocation | null;
+  /** 就業状況 (在職中/退職済み) の回答。分岐に使う */
+  employmentStatus?: string | null;
 };
 
 /**
@@ -88,6 +92,10 @@ export function isQuestionVisible(q: InterviewQuestion, ctx: QuestionContext): b
   }
   if (cond.locationIn && ctx.location) {
     if (!cond.locationIn.includes(ctx.location)) return false;
+  }
+  const emp = ctx.employmentStatus?.trim();
+  if (cond.employmentStatusIn && emp) {
+    if (!cond.employmentStatusIn.includes(emp)) return false;
   }
   return true;
 }
@@ -143,8 +151,16 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
     title: "分野の経験・仕事内容・今の給料",
     questions: [
       {
+        key: "employmentStatus",
+        question: "今の就業状況を教えてください。",
+        type: "select",
+        options: ["在職中", "退職済み"],
+        jsonKey: "employmentStatus",
+        priority: "must",
+      },
+      {
         key: "currentJob",
-        question: "今のお仕事の内容を教えてください。",
+        question: "今の（または直近の）お仕事の内容を教えてください。",
         type: "textarea",
         existingField: "currentJob",
         priority: "must",
@@ -165,6 +181,8 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         jsonKey: "currentTakeHome",
         priority: "must",
         hint: "例：月 18万円くらい",
+        // 在職中のときだけ聞く (退職済みなら表示しない)
+        showIf: { employmentStatusIn: ["在職中"] },
       },
       {
         key: "currentSalary",
@@ -172,6 +190,7 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         type: "text",
         jsonKey: "currentSalary",
         hint: "例：月 22万円",
+        showIf: { employmentStatusIn: ["在職中"] },
       },
       {
         key: "currentOvertimeHours",
@@ -179,6 +198,7 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         type: "text",
         jsonKey: "currentOvertimeHours",
         hint: "例：月 20時間くらい",
+        showIf: { employmentStatusIn: ["在職中"] },
       },
       {
         key: "workChallenge",
@@ -215,19 +235,11 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
     questions: [
       {
         key: "retirementReason",
-        question: "今のお仕事を辞めた（辞めたい）理由を教えてください。",
+        question: "お仕事を辞めた（辞めたい）理由を教えてください。",
         type: "textarea",
         existingField: "retirementReason",
         priority: "must",
         hint: "例：もっと専門的な仕事に挑戦したいからです。",
-      },
-      {
-        key: "employmentStatus",
-        question: "今の就業状況を教えてください。",
-        type: "select",
-        options: ["在職中", "退職済み"],
-        jsonKey: "employmentStatus",
-        priority: "must",
       },
     ],
   },

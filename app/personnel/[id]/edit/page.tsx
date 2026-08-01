@@ -120,6 +120,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
     ctx: {
       residenceStatus: person.residenceStatus,
       location: parseLocationAnswer(interviewAnswers[LOCATION_QUESTION_KEY]),
+      employmentStatus: interviewAnswers.employmentStatus ?? null,
     },
   }).flatMap((s) => s.questions);
   const unansweredMust = mustQuestions.filter((q) => !isQuestionAnswered(q));
