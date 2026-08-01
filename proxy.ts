@@ -22,6 +22,9 @@ export function proxy(request: NextRequest) {
     // 候補者向け公開フォーム (intake) は token 認証で動作するため未ログイン可
     pathname.startsWith("/intake/") ||
     pathname.startsWith("/api/intake/") ||
+    // 母国語 求人票チェックリスト (公開・token 認証)
+    pathname.startsWith("/checklist/") ||
+    pathname.startsWith("/api/checklist/") ||
     // 法的文書ページ (Meta App Review 要件) は完全公開
     pathname.startsWith("/legal/") ||
     // アップロード画像の配信 (LINE / Messenger / メール添付の originalContentUrl)。
