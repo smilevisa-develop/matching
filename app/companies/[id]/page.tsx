@@ -1,74 +1,39 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
-import CompanyDetailClient from "./CompanyDetailClient";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * 企業を開いたら、その企業の求人ワークスペース (条件・求人票・候補者) へ直行する。
+ * 「企業→求人カード→ワークスペース」の階層を廃止し、1 企業 = 1 求人で運用。
+ * 求人が無ければ自動作成する。
+ */
 export default async function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireCurrentAccount();
   const { id } = await params;
+  const companyId = Number(id);
+  if (!Number.isFinite(companyId)) notFound();
+
   const company = await prisma.company.findUnique({
-    where: { id: Number(id) },
-    include: {
-      deals: {
-        include: {
-          owner: { select: { name: true } },
-          candidates: { select: { id: true } },
-        },
-        orderBy: [{ updatedAt: "desc" }, { title: "asc" }],
-      },
+    where: { id: companyId },
+    select: {
+      id: true,
+      name: true,
+      deals: { select: { id: true }, orderBy: { updatedAt: "desc" }, take: 1 },
     },
   });
-
   if (!company) notFound();
 
-  // この企業に紐づく請求を取得
-  const invoices = await prisma.invoice.findMany({
-    where: { deal: { companyId: Number(id) } },
-    orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
-    include: {
-      person: { select: { id: true, name: true } },
-      deal: { select: { id: true, title: true } },
-    },
-  });
+  let dealId = company.deals[0]?.id;
+  if (!dealId) {
+    // 求人がまだ無ければ 1 件作成 (タイトルは企業名)
+    const created = await prisma.deal.create({
+      data: { title: company.name, companyId },
+      select: { id: true },
+    });
+    dealId = created.id;
+  }
 
-  return (
-    <div className="space-y-6 p-8">
-      <CompanyDetailClient
-        initialCompany={{
-          id: company.id,
-          externalId: company.externalId,
-          name: company.name,
-          industry: company.industry,
-          location: company.location,
-          hiringStatus: company.hiringStatus,
-          driveFolderUrl: company.driveFolderUrl,
-          notes: company.notes,
-          deals: company.deals.map((deal) => ({
-            id: deal.id,
-            title: deal.title,
-            status: deal.status,
-            unitPrice: deal.unitPrice,
-            field: deal.field,
-            deadline: deal.deadline?.toISOString() ?? null,
-            ownerName: deal.owner?.name ?? null,
-            candidatesCount: deal.candidates.length,
-          })),
-          invoices: invoices.map((invoice) => ({
-            id: invoice.id,
-            personId: invoice.person?.id ?? null,
-            personName: invoice.person?.name ?? null,
-            dealId: invoice.deal?.id ?? null,
-            dealTitle: invoice.deal?.title ?? null,
-            invoiceDate: invoice.invoiceDate?.toISOString() ?? null,
-            invoiceAmount: invoice.invoiceAmount,
-            invoiceNumber: invoice.invoiceNumber,
-            invoiceStatus: invoice.invoiceStatus,
-            invoiceUrl: invoice.invoiceUrl,
-          })),
-        }}
-      />
-    </div>
-  );
+  redirect(`/companies/deals/${dealId}`);
 }

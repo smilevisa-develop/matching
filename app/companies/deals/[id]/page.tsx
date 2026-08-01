@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
@@ -61,9 +62,11 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
   return (
     <div className="space-y-6 p-8">
       <div>
-        <p className="text-xs font-semibold tracking-[0.16em] text-[var(--color-primary)]">DEAL BOARD</p>
-        <h1 className="mt-2 text-2xl font-bold text-[var(--color-text-dark)]">{deal.title}</h1>
-        <p className="mt-1 text-sm text-gray-500">求人詳細、進捗、求人票の条件を管理します。</p>
+        <Link href="/companies" className="text-xs font-medium text-[var(--color-primary)] hover:underline">
+          ← 企業一覧
+        </Link>
+        <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-dark)]">{deal.company.name}</h1>
+        <p className="mt-1 text-sm text-gray-500">この企業の求人条件・求人票・候補者をまとめて管理します。</p>
       </div>
 
       <DealTabs
