@@ -572,9 +572,7 @@ export default function EditPersonForm({
                         <textarea
                           className={`${INPUT} min-h-20`}
                           value={value}
-                          onChange={(e) => onChange(e.target.value)}
-                          placeholder={q.hint}
-                        />
+                          onChange={(e) => onChange(e.target.value)}                        />
                       ) : q.type === "select" && q.options ? (
                         <select
                           className={INPUT}
@@ -592,9 +590,7 @@ export default function EditPersonForm({
                         <input
                           className={INPUT}
                           value={value}
-                          onChange={(e) => onChange(e.target.value)}
-                          placeholder={q.hint}
-                        />
+                          onChange={(e) => onChange(e.target.value)}                        />
                       )}
                     </Field>
                   );
@@ -934,9 +930,7 @@ export default function EditPersonForm({
                         <textarea
                           className={`${INPUT} min-h-20`}
                           value={value}
-                          onChange={(e) => onChange(e.target.value)}
-                          placeholder={q.hint}
-                        />
+                          onChange={(e) => onChange(e.target.value)}                        />
                       ) : q.type === "select" && q.options ? (
                         <select className={INPUT} value={value} onChange={(e) => onChange(e.target.value)}>
                           <option value="">未設定</option>
@@ -950,9 +944,7 @@ export default function EditPersonForm({
                         <input
                           className={INPUT}
                           value={value}
-                          onChange={(e) => onChange(e.target.value)}
-                          placeholder={q.hint}
-                        />
+                          onChange={(e) => onChange(e.target.value)}                        />
                       )}
                     </Field>
                   );
