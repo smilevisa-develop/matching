@@ -46,6 +46,7 @@ model Person {
   portalTasks     PortalTask[]
   resumeProfile   ResumeProfile?
   japaneseCheck   PersonJapaneseCheck?
+  checklistDeliveries JobChecklistDelivery[]
   resumeDocuments ResumeDocument[]
   dealCandidates  DealCandidate[]
   customQuestions PersonCustomQuestion[]
@@ -86,6 +87,34 @@ model Company {
   updatedAt      DateTime @updatedAt
 
   deals Deal[]
+  checklistDeliveries JobChecklistDelivery[]
+}
+
+/// 母国語の求人票チェックリストを候補者へ送った記録。
+/// 求人票の要点を母国語+日本語で候補者に見せ、開封/チェックを追跡する。
+model JobChecklistDelivery {
+  id          Int      @id @default(autoincrement())
+  personId    Int
+  person      Person   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  companyId   Int
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// 母国語コード: vi(ベトナム) / id(インドネシア) / my(ミャンマー) / ne(ネパール)
+  language    String
+  /// 公開URL用トークン
+  token       String   @unique
+  /// 要点チェックリストのスナップショット (日本語原文 + 翻訳)。
+  /// [{ key, jaLabel, jaValue, trLabel, trValue }]
+  items       Json
+  sentAt      DateTime?
+  openedAt    DateTime?
+  /// 候補者がチェックした項目 { key: true }
+  checkedItems Json?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([personId])
+  @@index([companyId])
 }
 
 model Partner {
