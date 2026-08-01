@@ -14,7 +14,9 @@ import IntakeLinkButton from "./IntakeLinkButton";
 import PreparationPanel, { type PreparationState } from "./PreparationPanel";
 import TestResetPanel from "./TestResetPanel";
 import RecommendedCompanySelect from "./RecommendedCompanySelect";
+import ChecklistPanel from "./ChecklistPanel";
 import { companyLabel } from "@/lib/company-label";
+import { hasEnoughJobInfo, nationalityToLanguage } from "@/lib/job-checklist";
 import JapaneseCheckPanel, {
   type JapaneseCheckView,
   type JapaneseCheckRecordingView,
@@ -78,6 +80,41 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
   const companyOptions = companies
     .map((c) => companyLabel(c.externalId, c.name))
     .filter(Boolean);
+
+  // ── 母国語チェックリスト: 前提(推薦先企業の求人情報の有無) と 送信履歴 ──
+  const checklistExternalId = (() => {
+    const s = (person.recommendedCompany ?? "").trim();
+    if (!s) return null;
+    const idx = s.search(/[_＿]/);
+    const idPart = (idx >= 0 ? s.slice(0, idx) : s).trim().toLowerCase();
+    return /^[a-z0-9]{2,}$/.test(idPart) ? idPart : null;
+  })();
+  const [checklistCompany, checklistDeliveriesRaw] = await Promise.all([
+    checklistExternalId
+      ? prisma.company.findFirst({
+          where: { externalId: checklistExternalId },
+          select: { deals: { select: { conditions: true } } },
+        })
+      : Promise.resolve(null),
+    prisma.jobChecklistDelivery.findMany({
+      where: { personId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, language: true, token: true, sentAt: true, openedAt: true, completedAt: true },
+    }),
+  ]);
+  const companyHasJobInfo = Boolean(
+    checklistCompany?.deals.some((d) => hasEnoughJobInfo(d.conditions)),
+  );
+  const iso = (d: Date | null) => (d ? d.toISOString() : null);
+  const checklistDeliveries = checklistDeliveriesRaw.map((d) => ({
+    id: d.id,
+    language: d.language,
+    token: d.token,
+    sentAt: iso(d.sentAt),
+    openedAt: iso(d.openedAt),
+    completedAt: iso(d.completedAt),
+  }));
+  const defaultChecklistLang = nationalityToLanguage(person.nationality);
 
   const toDate = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
@@ -307,6 +344,14 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
           />
 
           <PreparationPanel personName={person.name} state={preparationState} />
+
+          <ChecklistPanel
+            personId={person.id}
+            recommendedCompany={person.recommendedCompany}
+            companyHasJobInfo={companyHasJobInfo}
+            defaultLanguage={defaultChecklistLang}
+            deliveries={checklistDeliveries}
+          />
 
           <EditPersonForm
             person={person}
