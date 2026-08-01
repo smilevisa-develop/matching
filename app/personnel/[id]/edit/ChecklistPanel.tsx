@@ -37,12 +37,15 @@ export default function ChecklistPanel({
   companyHasJobInfo,
   defaultLanguage,
   deliveries,
+  embedded = false,
 }: {
   personId: number;
   recommendedCompany: string | null;
   companyHasJobInfo: boolean;
   defaultLanguage: string;
   deliveries: ChecklistDeliveryView[];
+  /** 準備パネル内に埋め込む場合 true (外枠・大見出しを省く) */
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const [language, setLanguage] = useState(defaultLanguage);
@@ -92,9 +95,16 @@ export default function ChecklistPanel({
     }
   };
 
+  const Wrapper = embedded ? "div" : "section";
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">母国語の求人票チェックリスト</p>
+    <Wrapper className={embedded ? "" : "rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"}>
+      {embedded ? (
+        <p className="text-[12px] font-semibold text-[var(--color-text-dark)]">
+          🌐 求人票の確認（母国語チェックリスト）
+        </p>
+      ) : (
+        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">母国語の求人票チェックリスト</p>
+      )}
       <p className="mt-1 text-[12px] text-gray-500">
         求人票の要点を母国語＋日本語の対訳にして候補者に送り、確認（チェック）してもらいます。
       </p>
@@ -187,6 +197,6 @@ export default function ChecklistPanel({
           </ul>
         </div>
       ) : null}
-    </section>
+    </Wrapper>
   );
 }

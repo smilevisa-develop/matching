@@ -22,14 +22,21 @@ export type PreparationState = {
   mustAnswered: number;
   /** 未回答の必須質問ラベル (最大 5 件に切って渡す) */
   unansweredLabels: string[];
+  /** Step4: 母国語チェックリストの状況 */
+  checklistSent: boolean;
+  checklistOpened: boolean;
+  checklistCompleted: boolean;
 };
 
 export default function PreparationPanel({
   personName,
   state,
+  checklistContent,
 }: {
   personName: string;
   state: PreparationState;
+  /** Step4 (求人票確認) の操作 UI をパネル内に埋め込む */
+  checklistContent?: React.ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -56,7 +63,7 @@ export default function PreparationPanel({
     <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">事前面談の準備</p>
 
-      <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
         {/* Step 1: 履歴書取込 */}
         <StepCard
           done={state.resumeImported}
@@ -107,15 +114,37 @@ export default function PreparationPanel({
           }
         />
 
-        {/* Step 4: 面談へ */}
+        {/* Step 4: 求人票確認 (母国語チェックリスト) */}
+        <StepCard
+          done={state.checklistCompleted}
+          active={step3Done && !state.checklistCompleted}
+          title="4. 求人票確認"
+          doneNote="候補者が確認済み"
+          pendingNote={
+            state.checklistCompleted
+              ? "候補者が確認済み"
+              : state.checklistSent
+                ? state.checklistOpened
+                  ? "送信済み・開封（確認待ち）"
+                  : "送信済み（未開封）"
+                : step3Done
+                  ? "下から母国語チェックリストを送信"
+                  : "本人の回答の後に送信"
+          }
+        />
+
+        {/* Step 5: 面談へ */}
         <StepCard
           done={false}
           active={step3Done}
-          title="4. 面談へ"
+          title="5. 面談へ"
           doneNote=""
           pendingNote={step3Done ? "準備完了。面談に進めます" : "全問回答で準備完了"}
         />
       </div>
+
+      {/* Step4 の操作 (母国語チェックリスト) をパネル内に埋め込む */}
+      {checklistContent ? <div className="mt-3 border-t border-gray-100 pt-3">{checklistContent}</div> : null}
 
       {/* 未回答の必須質問 */}
       {state.intakeIssued && !step3Done && state.unansweredLabels.length > 0 ? (

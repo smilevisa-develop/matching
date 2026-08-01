@@ -212,6 +212,10 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
     mustAnswered: mustQuestions.length - unansweredMust.length,
     // 長すぎると横に溢れるので 5 件まで
     unansweredLabels: unansweredMust.slice(0, 5).map((q) => shortLabel(q.question)),
+    // Step4: 母国語チェックリストの状況
+    checklistSent: checklistDeliveries.some((d) => d.sentAt),
+    checklistOpened: checklistDeliveries.some((d) => d.openedAt),
+    checklistCompleted: checklistDeliveries.some((d) => d.completedAt),
   };
 
   return (
@@ -343,14 +347,19 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
             }
           />
 
-          <PreparationPanel personName={person.name} state={preparationState} />
-
-          <ChecklistPanel
-            personId={person.id}
-            recommendedCompany={person.recommendedCompany}
-            companyHasJobInfo={companyHasJobInfo}
-            defaultLanguage={defaultChecklistLang}
-            deliveries={checklistDeliveries}
+          <PreparationPanel
+            personName={person.name}
+            state={preparationState}
+            checklistContent={
+              <ChecklistPanel
+                embedded
+                personId={person.id}
+                recommendedCompany={person.recommendedCompany}
+                companyHasJobInfo={companyHasJobInfo}
+                defaultLanguage={defaultChecklistLang}
+                deliveries={checklistDeliveries}
+              />
+            }
           />
 
           <EditPersonForm
