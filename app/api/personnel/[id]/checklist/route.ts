@@ -48,27 +48,38 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const person = await prisma.person.findUnique({
       where: { id: personId },
-      select: { id: true, nationality: true, recommendedCompany: true },
+      select: {
+        id: true,
+        nationality: true,
+        recommendedCompany: true,
+        // 推薦先が案件由来(手動上書き無し)のときのフォールバック
+        dealCandidates: {
+          select: { deal: { select: { companyId: true } } },
+          orderBy: { updatedAt: "desc" },
+          take: 1,
+        },
+      },
     });
     if (!person) {
       return Response.json({ ok: false, error: "候補者が見つかりません" }, { status: 404 });
     }
 
-    // 1. 推薦先企業を特定
+    // 1. 推薦先企業を特定 (手動上書きの企業ID → 無ければ案件由来の企業)
     const externalId = parseCompanyExternalId(person.recommendedCompany);
-    if (!externalId) {
-      return Response.json(
-        { ok: false, error: "推薦先企業が設定されていません。先に推薦先企業を選択してください。" },
-        { status: 400 },
-      );
-    }
-    const company = await prisma.company.findFirst({
-      where: { externalId },
-      select: { id: true, name: true, deals: { select: { conditions: true, updatedAt: true } } },
-    });
+    const company = externalId
+      ? await prisma.company.findFirst({
+          where: { externalId },
+          select: { id: true, name: true, deals: { select: { conditions: true, updatedAt: true } } },
+        })
+      : person.dealCandidates[0]?.deal.companyId
+        ? await prisma.company.findUnique({
+            where: { id: person.dealCandidates[0].deal.companyId },
+            select: { id: true, name: true, deals: { select: { conditions: true, updatedAt: true } } },
+          })
+        : null;
     if (!company) {
       return Response.json(
-        { ok: false, error: `推薦先企業 (${externalId}) が企業マスタに見つかりません` },
+        { ok: false, error: "推薦先企業が設定されていません。先に推薦先企業を選択してください。" },
         { status: 400 },
       );
     }

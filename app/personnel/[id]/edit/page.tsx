@@ -82,8 +82,11 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
     .filter(Boolean);
 
   // ── 母国語チェックリスト: 前提(推薦先企業の求人情報の有無) と 送信履歴 ──
+  // 実効的な推薦先 = 手動上書き(recommendedCompany) があればそれ、無ければ案件由来(dealCompanies)
+  const effectiveRecommendedCompany =
+    (person.recommendedCompany && person.recommendedCompany.trim()) || dealCompanies[0] || null;
   const checklistExternalId = (() => {
-    const s = (person.recommendedCompany ?? "").trim();
+    const s = (effectiveRecommendedCompany ?? "").trim();
     if (!s) return null;
     const idx = s.search(/[_＿]/);
     const idPart = (idx >= 0 ? s.slice(0, idx) : s).trim().toLowerCase();
@@ -354,7 +357,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
               <ChecklistPanel
                 embedded
                 personId={person.id}
-                recommendedCompany={person.recommendedCompany}
+                recommendedCompany={effectiveRecommendedCompany}
                 companyHasJobInfo={companyHasJobInfo}
                 defaultLanguage={defaultChecklistLang}
                 deliveries={checklistDeliveries}
