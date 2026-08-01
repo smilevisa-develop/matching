@@ -110,7 +110,7 @@ export default function CompanyDetailClient({ initialCompany }: { initialCompany
         <div>
           <p className="text-xs font-semibold tracking-[0.16em] text-[var(--color-primary)]">COMPANY DETAIL</p>
           <h1 className="mt-2 text-3xl font-bold text-[var(--color-text-dark)]">{company.name}</h1>
-          <p className="mt-2 text-sm text-gray-500">企業詳細と、この企業に紐づく案件をまとめて確認できます。</p>
+          <p className="mt-2 text-sm text-gray-500">企業情報と、この企業の求人・候補者をまとめて確認できます。</p>
         </div>
         <div className="flex gap-2">
           {company.driveFolderUrl ? (
@@ -138,7 +138,7 @@ export default function CompanyDetailClient({ initialCompany }: { initialCompany
             href={`/companies/deals/new?companyId=${company.id}`}
             className="rounded-lg bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]"
           >
-            + 案件を追加
+            + 求人を追加
           </Link>
         </div>
       </div>
@@ -154,7 +154,7 @@ export default function CompanyDetailClient({ initialCompany }: { initialCompany
                 <InfoRow label="業種" value={normalizeSswIndustry(company.industry) ?? "-"} />
                 <InfoRow label="所在地" value={company.location ?? "-"} />
                 <InfoRow label="採用状況" value={company.hiringStatus} />
-                <InfoRow label="案件数" value={`${company.deals.length}件`} />
+                <InfoRow label="求人数" value={`${company.deals.length}件`} />
                 {company.driveFolderUrl ? (
                   <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
                     <span className="text-gray-400">Drive フォルダ</span>
@@ -239,10 +239,7 @@ export default function CompanyDetailClient({ initialCompany }: { initialCompany
 
         <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-[var(--color-text-dark)]">紐づいている案件</h2>
-            <Link href="/companies/deals" className="text-xs text-[var(--color-primary)] hover:underline">
-              案件管理を見る
-            </Link>
+            <h2 className="text-base font-semibold text-[var(--color-text-dark)]">求人・候補者</h2>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {company.deals.map((deal) => (
@@ -268,7 +265,7 @@ export default function CompanyDetailClient({ initialCompany }: { initialCompany
             ))}
             {company.deals.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-gray-200 px-4 py-12 text-center text-sm text-gray-400 md:col-span-2">
-                まだ案件がありません
+                まだ求人がありません。「＋ 求人を追加」から作成できます。
               </p>
             ) : null}
           </div>
