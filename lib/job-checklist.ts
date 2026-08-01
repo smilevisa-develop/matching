@@ -36,14 +36,74 @@ export type JaKeyPoint = { key: string; jaLabel: string; jaValue: string };
 /** 対訳済みの要点 1 項目 */
 export type ChecklistItem = JaKeyPoint & { trLabel: string; trValue: string };
 
+function str(v: unknown): string {
+  return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
+}
+function joinNonEmpty(parts: string[], sep: string): string {
+  return parts.filter((p) => p && p.length > 0).join(sep);
+}
+
+/** 金額に円と桁区切りを付ける。数字だけなら "265,000円"、既に単位付きならそのまま。 */
+function money(v: string): string {
+  const s = v.trim();
+  if (!s) return "";
+  const digits = s.replace(/[,，\s]/g, "");
+  if (/^\d+$/.test(digits)) return `${Number(digits).toLocaleString("ja-JP")}円`;
+  return s; // "月20万" 等はそのまま
+}
+
+/** 勤務地: 都道府県を先頭にする */
+function formatLocation(c: Record<string, unknown>): string {
+  const loc = str(c.workLocation);
+  const station = str(c.nearestStation);
+  let out = loc;
+  const m = loc.match(/(北海道|東京都|京都府|大阪府|..[県府])/);
+  if (m && !loc.startsWith(m[1])) out = `${m[1]} ${loc}`;
+  return joinNonEmpty([out, station ? `最寄: ${station}` : ""], " / ");
+}
+
+/** 残業: 固定残業かどうかを明記 */
+function formatOvertime(c: Record<string, unknown>): string {
+  const fh = str(c.fixedOvertimeHours);
+  const fp = str(c.fixedOvertimePay);
+  if (fh || fp) {
+    const fhLabel = fh ? (/^\d+$/.test(fh) ? `（${fh}時間ぶん）` : `（${fh}）`) : "";
+    return joinNonEmpty(["固定残業あり", fhLabel, fp ? `／ ${money(fp)}` : ""], " ");
+  }
+  const ov = str(c.overtime);
+  const avg = str(c.avgMonthlyOvertime);
+  return joinNonEmpty([ov ? `固定残業なし（${ov}）` : "", avg ? `平均 ${avg}` : ""], " / ") || ov;
+}
+
+/** 寮: あり/なし＋寮費(本人負担)を円で */
+function formatDorm(c: Record<string, unknown>): string {
+  const prov = str(c.dormProvision);
+  const amt = str(c.dormAmount);
+  if (!prov && !amt) return "";
+  if (/無|なし/.test(prov)) return "なし";
+  const fee = amt ? `寮費 ${money(amt)}／月（本人負担）` : "";
+  return joinNonEmpty([prov || "あり", fee], "・");
+}
+
+/** 食事: あり/なし＋金額を円で */
+function formatMeal(c: Record<string, unknown>): string {
+  const prov = str(c.mealProvision);
+  const amt = str(c.mealAmount);
+  if (!prov && !amt) return "";
+  if (/無|なし/.test(prov)) return "なし";
+  const fee = amt ? `${money(amt)}／食` : "";
+  return joinNonEmpty([prov || "あり", fee], "・");
+}
+
 /** conditions(Json) から拾う要点の定義。必要書類は含めない。 */
 const KEY_POINT_FIELDS: { key: string; label: string; from: (c: Record<string, unknown>) => string }[] = [
   { key: "jobDescription", label: "仕事内容", from: (c) => str(c.jobDescription) },
-  { key: "workLocation", label: "勤務地", from: (c) => joinNonEmpty([str(c.workLocation), str(c.nearestStation)], " / ") },
+  { key: "workLocation", label: "勤務地（都道府県から）", from: (c) => formatLocation(c) },
   {
+    // monthlyGross=額面(総支給) / basicSalary=基本給。どちらも手取りではないので明記。
     key: "salary",
-    label: "給料（月）",
-    from: (c) => str(c.monthlyGross) || str(c.basicSalary),
+    label: "月収（額面・手取りではありません）",
+    from: (c) => money(str(c.monthlyGross) || str(c.basicSalary)),
   },
   {
     key: "workTime",
@@ -54,24 +114,13 @@ const KEY_POINT_FIELDS: { key: string; label: string; from: (c: Record<string, u
       return joinNonEmpty([a, b], " / ");
     },
   },
-  { key: "overtime", label: "残業", from: (c) => str(c.overtime) || str(c.avgMonthlyOvertime) },
+  { key: "overtime", label: "残業", from: (c) => formatOvertime(c) },
   { key: "holidays", label: "休日", from: (c) => str(c.holidays) },
-  {
-    key: "dorm",
-    label: "寮",
-    from: (c) => joinNonEmpty([str(c.dormProvision), str(c.dormAmount)], " "),
-  },
-  { key: "meal", label: "食事", from: (c) => joinNonEmpty([str(c.mealProvision), str(c.mealAmount)], " ") },
-  { key: "benefits", label: "待遇・手当", from: (c) => str(c.otherBenefits) },
+  { key: "dorm", label: "寮", from: (c) => formatDorm(c) },
+  { key: "meal", label: "食事", from: (c) => formatMeal(c) },
+  { key: "benefits", label: "待遇・手当（有給など）", from: (c) => str(c.otherBenefits) },
   { key: "notes", label: "備考", from: (c) => str(c.notes) },
 ];
-
-function str(v: unknown): string {
-  return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
-}
-function joinNonEmpty(parts: string[], sep: string): string {
-  return parts.filter((p) => p && p.length > 0).join(sep);
-}
 
 /** 求人の conditions から日本語の要点リストを作る (値が空の項目は除外) */
 export function buildJapaneseKeyPoints(conditions: unknown): JaKeyPoint[] {
