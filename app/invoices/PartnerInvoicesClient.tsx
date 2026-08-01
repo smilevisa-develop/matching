@@ -82,7 +82,7 @@ export default function PartnerInvoicesClient({
       <SearchInput
         value={searchTerm}
         onChange={setSearchTerm}
-        placeholder="パートナー名・候補者名・案件名で検索"
+        placeholder="パートナー名・候補者名・求人名で検索"
       />
 
       <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -156,7 +156,7 @@ function TaskRow({
           へ仕入支払い
         </p>
         <p className="mt-0.5 text-xs text-gray-600">
-          {invoice.dealTitle ?? "案件未設定"}
+          {invoice.dealTitle ?? "求人未設定"}
           {invoice.personName ? (
             <>
               {" "}

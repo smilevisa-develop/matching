@@ -41,7 +41,7 @@ export default function NewDealClient({
 
   const submit = async () => {
     if (!form.title.trim() || !form.companyId) {
-      alert("案件名と企業を入力してください");
+      alert("求人名と企業を入力してください");
       return;
     }
 
@@ -54,7 +54,7 @@ export default function NewDealClient({
       });
       const result = await response.json();
       if (!response.ok || !result.ok) {
-        alert(result.error || "案件作成に失敗しました");
+        alert(result.error || "求人作成に失敗しました");
         return;
       }
       router.push(`/companies/deals/${result.deal.id}`);
@@ -66,7 +66,7 @@ export default function NewDealClient({
 
   return (
     <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-      <Field label="案件名 *">
+      <Field label="求人名 *">
         <input className={INPUT} value={form.title} onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))} />
       </Field>
       <Field label="企業">
@@ -102,7 +102,7 @@ export default function NewDealClient({
             <option value="urgent">急ぎ</option>
           </select>
         </Field>
-        <Field label="案件ステップ">
+        <Field label="求人ステップ">
           <select className={INPUT} value={form.status} onChange={(e) => setForm((current) => ({ ...current, status: e.target.value }))}>
             <option value="至急募集">至急募集</option>
             <option value="募集中">募集中</option>
@@ -126,7 +126,7 @@ export default function NewDealClient({
         <Field label="期限">
           <input className={INPUT} type="date" value={form.deadline} onChange={(e) => setForm((current) => ({ ...current, deadline: e.target.value }))} />
         </Field>
-        <Field label="案件受付日">
+        <Field label="求人受付日">
           <input className={INPUT} type="date" value={form.acceptedAt} onChange={(e) => setForm((current) => ({ ...current, acceptedAt: e.target.value }))} />
         </Field>
       </div>

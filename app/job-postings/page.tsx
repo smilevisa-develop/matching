@@ -27,7 +27,7 @@ export default async function JobPostingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">求人票作成</h1>
         <p className="mt-1 text-sm text-gray-500">
-          案件とテンプレートを選び、元ファイルをAIで取り込んで求人票を作成します。
+          求人とテンプレートを選び、元ファイルをAIで取り込んで求人票を作成します。
         </p>
       </div>
 

@@ -114,11 +114,11 @@ export default function RevenueDashboard({
         </label>
       </header>
 
-      {/* 当月のメトリクス: 案件ファネル (左) + 内定 / 売上 タコメーター (右) */}
+      {/* 当月のメトリクス: 求人ファネル (左) + 内定 / 売上 タコメーター (右) */}
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-[var(--color-text-dark)]">案件ファネル</h2>
+            <h2 className="text-base font-semibold text-[var(--color-text-dark)]">求人ファネル</h2>
             <p className="text-xs text-gray-500">募集 → 推薦 → 面接 → 内定</p>
           </div>
           <Funnel

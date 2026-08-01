@@ -303,7 +303,7 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
             </span>
             <span className="text-xs text-gray-600">
               {isActive
-                ? "一斉配信・一覧・案件作成の対象に含まれます"
+                ? "一斉配信・一覧・求人作成の対象に含まれます"
                 : "一覧では折りたたみセクションに移動します"}
             </span>
           </div>
@@ -653,19 +653,19 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-base font-semibold text-[var(--color-text-dark)]">過去の実績</h2>
         <div className="mt-4 grid gap-3 grid-cols-2 md:grid-cols-5">
-          <SummaryCard label="案件数" value={summary.dealCount.toLocaleString()} />
+          <SummaryCard label="求人数" value={summary.dealCount.toLocaleString()} />
           <SummaryCard label="募集人数 合計" value={summary.req.toLocaleString()} />
           <SummaryCard label="内定 合計" value={summary.offer.toLocaleString()} />
           <SummaryCard label="成約 合計" value={summary.contract.toLocaleString()} />
           <SummaryCard label="請求 合計" value={`¥${summary.invoiceTotal.toLocaleString()}`} />
         </div>
 
-        <h3 className="mt-6 text-sm font-semibold text-[var(--color-text-dark)]">案件一覧</h3>
+        <h3 className="mt-6 text-sm font-semibold text-[var(--color-text-dark)]">求人一覧</h3>
         <div className="mt-2 overflow-hidden rounded-xl border border-gray-200">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-[var(--color-light)] text-left text-xs font-semibold text-gray-600">
-                <th className="px-3 py-2">案件</th>
+                <th className="px-3 py-2">求人</th>
                 <th className="px-3 py-2 w-32">企業</th>
                 <th className="px-3 py-2 w-24">ステータス</th>
                 <th className="px-3 py-2 w-16 text-right">募集</th>
@@ -701,7 +701,7 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
               {initial.deals.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-3 py-6 text-center text-sm text-gray-400">
-                    まだ案件がありません
+                    まだ求人がありません
                   </td>
                 </tr>
               ) : null}
@@ -717,7 +717,7 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
                 <thead>
                   <tr className="bg-[var(--color-light)] text-left text-xs font-semibold text-gray-600">
                     <th className="px-3 py-2 w-28">請求日</th>
-                    <th className="px-3 py-2">案件</th>
+                    <th className="px-3 py-2">求人</th>
                     <th className="px-3 py-2 w-32">企業</th>
                     <th className="px-3 py-2 w-28 text-right">金額</th>
                     <th className="px-3 py-2 w-20">状態</th>

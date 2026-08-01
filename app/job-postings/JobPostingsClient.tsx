@@ -72,7 +72,7 @@ export default function JobPostingsClient({
           <div>
             <h2 className="text-lg font-semibold text-[var(--color-text-dark)]">求人票を作成</h2>
             <p className="mt-1 text-sm text-gray-500">
-              案件とテンプレートを選び、ファイルをAIで取り込んで求人票を作成します。
+              求人とテンプレートを選び、ファイルをAIで取り込んで求人票を作成します。
             </p>
           </div>
           <Link
@@ -96,12 +96,12 @@ export default function JobPostingsClient({
         ) : (
           <div className="mt-5 space-y-4">
             <div className="grid gap-4 md:grid-cols-3">
-              <Field label="1. 案件を選択">
+              <Field label="1. 求人を選択">
                 <DealPicker
                   deals={deals}
                   selectedId={form.dealId}
                   onSelect={(id) => setForm((current) => ({ ...current, dealId: id }))}
-                  placeholder="会社名・案件名で検索"
+                  placeholder="会社名・求人名で検索"
                 />
               </Field>
               <Field label="2. テンプレートを選択">
@@ -139,7 +139,7 @@ export default function JobPostingsClient({
                 type="button"
                 onClick={() => {
                   if (!form.dealId || !form.templateId) {
-                    alert("案件とテンプレートを選択してください");
+                    alert("求人とテンプレートを選択してください");
                     return;
                   }
                   setUploaderOpen(true);
@@ -365,7 +365,7 @@ function JobPostingUploadModal({
           setError(parseResult.error || "PDF 解析に失敗しました");
           return;
         }
-        // 1 ページ目の mappedJobs を採用 (複数案件 PDF は将来対応)
+        // 1 ページ目の mappedJobs を採用 (複数求人 PDF は将来対応)
         const first = (parseResult.mappedJobs ?? [])[0] ?? {};
         payload = first as Record<string, unknown>;
       } else {
@@ -451,7 +451,7 @@ function JobPostingUploadModal({
 
         <div className="mt-5 rounded-2xl border border-[var(--color-secondary)] bg-[var(--color-light)] px-4 py-3 text-sm text-gray-600">
           <p>
-            案件: <span className="font-medium text-[var(--color-text-dark)]">{deal.companyName} / {deal.title}</span>
+            求人: <span className="font-medium text-[var(--color-text-dark)]">{deal.companyName} / {deal.title}</span>
           </p>
           <p className="mt-1">
             テンプレート: <span className="font-medium text-[var(--color-text-dark)]">{template.name}</span>

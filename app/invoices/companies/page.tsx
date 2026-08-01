@@ -25,7 +25,7 @@ export default async function CompanyInvoicesPage() {
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">企業への請求</h1>
         <p className="mt-1 text-sm text-gray-500">
-          案件に紐づく企業へ発行する請求書を管理します。行の企業名をクリックすると企業詳細に移動します。
+          求人に紐づく企業へ発行する請求書を管理します。行の企業名をクリックすると企業詳細に移動します。
         </p>
       </div>
 

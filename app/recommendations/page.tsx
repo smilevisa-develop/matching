@@ -19,7 +19,7 @@ export default async function RecommendationsPage() {
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">推薦リスト作成</h1>
         <p className="mt-1 text-sm text-gray-500">
-          案件を選択すると、その案件に紐づく候補者の推薦リストを CSV でダウンロードできます。
+          求人を選択すると、その求人に紐づく候補者の推薦リストを CSV でダウンロードできます。
         </p>
       </div>
 

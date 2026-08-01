@@ -11,13 +11,13 @@ export type DealOption = {
 };
 
 /**
- * 案件選択用の検索コンボボックス。会社名 / 案件名 / ID で絞り込み。
+ * 求人選択用の検索コンボボックス。会社名 / 求人名 / ID で絞り込み。
  */
 export default function DealPicker({
   deals,
   selectedId,
   onSelect,
-  placeholder = "会社名・案件名・ID で検索",
+  placeholder = "会社名・求人名・ID で検索",
   className,
 }: {
   deals: DealOption[];
@@ -98,7 +98,7 @@ export default function DealPicker({
         <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
           {filtered.length === 0 ? (
             <p className="px-4 py-6 text-center text-xs text-gray-400">
-              {query ? `「${query}」に一致する案件がいません` : "案件がありません"}
+              {query ? `「${query}」に一致する求人がいません` : "求人がありません"}
             </p>
           ) : (
             filtered.map((deal) => (

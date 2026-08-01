@@ -14,7 +14,7 @@ export default function RecommendationsClient({
   lockedDealId,
 }: {
   deals: Deal[];
-  /** 指定すると案件選択 UI を出さず、このIDで固定 */
+  /** 指定すると求人選択 UI を出さず、このIDで固定 */
   lockedDealId?: number;
 }) {
   const [dealId, setDealId] = useState(
@@ -36,7 +36,7 @@ export default function RecommendationsClient({
 
   const saveToDrive = async () => {
     if (!dealId) {
-      alert("案件を選択してください");
+      alert("求人を選択してください");
       return;
     }
     setSaving(true);
@@ -70,7 +70,7 @@ export default function RecommendationsClient({
         }`}
       >
         {!lockedDealId ? (
-          <Field label="案件">
+          <Field label="求人">
             <select className={INPUT} value={dealId} onChange={(e) => setDealId(e.target.value)}>
               {deals.map((deal) => (
                 <option key={deal.id} value={deal.id}>
