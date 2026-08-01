@@ -39,6 +39,7 @@ export default function PreparationPanel({
   checklistContent?: React.ReactNode;
 }) {
   const [copied, setCopied] = useState(false);
+  const [checklistOpen, setChecklistOpen] = useState(false);
 
   const step3Done = state.mustTotal > 0 && state.mustAnswered >= state.mustTotal;
   const answering = state.intakeIssued && !step3Done;
@@ -114,12 +115,13 @@ export default function PreparationPanel({
           }
         />
 
-        {/* Step 4: 求人票確認 (母国語チェックリスト) */}
+        {/* Step 4: 求人票確認 (母国語チェックリスト) — クリックでポップアップ */}
         <StepCard
           done={state.checklistCompleted}
           active={step3Done && !state.checklistCompleted}
           title="4. 求人票確認"
           doneNote="候補者が確認済み"
+          onClick={checklistContent ? () => setChecklistOpen(true) : undefined}
           pendingNote={
             state.checklistCompleted
               ? "候補者が確認済み"
@@ -128,7 +130,7 @@ export default function PreparationPanel({
                   ? "送信済み・開封（確認待ち）"
                   : "送信済み（未開封）"
                 : step3Done
-                  ? "下から母国語チェックリストを送信"
+                  ? "クリックして母国語チェックリストを送信"
                   : "本人の回答の後に送信"
           }
         />
@@ -143,8 +145,31 @@ export default function PreparationPanel({
         />
       </div>
 
-      {/* Step4 の操作 (母国語チェックリスト) をパネル内に埋め込む */}
-      {checklistContent ? <div className="mt-3 border-t border-gray-100 pt-3">{checklistContent}</div> : null}
+      {/* Step4 の操作 (母国語チェックリスト) はステップ4クリックでポップアップ表示 */}
+      {checklistOpen && checklistContent ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8"
+          onClick={() => setChecklistOpen(false)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-bold text-[var(--color-text-dark)]">4. 求人票確認</p>
+              <button
+                type="button"
+                onClick={() => setChecklistOpen(false)}
+                className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="閉じる"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+            {checklistContent}
+          </div>
+        </div>
+      ) : null}
 
       {/* 未回答の必須質問 */}
       {state.intakeIssued && !step3Done && state.unansweredLabels.length > 0 ? (
@@ -171,6 +196,7 @@ function StepCard({
   doneNote,
   pendingNote,
   extra,
+  onClick,
 }: {
   done: boolean;
   active: boolean;
@@ -178,10 +204,14 @@ function StepCard({
   doneNote: string;
   pendingNote: React.ReactNode;
   extra?: React.ReactNode;
+  onClick?: () => void;
 }) {
   return (
     <div
+      onClick={onClick}
       className={`rounded-xl border px-3 py-2.5 ${
+        onClick ? "cursor-pointer transition hover:shadow-md" : ""
+      } ${
         done
           ? "border-[#BBF7D0] bg-[#F0FDF4]"
           : active
