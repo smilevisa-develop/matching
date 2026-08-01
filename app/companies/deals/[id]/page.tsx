@@ -63,7 +63,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
       <div>
         <p className="text-xs font-semibold tracking-[0.16em] text-[var(--color-primary)]">DEAL BOARD</p>
         <h1 className="mt-2 text-2xl font-bold text-[var(--color-text-dark)]">{deal.title}</h1>
-        <p className="mt-1 text-sm text-gray-500">案件詳細、進捗、求人票の条件を管理します。</p>
+        <p className="mt-1 text-sm text-gray-500">求人詳細、進捗、求人票の条件を管理します。</p>
       </div>
 
       <DealTabs

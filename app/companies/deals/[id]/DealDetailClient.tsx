@@ -147,13 +147,13 @@ export default function DealDetailClient({
     const candidateCount = candidates.length;
     const warning =
       candidateCount > 0
-        ? `この案件には ${candidateCount} 名の候補者が紐づいています。\n削除すると候補者との関連も全て解除されます (候補者本体は残ります)。\n本当に削除しますか?`
-        : "この案件を削除します。よろしいですか?";
+        ? `この求人には ${candidateCount} 名の候補者が紐づいています。\n削除すると候補者との関連も全て解除されます (候補者本体は残ります)。\n本当に削除しますか?`
+        : "この求人を削除します。よろしいですか?";
     if (!confirm(warning)) return;
     const response = await fetch(`/api/deals/${currentDeal.id}`, { method: "DELETE" });
     const result = await response.json();
     if (!response.ok || !result.ok) {
-      alert(result.error || "案件の削除に失敗しました");
+      alert(result.error || "求人の削除に失敗しました");
       return;
     }
     alert("削除しました");
@@ -195,7 +195,7 @@ export default function DealDetailClient({
 
   const saveEdit = async () => {
     if (!editForm.title.trim()) {
-      alert("案件名を入力してください");
+      alert("求人名を入力してください");
       return;
     }
     setSavingEdit(true);
@@ -294,7 +294,7 @@ export default function DealDetailClient({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold text-[var(--color-text-dark)]">案件情報</h2>
+              <h2 className="text-lg font-semibold text-[var(--color-text-dark)]">求人情報</h2>
               <span className={statusClass(currentDeal.status)}>{currentDeal.status}</span>
               {currentDeal.priority && currentDeal.priority !== "normal" ? (
                 <span className={priorityClass(currentDeal.priority)}>{priorityLabel(currentDeal.priority)}</span>
@@ -305,7 +305,7 @@ export default function DealDetailClient({
                 <InfoRow label="企業" value={currentDeal.company.name} />
                 <InfoRow label="担当者" value={currentDeal.owner?.name ?? "未設定"} />
                 <InfoRow label="単価" value={formatUnitPrice(currentDeal.unitPrice)} />
-                <InfoRow label="案件受付日" value={currentDeal.acceptedAt ? new Date(currentDeal.acceptedAt).toLocaleDateString("ja-JP") : "未設定"} />
+                <InfoRow label="受付日" value={currentDeal.acceptedAt ? new Date(currentDeal.acceptedAt).toLocaleDateString("ja-JP") : "未設定"} />
                 <InfoRow label="期限" value={currentDeal.deadline ? new Date(currentDeal.deadline).toLocaleDateString("ja-JP") : "未設定"} />
                 <InfoRow label="分野" value={normalizeSswIndustry(currentDeal.field) ?? "未設定"} />
               </div>
@@ -351,7 +351,7 @@ export default function DealDetailClient({
           ) : null
         ) : (
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <EditField label="案件名 *" className="md:col-span-2">
+            <EditField label="求人名 *" className="md:col-span-2">
               <input className={EDIT_INPUT} value={editForm.title} onChange={(e) => setEditForm((c) => ({ ...c, title: e.target.value }))} />
             </EditField>
             <EditField label="分野">
@@ -361,7 +361,7 @@ export default function DealDetailClient({
                 ))}
               </select>
             </EditField>
-            <EditField label="案件ステータス">
+            <EditField label="求人ステータス">
               <select className={EDIT_INPUT} value={editForm.status} onChange={(e) => setEditForm((c) => ({ ...c, status: e.target.value }))}>
                 {STATUS_OPTIONS.map((status) => (
                   <option key={status} value={status}>{status}</option>
@@ -390,7 +390,7 @@ export default function DealDetailClient({
             <EditField label="期限">
               <input className={EDIT_INPUT} type="date" value={editForm.deadline} onChange={(e) => setEditForm((c) => ({ ...c, deadline: e.target.value }))} />
             </EditField>
-            <EditField label="案件受付日">
+            <EditField label="受付日">
               <input className={EDIT_INPUT} type="date" value={editForm.acceptedAt} onChange={(e) => setEditForm((c) => ({ ...c, acceptedAt: e.target.value }))} />
             </EditField>
             <EditField label="メモ" className="md:col-span-2">
@@ -533,7 +533,7 @@ export default function DealDetailClient({
                   {currentDeal.company.name} / {currentDeal.title}
                 </h3>
                 <p className="mt-1 text-xs text-gray-500">
-                  この案件の候補者から推薦リストを生成します。CSV ダウンロードまたは企業フォルダへ Drive 保存できます。
+                  この求人の候補者から推薦リストを生成します。CSV ダウンロードまたは企業フォルダへ Drive 保存できます。
                 </p>
               </div>
               <CloseButton onClick={() => setRecommendationOpen(false)} />
@@ -603,7 +603,7 @@ function priorityClass(priority: string) {
   return "rounded-full bg-[var(--color-light)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)]";
 }
 
-// 案件メモに含まれる「流入:」「入社状況:」行は候補者情報なので、表示時に除外
+// 求人メモに含まれる「流入:」「入社状況:」行は候補者情報なので、表示時に除外
 function sanitizeDealNotes(value: string | null) {
   if (!value) return null;
   const cleaned = value

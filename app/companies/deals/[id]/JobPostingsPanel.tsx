@@ -30,7 +30,7 @@ export default function JobPostingsPanel({
           <div>
             <h3 className="text-base font-semibold text-[var(--color-text-dark)]">求人票 作成履歴</h3>
             <p className="mt-1 text-xs text-gray-500">
-              この案件で生成された求人票の一覧です。条件タブで設定した内容をもとに新しい求人票を作成できます。
+              この求人で生成された求人票の一覧です。条件タブで設定した内容をもとに新しい求人票を作成できます。
             </p>
           </div>
           <Link
