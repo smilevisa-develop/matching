@@ -12,9 +12,11 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const isIntake = pathname.startsWith("/intake");
   // 法的文書ページ (Meta App Review 要件) は完全公開
   const isLegal = pathname.startsWith("/legal");
+  // 母国語チェックリスト (公開・token 認証)
+  const isChecklist = pathname.startsWith("/checklist");
 
   useEffect(() => {
-    if (isPortal || isAuth || isIntake || isLegal) return;
+    if (isPortal || isAuth || isIntake || isLegal || isChecklist) return;
 
     const checkSession = async () => {
       try {
@@ -29,9 +31,9 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     };
 
     void checkSession();
-  }, [isAuth, isPortal, isIntake, isLegal]);
+  }, [isAuth, isPortal, isIntake, isLegal, isChecklist]);
 
-  if (isPortal || isAuth || isIntake || isLegal) {
+  if (isPortal || isAuth || isIntake || isLegal || isChecklist) {
     return (
       <body className={`min-h-full ${isAuth ? "bg-[var(--color-text-dark)] text-white" : "bg-[var(--color-light)] text-[var(--color-text-dark)]"}`}>
         {children}
