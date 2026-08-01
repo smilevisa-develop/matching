@@ -4,11 +4,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 /**
- * テスト用候補者 (ID:280「テストさん」) 専用の操作パネル。
+ * テスト用候補者 (ID:2「テストさん」) 専用の操作パネル。
  * 本番でフォーム送信テストを繰り返すために、
  *   - すべての情報を消す (追加したての空状態に戻す)
  *   - サンプル情報を入れる
- * を行う。ID:280 の詳細ページでのみ表示される (page.tsx 側で分岐)。
+ * を行う。ID:2 の詳細ページでのみ表示される (page.tsx 側で分岐)。
  */
 export default function TestResetPanel({ personId }: { personId: number }) {
   const router = useRouter();
@@ -49,7 +49,7 @@ export default function TestResetPanel({ personId }: { personId: number }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-bold text-amber-800">
-            🧪 テスト用（ID:280 専用）・土田のテストデータ
+            🧪 テスト用（ID:2 専用）・土田のテストデータ
           </p>
           <p className="mt-0.5 text-[12px] text-amber-700">
             土田がフォーム送信テストに使う候補者です。<span className="font-semibold">他の方は触らないでください。</span>

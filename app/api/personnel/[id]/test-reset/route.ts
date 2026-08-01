@@ -1,5 +1,5 @@
 /**
- * テスト用候補者 (ID:280「テストさん」) 専用のリセット / サンプル投入 (要ログイン)。
+ * テスト用候補者 (ID:2「テストさん」) 専用のリセット / サンプル投入 (要ログイン)。
  *
  * POST /api/personnel/[id]/test-reset
  *   body: { action: "clear" | "fill" }
@@ -10,7 +10,7 @@
  *   - fill : サンプル情報 (基本情報・詳細情報すべて + 日本語チェックのデモ) を投入して
  *            「入力済み」の状態にする
  *
- * 安全のため ID:280 以外では動作しない (誤操作で実候補者を消さないため)。
+ * 安全のため ID:2 以外では動作しない (誤操作で実候補者を消さないため)。
  * name / intakeToken / 連絡先紐づけ / パートナー等の identity は保持する。
  */
 
@@ -22,7 +22,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** この ID の候補者だけ操作を許可する (本番のテスト専用アカウント) */
-const TEST_PERSON_ID = 280;
+const TEST_PERSON_ID = 2;
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -32,7 +32,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const personId = Number(id);
     if (personId !== TEST_PERSON_ID) {
       return Response.json(
-        { ok: false, error: "この操作はテスト用候補者 (ID:280) でのみ使用できます" },
+        { ok: false, error: "この操作はテスト用候補者 (ID:2) でのみ使用できます" },
         { status: 403 },
       );
     }

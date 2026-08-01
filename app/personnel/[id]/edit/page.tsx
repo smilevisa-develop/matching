@@ -192,8 +192,8 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
           </p>
         </div>
 
-        {/* テスト用候補者 (ID:280) だけに表示するリセット/投入ツール */}
-        {person.id === 280 ? <TestResetPanel personId={person.id} /> : null}
+        {/* テスト用候補者 (ID:2) だけに表示するリセット/投入ツール */}
+        {person.id === 2 ? <TestResetPanel personId={person.id} /> : null}
 
         <CustomQuestionsProvider
           personId={person.id}
