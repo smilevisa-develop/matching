@@ -297,19 +297,23 @@ export async function POST(req: Request, { params }: { params: Params }) {
 
     if (uploadedFiles.length > 0) {
       // 履歴書本体の URL を ResumeProfile.resumeFileUrl に保存。
-      // 分類結果 (kind=resume) を最優先し、無ければファイル名、最後に先頭ファイル
+      // ★履歴書と確実に判定できたファイルだけを対象にする。
+      //   分類結果 (kind=resume) か、ファイル名が履歴書/resume/cv のものだけ。
+      //   どちらも無ければ設定しない (先頭ファイルへのフォールバックは廃止)。
+      //   → 履歴書が無い候補者に、パスポート等の間違ったリンクが入るのを防ぐ。
       const resumeFile =
         uploadedFiles.find((f) => f.suggestedKind === "resume") ??
-        uploadedFiles.find((f) => /履歴書|resume|cv/i.test(f.fileName)) ??
-        uploadedFiles[0];
-      try {
-        await prisma.resumeProfile.upsert({
-          where: { personId },
-          create: { personId, resumeFileUrl: resumeFile.fileUrl },
-          update: { resumeFileUrl: resumeFile.fileUrl },
-        });
-      } catch {
-        // resumeFileUrl の保存失敗は致命ではないのでサイレント
+        uploadedFiles.find((f) => /履歴書|resume|cv/i.test(f.fileName));
+      if (resumeFile) {
+        try {
+          await prisma.resumeProfile.upsert({
+            where: { personId },
+            create: { personId, resumeFileUrl: resumeFile.fileUrl },
+            update: { resumeFileUrl: resumeFile.fileUrl },
+          });
+        } catch {
+          // resumeFileUrl の保存失敗は致命ではないのでサイレント
+        }
       }
 
       // 顔写真として分類されたファイルがあれば Person.photoUrl を差し替える。
