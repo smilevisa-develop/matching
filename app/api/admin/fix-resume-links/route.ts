@@ -32,16 +32,28 @@ export async function POST(req: Request) {
   try {
     await requireApiAdmin();
     const apply = new URL(req.url).searchParams.get("apply") === "1";
+    const body = await req.json().catch(() => ({}));
+    // body.personIds が指定されていれば、その候補者のスプシ履歴書列だけをクリアする
+    // (DBを先に空欄化済みで自動検出できないケース用)
+    const explicitIds: number[] = Array.isArray(body?.personIds)
+      ? body.personIds.map((n: unknown) => Number(n)).filter((n: number) => Number.isFinite(n))
+      : [];
 
-    // resumeFileUrl が「履歴書以外の書類」に一致している候補者 (=誤設定)
-    const rows = await prisma.$queryRaw<WrongRow[]>`
-      SELECT DISTINCT rp."personId" AS "personId", pd.kind AS kind
-      FROM "ResumeProfile" rp
-      JOIN "PortalDocument" pd
-        ON pd."personId" = rp."personId" AND pd."fileUrl" = rp."resumeFileUrl"
-      WHERE rp."resumeFileUrl" IS NOT NULL AND rp."resumeFileUrl" <> '' AND pd.kind <> 'resume'
-    `;
-    const wrongPersonIds = [...new Set(rows.map((r) => r.personId))];
+    let wrongPersonIds: number[];
+    let rows: WrongRow[] = [];
+    if (explicitIds.length > 0) {
+      wrongPersonIds = [...new Set(explicitIds)];
+    } else {
+      // resumeFileUrl が「履歴書以外の書類」に一致している候補者 (=誤設定)
+      rows = await prisma.$queryRaw<WrongRow[]>`
+        SELECT DISTINCT rp."personId" AS "personId", pd.kind AS kind
+        FROM "ResumeProfile" rp
+        JOIN "PortalDocument" pd
+          ON pd."personId" = rp."personId" AND pd."fileUrl" = rp."resumeFileUrl"
+        WHERE rp."resumeFileUrl" IS NOT NULL AND rp."resumeFileUrl" <> '' AND pd.kind <> 'resume'
+      `;
+      wrongPersonIds = [...new Set(rows.map((r) => r.personId))];
+    }
 
     if (!apply) {
       return Response.json({
