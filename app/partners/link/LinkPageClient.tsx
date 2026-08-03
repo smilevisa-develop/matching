@@ -110,6 +110,8 @@ export default function LinkPageClient({
           sub="解除すると配信対象から外れます"
           badgeColor="bg-gray-100 text-gray-600 border-gray-200"
           count={linkedLineGroups.length}
+          collapsible
+          defaultOpen={false}
         >
           {linkedLineGroups.map((g) => (
             <div
@@ -222,23 +224,63 @@ function Section({
   badgeColor,
   count,
   children,
+  collapsible = false,
+  defaultOpen = true,
 }: {
   title: string;
   sub?: string;
   badgeColor: string;
   count: number;
   children: React.ReactNode;
+  /** true にするとヘッダークリックで開閉できる (件数が多い一覧向け) */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const isOpen = collapsible ? open : true;
+
+  const header = (
+    <div className="flex items-center gap-2">
+      {collapsible ? (
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`text-gray-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
+          aria-hidden
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      ) : null}
+      <span className={`rounded-full border px-3 py-1 text-sm font-semibold ${badgeColor}`}>{title}</span>
+      <span className="text-sm text-gray-500">{count} 件</span>
+    </div>
+  );
+
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
-        <span className={`rounded-full border px-3 py-1 text-sm font-semibold ${badgeColor}`}>{title}</span>
-        <span className="text-sm text-gray-500">{count} 件</span>
-      </div>
-      {sub ? <p className="mb-2 text-xs text-gray-400">{sub}</p> : null}
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm divide-y divide-gray-100">
-        {children}
-      </div>
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="mb-3 flex w-full items-center gap-2 rounded-lg text-left hover:opacity-80"
+        >
+          {header}
+        </button>
+      ) : (
+        <div className="mb-3">{header}</div>
+      )}
+      {sub && isOpen ? <p className="mb-2 text-xs text-gray-400">{sub}</p> : null}
+      {isOpen ? (
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm divide-y divide-gray-100">
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }

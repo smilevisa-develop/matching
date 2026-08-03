@@ -48,9 +48,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (action === "clear") {
       // 関連プロフィールを削除して「追加したて」の空状態へ
       await prisma.personJapaneseCheck.deleteMany({ where: { personId } });
+      await prisma.jobChecklistDelivery.deleteMany({ where: { personId } });
       await prisma.resumeProfile.deleteMany({ where: { personId } });
       await prisma.personOnboarding.deleteMany({ where: { personId } });
-      await prisma.person.update({ where: { id: personId }, data: { photoUrl: null } });
+      // 案件紐づけも解除して推薦先を完全に未設定へ (残っていると推薦先が案件由来で残る)
+      await prisma.dealCandidate.deleteMany({ where: { personId } });
+      await prisma.person.update({
+        where: { id: personId },
+        data: { photoUrl: null, recommendedCompany: null },
+      });
       return Response.json({ ok: true, action: "clear" });
     }
 
