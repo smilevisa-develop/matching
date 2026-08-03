@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type Person = { id: number; name: string };
 type Group = { id: number; name: string; members: Person[] };
@@ -10,9 +10,17 @@ export default function GroupsClient({ groups: initial, persons }: { groups: Gro
   const [newName, setNewName] = useState("");
   const [selectedPersonIds, setSelectedPersonIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState("");
 
   const togglePerson = (id: number) =>
     setSelectedPersonIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+
+  // 検索で絞り込み (パートナー名の部分一致、大文字小文字問わず)
+  const filteredPersons = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return persons;
+    return persons.filter((p) => p.name.toLowerCase().includes(q));
+  }, [persons, query]);
 
   const create = async () => {
     if (!newName.trim()) { alert("グループ名を入力してください"); return; }
@@ -54,8 +62,14 @@ export default function GroupsClient({ groups: initial, persons }: { groups: Gro
           <label className="block text-xs font-medium text-gray-500 mb-2">
             パートナーを選択 ({selectedPersonIds.length}件)
           </label>
+          <input
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="パートナー名で検索..."
+          />
           <div className="max-h-52 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-50">
-            {persons.map((p) => (
+            {filteredPersons.map((p) => (
               <label key={p.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
                 <input
                   type="checkbox"
@@ -66,6 +80,11 @@ export default function GroupsClient({ groups: initial, persons }: { groups: Gro
                 <span className="text-sm">{p.name}</span>
               </label>
             ))}
+            {filteredPersons.length === 0 && (
+              <p className="px-3 py-4 text-center text-xs text-gray-400">
+                「{query}」に一致するパートナーがありません
+              </p>
+            )}
           </div>
         </div>
         <button onClick={create} disabled={saving}

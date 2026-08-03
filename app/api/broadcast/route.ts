@@ -354,13 +354,23 @@ export async function POST(req: Request) {
       images: LoadedAttachment[]
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
       if (!lineToken) return { ok: false, error: "LINE_CHANNEL_ACCESS_TOKEN 未設定" };
-      const messages: Array<Record<string, unknown>> = [{ type: "text", text }];
+      const messages: Array<Record<string, unknown>> = [];
+      // LINE は空文字の text メッセージを拒否する (messages[0].text: May not be empty)。
+      // 本文が空なら text メッセージ自体を送らない (画像だけ送るケースに対応)。
+      const trimmedText = (text ?? "").trim();
+      if (trimmedText) {
+        messages.push({ type: "text", text });
+      }
       for (const img of images.slice(0, 4)) {
         messages.push({
           type: "image",
           originalContentUrl: img.publicAbsUrl,
           previewImageUrl: img.publicAbsUrl,
         });
+      }
+      // 本文も画像も無ければ送るものが無い
+      if (messages.length === 0) {
+        return { ok: false, error: "本文・画像がどちらも空です。メッセージを入力してください" };
       }
       const res = await fetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",
