@@ -6,10 +6,11 @@ export const dynamic = "force-dynamic";
 
 export default async function PartnerLinkPage() {
   await requireCurrentAccount();
-  const [partners, lineProfiles, messengerProfiles, lineGroups] = await Promise.all([
+  const [partners, lineProfiles, messengerProfiles, whatsappProfiles, lineGroups] = await Promise.all([
     prisma.partner.findMany({ orderBy: { name: "asc" } }),
     prisma.lineProfile.findMany({ orderBy: { lastSeenAt: "desc" }, take: 50 }),
     prisma.messengerProfile.findMany({ orderBy: { lastSeenAt: "desc" }, take: 50 }),
+    prisma.whatsappProfile.findMany({ orderBy: { lastSeenAt: "desc" }, take: 50 }),
     prisma.lineGroup.findMany({
       where: { isActive: true },
       orderBy: { lastSeenAt: "desc" },
@@ -19,9 +20,11 @@ export default async function PartnerLinkPage() {
 
   const linkedLineIds = new Set(partners.map((p) => p.lineUserId).filter(Boolean) as string[]);
   const linkedPsids = new Set(partners.map((p) => p.messengerPsid).filter(Boolean) as string[]);
+  const linkedWaIds = new Set(partners.map((p) => p.whatsappId).filter(Boolean) as string[]);
 
   const unlinkedLine = lineProfiles.filter((p) => !linkedLineIds.has(p.lineUserId));
   const unlinkedMessenger = messengerProfiles.filter((p) => !linkedPsids.has(p.psid));
+  const unlinkedWhatsapp = whatsappProfiles.filter((p) => !linkedWaIds.has(p.waId));
   const unlinkedLineGroups = lineGroups.filter((g) => !g.partnerId);
   const linkedLineGroups = lineGroups.filter((g) => g.partnerId);
 
@@ -60,6 +63,12 @@ export default async function PartnerLinkPage() {
         }))}
         unlinkedMessenger={unlinkedMessenger.map((p) => ({
           psid: p.psid,
+          lastMessageText: p.lastMessageText,
+          lastSeenAt: p.lastSeenAt.toISOString(),
+        }))}
+        unlinkedWhatsapp={unlinkedWhatsapp.map((p) => ({
+          waId: p.waId,
+          profileName: p.profileName,
           lastMessageText: p.lastMessageText,
           lastSeenAt: p.lastSeenAt.toISOString(),
         }))}

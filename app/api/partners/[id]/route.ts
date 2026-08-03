@@ -16,6 +16,18 @@ function cleanString(v: unknown): string | null {
   return t === "" ? null : t;
 }
 
+/**
+ * WhatsApp 宛先番号を正規化する。
+ * ユーザーが「+」「-」空白や先頭0を含めて入力しても、Cloud API が受け付ける
+ * 数字のみ (国番号付き E.164 の + 抜き) に落とす。空なら null。
+ */
+function normalizeWhatsapp(v: unknown): string | null {
+  const s = cleanString(v);
+  if (!s) return null;
+  const digits = s.replace(/\D/g, "");
+  return digits === "" ? null : digits;
+}
+
 function cleanBool(v: unknown): boolean {
   if (typeof v === "boolean") return v;
   if (typeof v === "string") return v === "true" || v === "1" || v === "実績有り";
@@ -61,6 +73,7 @@ function buildPartnerData(body: Record<string, unknown>) {
     hasPerformance,
     relationshipStatus,
     email: cleanString(body.email),
+    whatsappId: normalizeWhatsapp(body.whatsappId),
     snsContact: cleanString(body.snsContact),
     features: cleanString(body.features),
     introducibleNationalities: csvFromAny(body.introducibleNationalities),

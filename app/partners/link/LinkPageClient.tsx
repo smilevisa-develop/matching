@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 type PartnerOption = { id: number; name: string };
 type LineEntry = { lineUserId: string; displayName: string | null; lastMessageText: string | null; lastSeenAt: string };
 type MessengerEntry = { psid: string; lastMessageText: string | null; lastSeenAt: string };
+type WhatsappEntry = { waId: string; profileName: string | null; lastMessageText: string | null; lastSeenAt: string };
 type UnlinkedGroupEntry = {
   id: number;
   groupId: string;
@@ -29,16 +30,22 @@ export default function LinkPageClient({
   linkedLineGroups,
   unlinkedLine,
   unlinkedMessenger,
+  unlinkedWhatsapp,
 }: {
   partners: PartnerOption[];
   unlinkedLineGroups: UnlinkedGroupEntry[];
   linkedLineGroups: LinkedGroupEntry[];
   unlinkedLine: LineEntry[];
   unlinkedMessenger: MessengerEntry[];
+  unlinkedWhatsapp: WhatsappEntry[];
 }) {
   const router = useRouter();
 
-  const link = async (partnerId: number, field: "lineUserId" | "messengerPsid", value: string) => {
+  const link = async (
+    partnerId: number,
+    field: "lineUserId" | "messengerPsid" | "whatsappId",
+    value: string
+  ) => {
     const res = await fetch(`/api/partners/${partnerId}/link-contact`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -173,6 +180,29 @@ export default function LinkPageClient({
           />
         ))}
         {unlinkedMessenger.length === 0 ? <Empty text="未紐づけの Messenger ユーザーはいません" /> : null}
+      </Section>
+
+      {/* === WhatsApp === */}
+      <Section
+        title="WhatsApp"
+        sub="相手が本番番号にメッセージを送ると、その番号がここに自動で表示されます。パートナーを選んで紐づけると一括送信の宛先になります。"
+        badgeColor="bg-[#DCFCE7] text-[#166534] border-[#BBF7D0]"
+        count={unlinkedWhatsapp.length}
+      >
+        {unlinkedWhatsapp.map((entry) => (
+          <ProfileRow
+            key={entry.waId}
+            id={entry.waId}
+            displayName={entry.profileName}
+            lastMessage={entry.lastMessageText}
+            lastSeen={entry.lastSeenAt}
+            partners={partners}
+            onLink={(partnerId) => link(partnerId, "whatsappId", entry.waId)}
+          />
+        ))}
+        {unlinkedWhatsapp.length === 0 ? (
+          <Empty text="未紐づけの WhatsApp ユーザーはいません (相手が本番番号にメッセージを送ると表示)" />
+        ) : null}
       </Section>
 
       <p className="text-xs text-gray-500">

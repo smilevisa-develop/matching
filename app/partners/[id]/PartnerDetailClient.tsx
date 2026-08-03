@@ -122,6 +122,7 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
     contactName: initial.contactName ?? "",
     contactPhone: initial.contactPhone ?? "",
     email: initial.email ?? "",
+    whatsappId: initial.whatsappId ?? "",
     notes: initial.notes ?? "",
     rating: initial.rating ?? 0,
     ratingReason: initial.ratingReason ?? "",
@@ -413,6 +414,18 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
               placeholder="example@partner.com"
             />
           </Field>
+          <Field label="WhatsApp 番号" className="md:col-span-2">
+            <input
+              className={INPUT}
+              value={form.whatsappId}
+              onChange={(e) => set("whatsappId", e.target.value)}
+              placeholder="818012345678 (国番号付き)"
+              inputMode="tel"
+            />
+            <p className="mt-1 text-[11px] text-gray-500">
+              国番号から入力 (日本の 080-1234-5678 → 818012345678)。「+」・先頭の 0・ハイフンは保存時に自動で除去されます。一括送信で WhatsApp テンプレを送る宛先になります。
+            </p>
+          </Field>
           <Field label="SNS 連絡先" className="md:col-span-2">
             <input className={INPUT} value={form.snsContact} onChange={(e) => set("snsContact", e.target.value)} placeholder="LINE / Facebook URL など" />
           </Field>
@@ -470,7 +483,7 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
               lineGroupName={initial.lineGroupName}
               lineGroupMemberCount={initial.lineGroupMemberCount}
               messengerPsid={initial.messengerPsid}
-              whatsappId={initial.whatsappId}
+              whatsappId={form.whatsappId || null}
             />
           </Field>
           {initial.messengerPsid ? (

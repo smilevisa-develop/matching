@@ -14,19 +14,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return Response.json({ ok: false, error: "紐づけるIDが空です" }, { status: 400 });
     }
 
-    if (field !== "lineUserId" && field !== "messengerPsid") {
+    if (field !== "lineUserId" && field !== "messengerPsid" && field !== "whatsappId") {
       return Response.json({ ok: false, error: "対象のフィールドが不正です" }, { status: 400 });
     }
 
-    const data: { lineUserId?: string; messengerPsid?: string; linkStatus?: string; channel?: string | null } = {
+    const data: {
+      lineUserId?: string;
+      messengerPsid?: string;
+      whatsappId?: string;
+      linkStatus?: string;
+      channel?: string | null;
+    } = {
       linkStatus: "完了",
     };
     if (field === "lineUserId") {
       data.lineUserId = value;
       data.channel = "LINE";
-    } else {
+    } else if (field === "messengerPsid") {
       data.messengerPsid = value;
       data.channel = "Messenger";
+    } else {
+      // whatsappId は国コード込みの数字のみ (webhook が保存した waId をそのまま使う)
+      data.whatsappId = value.replace(/\D/g, "");
+      data.channel = "WhatsApp";
     }
 
     const partner = await prisma.partner.update({
