@@ -177,8 +177,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await requireApiAccount();
     const { id } = await params;
     const body = await req.json();
-    const data: { isActive?: boolean } = {};
+    const data: { isActive?: boolean; preferredChannels?: string | null; channel?: string | null } = {};
     if (typeof body.isActive === "boolean") data.isActive = body.isActive;
+    if (body.preferredChannels !== undefined) {
+      data.preferredChannels = csvFromAny(body.preferredChannels);
+      // レガシー channel は先頭を採用 (未指定なら触らない)
+      const first = (data.preferredChannels ?? "").split(",")[0]?.trim();
+      if (first) data.channel = first;
+    }
     if (Object.keys(data).length === 0) {
       return Response.json({ ok: false, error: "更新項目がありません" }, { status: 400 });
     }

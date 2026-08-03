@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CHANNELS } from "@/lib/candidate-profile";
 import {
   INTRODUCIBLE_FIELDS,
@@ -207,6 +207,31 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
     setForm((c) => ({ ...c, [k]: v }));
     setDirty(true);
   };
+
+  // 連絡先が紐づいているのに連絡手段が OFF のチャネルを、マウント時に自動で ON にする。
+  // (この機能導入より前に紐づけたパートナーの取りこぼしを埋める。保存ボタン不要で DB にも静かに反映)
+  const autoEnableDone = useRef(false);
+  useEffect(() => {
+    if (autoEnableDone.current) return;
+    autoEnableDone.current = true;
+
+    const linked: string[] = [];
+    if (initial.lineUserId || initial.lineGroupId) linked.push("LINE");
+    if (initial.messengerPsid) linked.push("Messenger");
+    if (initial.whatsappId) linked.push("WhatsApp");
+
+    const missing = linked.filter((c) => !form.preferredChannels.includes(c));
+    if (missing.length === 0) return;
+
+    const next = [...new Set([...form.preferredChannels, ...missing])];
+    setForm((c) => ({ ...c, preferredChannels: next }));
+    void fetch(`/api/partners/${initial.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preferredChannels: next }),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const save = async () => {
     if (!form.name.trim()) {
