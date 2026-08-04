@@ -63,8 +63,11 @@ export async function GET() {
       category?: string;
       components?: MetaComponent[];
     };
+    // MARKETING カテゴリは 1 通あたりの単価が UTILITY の約 6.5 倍 かつ 24h 枠内でも常に課金される。
+    // 意図しない高額配信を防ぐため、UTILITY のテンプレだけを選択候補にする。
+    // (Meta 側でテンプレが MARKETING に再分類された場合も自動的に候補から外れる)
     const templates = ((data.data ?? []) as MetaTemplate[])
-      .filter((t) => t.status === "APPROVED" && isAllowed(t.name))
+      .filter((t) => t.status === "APPROVED" && t.category === "UTILITY" && isAllowed(t.name))
       .map((t) => {
         const body = (t.components ?? []).find((c) => c.type === "BODY");
         const nums = [...(body?.text ?? "").matchAll(/\{\{(\d+)\}\}/g)].map((m) =>
@@ -85,7 +88,15 @@ export async function GET() {
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-    return Response.json({ ok: true, configured: true, templates });
+    return Response.json({
+      ok: true,
+      configured: true,
+      templates,
+      note:
+        templates.length === 0
+          ? "使用できるテンプレートがありません (承認済み かつ UTILITY カテゴリ のものだけが対象です)。審査中のテンプレは承認され次第ここに表示されます。"
+          : undefined,
+    });
   } catch (e) {
     return Response.json(
       { ok: false, templates: [], error: e instanceof Error ? e.message : "error" },
