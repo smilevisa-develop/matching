@@ -171,7 +171,7 @@ export default function TemplatesClient({ templates: initial }: { templates: Tem
     }
     if (mode === "ut") {
       if (!whatsappTemplateName.trim()) {
-        alert("承認済み UT を選択してください");
+        alert("承認済み WhatsApp テンプレートを選択してください");
         return;
       }
       if (varMap.some((m) => m.kind === "value" && !m.value.trim())) {
@@ -272,7 +272,7 @@ export default function TemplatesClient({ templates: initial }: { templates: Tem
                     : "text-gray-500 hover:text-[var(--color-text-dark)]"
                 }`}
               >
-                {m === "normal" ? "通常" : "UT"}
+                {m === "normal" ? "通常" : "WhatsApp"}
               </button>
             ))}
           </div>
@@ -338,7 +338,7 @@ export default function TemplatesClient({ templates: initial }: { templates: Tem
             {/* UT (WhatsApp 承認テンプレ) 選択 */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-medium text-gray-500">承認済み UT を選択</label>
+                <label className="block text-xs font-medium text-gray-500">承認済み WhatsApp テンプレートを選択</label>
                 <button type="button" onClick={loadWaTemplates} className="text-[10px] text-[var(--color-primary)] hover:underline">
                   再読込
                 </button>
@@ -354,7 +354,7 @@ export default function TemplatesClient({ templates: initial }: { templates: Tem
                 </select>
               ) : (
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
-                  {waNote ?? "承認済み UT を取得できませんでした"}。承認されると「再読込」で表示されます。
+                  {waNote ?? "承認済み WhatsApp テンプレートを取得できませんでした"}。承認されると「再読込」で表示されます。
                 </p>
               )}
               {whatsappTemplateName && !selectedWaOption && waOptions.length > 0 ? (
@@ -444,7 +444,7 @@ export default function TemplatesClient({ templates: initial }: { templates: Tem
                 <p className="font-medium text-[var(--color-text-dark)] text-sm">{t.name}</p>
                 {t.whatsappTemplateName ? (
                   <span className="mt-1 inline-block rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#15803D]">
-                    UT: {t.whatsappTemplateName}
+                    WhatsApp: {t.whatsappTemplateName}
                   </span>
                 ) : null}
               </div>

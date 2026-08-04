@@ -113,7 +113,9 @@ export async function POST(req: Request) {
       message,
       emailSubject: emailSubjectFromBody,
       scheduledAt,
-      templateId,
+      whatsappTemplateName,
+      whatsappTemplateLang,
+      whatsappParams,
       fileIds,
     } = body as {
       mode: "filter" | "group";
@@ -128,11 +130,19 @@ export async function POST(req: Request) {
        */
       partnerIds?: number[];
       message: string;
-      /** メール件名 (UI で個別指定された場合)。優先順位: 本体 > テンプレ > デフォルト */
+      /** メール件名 (UI で個別指定された場合)。優先順位: 本体 > デフォルト */
       emailSubject?: string | null;
       scheduledAt: string | null;
-      /** MessageTemplate.id を渡すと、WhatsApp ではそのテンプレ承認名で送信できる */
-      templateId?: number | null;
+      /** WhatsApp 承認テンプレ名 (一斉連絡ページで固定使用しているテンプレ)。 */
+      whatsappTemplateName?: string | null;
+      /** WhatsApp 承認テンプレの言語コード。 */
+      whatsappTemplateLang?: string | null;
+      /**
+       * WhatsApp テンプレ本文の各 {{n}} の指定。一斉連絡ページで組み立てて送る:
+       *   { auto } … 送信時に自動解決 (パートナー名 / 担当者名 / account:姓 など)
+       *   { value } … ページで入力した固定値 (全対象共通)
+       */
+      whatsappParams?: Array<{ auto?: string; value?: string }>;
       /** 添付画像 (UploadedFile.id 配列、最大 4 件)。LINE 用に image message、メール用に添付。 */
       fileIds?: string[];
     };
@@ -170,24 +180,36 @@ export async function POST(req: Request) {
       );
     }
 
-    // 選択テンプレ (WhatsApp テンプレ名がある場合のみ意味を持つ)
-    const tmpl = templateId
-      ? await prisma.messageTemplate.findUnique({ where: { id: templateId } })
-      : null;
-    // whatsappTemplateParams は各 {{n}} の指定を並べた JSON 配列:
-    //   { auto: "パートナー名" | "担当者名" | "account:姓" } … 送信時に自動解決
-    //   { value: "介護" }                                   … テンプレに保存した固定値
-    let paramSpecs: Array<{ auto?: string; value?: string }> = [];
-    try {
-      const parsed = JSON.parse(tmpl?.whatsappTemplateParams ?? "[]");
-      if (Array.isArray(parsed)) paramSpecs = parsed;
-    } catch {
-      paramSpecs = [];
-    }
+    // WhatsApp 承認テンプレ: 一斉連絡ページから テンプレ名 + 言語 + 変数指定(specs) を直接受け取る。
+    //   specs = 各 {{n}} の指定: { auto } = 送信時自動解決 / { value } = ページで入力した固定値
+    const paramSpecs: Array<{ auto?: string; value?: string }> = Array.isArray(whatsappParams)
+      ? whatsappParams
+      : [];
+    // 任意のテンプレ名を送れないよう、許可リスト (WA_TEMPLATE_ALLOWLIST) で検証する。
+    const waAllow = (process.env.WA_TEMPLATE_ALLOWLIST ?? "")
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const waNameAllowed = (n: string) =>
+      waAllow.length === 0 ||
+      waAllow.some((a) => (a.endsWith("*") ? n.startsWith(a.slice(0, -1)) : n === a));
     const waTemplate =
-      tmpl?.whatsappTemplateName && tmpl?.whatsappTemplateLang
-        ? { name: tmpl.whatsappTemplateName, lang: tmpl.whatsappTemplateLang, specs: paramSpecs }
+      whatsappTemplateName && whatsappTemplateLang && waNameAllowed(whatsappTemplateName)
+        ? { name: whatsappTemplateName, lang: whatsappTemplateLang, specs: paramSpecs }
         : null;
+
+    // 手入力の {{n}} が空だと Meta がテンプレ送信を拒否するため、送信前に弾く。
+    if (waTemplate) {
+      const emptyIdx = waTemplate.specs.findIndex(
+        (s) => s.value !== undefined && String(s.value).trim() === ""
+      );
+      if (emptyIdx >= 0) {
+        return Response.json(
+          { ok: false, error: `WhatsApp テンプレの入力欄 (${emptyIdx + 1} 番目) が空です` },
+          { status: 400 }
+        );
+      }
+    }
 
     // 対象パートナー取得
     type Target = {
@@ -562,8 +584,7 @@ export async function POST(req: Request) {
         country: t.country,
         introducibleFields: t.introducibleFields,
       };
-      const subjectTemplate =
-        emailSubjectFromBody?.trim() || tmpl?.emailSubject?.trim() || DEFAULT_EMAIL_SUBJECT;
+      const subjectTemplate = emailSubjectFromBody?.trim() || DEFAULT_EMAIL_SUBJECT;
       const subject = expandTemplate(subjectTemplate, {
         partner: partnerCtx,
         openDeals,

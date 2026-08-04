@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function BroadcastPage() {
   await requireCurrentAccount();
-  const [partners, templates, groups, openDealsRaw] = await Promise.all([
+  const [partners, groups, openDealsRaw] = await Promise.all([
     prisma.partner.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -23,8 +23,6 @@ export default async function BroadcastPage() {
         },
       },
     }),
-    // 連絡テンプレートは全アカウント共通
-    prisma.messageTemplate.findMany({ orderBy: { name: "asc" } }),
     prisma.group.findMany({
       include: { members: { select: { partnerId: true } } },
       orderBy: { name: "asc" },
@@ -46,7 +44,7 @@ export default async function BroadcastPage() {
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">パートナー一斉連絡</h1>
         <p className="text-sm text-gray-500 mt-1">
-          共有の連絡テンプレートを使って、海外パートナーへ一斉連絡します
+          承認済みテンプレートに沿って、海外パートナーへ一斉連絡します
         </p>
       </div>
       <BroadcastClient
@@ -72,14 +70,6 @@ export default async function BroadcastPage() {
           introducibleScope: p.introducibleScope,
           introducibleFields: p.introducibleFields,
           introducibleResidenceStatuses: p.introducibleResidenceStatuses,
-        }))}
-        templates={templates.map((t) => ({
-          id: t.id,
-          name: t.name,
-          content: t.content,
-          emailSubject: t.emailSubject,
-          whatsappTemplateName: t.whatsappTemplateName,
-          whatsappTemplateParams: t.whatsappTemplateParams,
         }))}
         groups={groups.map((g) => ({
           id: g.id,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   INTRODUCIBLE_FIELDS,
   INTRODUCIBLE_NATIONALITIES,
@@ -8,7 +8,6 @@ import {
   parseCsv,
 } from "@/lib/partner-profile";
 import {
-  BROADCAST_VARIABLES,
   URGENT_DEAL_STATUSES,
   expandTemplate,
   PREVIEW_PARTNER,
@@ -40,14 +39,29 @@ type Partner = {
   introducibleFields: string | null;
   introducibleResidenceStatuses: string | null;
 };
-type Template = {
-  id: number;
+/** Meta 承認済み WhatsApp テンプレート (一斉連絡で固定使用し、全チャネルの文面もこれで統一) */
+type WaTemplateInfo = {
   name: string;
-  content: string;
-  emailSubject: string | null;
-  whatsappTemplateName: string | null;
-  whatsappTemplateParams: string | null;
+  language: string;
+  bodyVarCount: number;
+  bodyText: string;
+  examples: string[];
 };
+
+/** 本文の {{1}}{{2}}{{3}} に自動で入る変数 (選択不要・入力不要) */
+const AUTO_COUNT = 3;
+
+/** 本文テキストから {{n}} の直前の見出しを推測して、手入力欄のラベルにする */
+function deriveLabelFromBody(body: string, n: number): string {
+  const idx = body.indexOf(`{{${n}}}`);
+  if (idx < 0) return "";
+  const before = body.slice(0, idx).replace(/\{\{\d+\}\}/g, "");
+  const lines = before
+    .split("\n")
+    .map((l) => l.replace(/^[■●・\-\s]+/, "").replace(/[：:]\s*$/, "").trim())
+    .filter(Boolean);
+  return lines[lines.length - 1] ?? "";
+}
 
 /**
  * 「主な連絡手段」(channel) を基準に、配信可能なパートナーか判定する。
@@ -102,12 +116,10 @@ const ALL = "すべて";
 
 export default function BroadcastClient({
   partners,
-  templates,
   groups,
   openDeals: openDealsRaw,
 }: {
   partners: Partner[];
-  templates: Template[];
   groups: Group[];
   openDeals: DealJson[];
 }) {
@@ -123,29 +135,34 @@ export default function BroadcastClient({
     () => openDeals.filter((d) => (URGENT_DEAL_STATUSES as readonly string[]).includes(d.status)),
     [openDeals]
   );
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [mode, setMode] = useState<"filter" | "group">("filter");
   const [relationshipStatus, setRelationshipStatus] = useState(ALL);
   const [introNationality, setIntroNationality] = useState(ALL);
   const [introField, setIntroField] = useState(ALL);
   const [linkFilter, setLinkFilter] = useState<"all" | "linked" | "unlinked">("linked");
   const [selectedGroup, setSelectedGroup] = useState("");
-  const [message, setMessage] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState("");
-  /** WhatsApp 承認テンプレの「input:ラベル」型パラメータへ流し込む値 (全対象パートナー共通) */
-  /** 承認済み UT の本文テキスト (name → 本文) — WhatsApp プレビュー描画に使う */
-  const [waBodies, setWaBodies] = useState<Record<string, string>>({});
+  /** 固定使用する承認済みテンプレート (取得失敗時は null + note にエラー) */
+  const [waTpl, setWaTpl] = useState<WaTemplateInfo | null>(null);
+  const [waTplNote, setWaTplNote] = useState<string | null>("テンプレートを読み込み中...");
+  /** 手入力変数 ({{4}} 以降) の入力値。全対象パートナー共通 */
+  const [waValues, setWaValues] = useState<string[]>([]);
   useEffect(() => {
     fetch("/api/whatsapp/templates")
       .then((r) => r.json())
       .then((d) => {
-        if (!d?.ok) return;
-        const map: Record<string, string> = {};
-        for (const t of d.templates ?? []) map[t.name] = t.bodyText ?? "";
-        setWaBodies(map);
+        const first: WaTemplateInfo | undefined = d?.ok ? (d.templates ?? [])[0] : undefined;
+        if (!first) {
+          setWaTplNote(
+            d?.error ?? d?.note ?? "承認済みテンプレートが見つかりません。設定を確認してください。"
+          );
+          return;
+        }
+        setWaTpl(first);
+        setWaTplNote(null);
+        setWaValues(Array(Math.max(0, first.bodyVarCount - AUTO_COUNT)).fill(""));
       })
-      .catch(() => {});
+      .catch(() => setWaTplNote("テンプレートの取得に失敗しました (ネットワークエラー)"));
   }, []);
   /** ログイン中アカウントの姓 (WhatsApp テンプレの {{姓}} プレビュー用) */
   const [senderLastName, setSenderLastName] = useState("");
@@ -328,77 +345,51 @@ export default function BroadcastClient({
   const lineOverLimit =
     lineUsage?.limit !== null && lineUsage?.limit !== undefined && lineAfter > lineUsage.limit;
 
-  const applyTemplate = (id: string) => {
-    const t = templates.find((t) => t.id === Number(id));
-    if (t) {
-      setMessage(t.content);
-      if (t.emailSubject) setEmailSubject(t.emailSubject);
-    }
-    setSelectedTemplate(id);
-  };
-
-  const selectedTmplObj = templates.find((t) => String(t.id) === selectedTemplate);
+  /** 手入力欄のラベル ({{4}} 以降、本文見出しから導出) と入力例 */
+  const manualFields = useMemo(() => {
+    if (!waTpl) return [];
+    return Array.from({ length: Math.max(0, waTpl.bodyVarCount - AUTO_COUNT) }, (_, i) => {
+      const n = AUTO_COUNT + i + 1; // {{n}}
+      return {
+        n,
+        label: deriveLabelFromBody(waTpl.bodyText, n) || `項目 ${n}`,
+        example: waTpl.examples[n - 1] ?? "",
+      };
+    });
+  }, [waTpl]);
 
   /**
-   * WhatsApp 承認テンプレのプレビュー。本文の {{1}}..{{n}} を、テンプレに保存された指定で差し込む:
-   *   { value }              → 保存済みの固定値
-   *   { auto: "account:姓" } → ログイン中アカウントの姓
-   *   { auto: 配信変数 }     → 1 件目のパートナー (無ければサンプル) で展開
+   * 送信用メッセージ本文。テンプレ本文の {{n}} を:
+   *   {{1}} → {{パートナー名}} / {{2}} → {{担当者名}} (受信者ごとにサーバーで展開)
+   *   {{3}} → ログイン中アカウントの姓
+   *   {{4}}以降 → ページで入力した値
+   * に置換したもの。LINE / Messenger / メール にはこの文面がそのまま届く。
    */
-  const waPreview = useMemo(() => {
-    const utName = selectedTmplObj?.whatsappTemplateName;
-    if (!utName) return null;
-    const body = waBodies[utName];
-    if (!body) return null;
-    const samplePartner: PartnerForBroadcast =
-      targetPartners.length > 0
-        ? {
-            name: targetPartners[0].name,
-            contactName: targetPartners[0].contactName,
-            country: targetPartners[0].country,
-            introducibleFields: targetPartners[0].introducibleFields,
-          }
-        : PREVIEW_PARTNER;
-    let specs: Array<{ auto?: string; value?: string }> = [];
-    try {
-      const parsed = JSON.parse(selectedTmplObj?.whatsappTemplateParams ?? "[]");
-      if (Array.isArray(parsed)) specs = parsed;
-    } catch {
-      specs = [];
-    }
-    const values = specs.map((spec) => {
-      if (spec.value !== undefined) return String(spec.value).replace(/\s+/g, " ").trim();
-      if (spec.auto === "account:姓") return senderLastName || "（担当者姓）";
-      if (spec.auto)
-        return expandTemplate(`{{${spec.auto}}}`, { partner: samplePartner, openDeals, urgentDeals })
-          .replace(/\s+/g, " ")
-          .trim();
-      return "";
+  const messageTemplate = useMemo(() => {
+    if (!waTpl) return "";
+    return waTpl.bodyText.replace(/\{\{(\d+)\}\}/g, (_, s) => {
+      const n = Number(s);
+      if (n === 1) return "{{パートナー名}}";
+      if (n === 2) return "{{担当者名}}";
+      if (n === 3) return senderLastName || "（担当者姓）";
+      return waValues[n - AUTO_COUNT - 1] ?? "";
     });
-    return body.replace(/\{\{(\d+)\}\}/g, (_, n) => values[Number(n) - 1] ?? "");
-  }, [selectedTmplObj, waBodies, targetPartners, openDeals, urgentDeals, senderLastName]);
+  }, [waTpl, senderLastName, waValues]);
 
-  /** カーソル位置に変数を挿入 */
-  const insertVariable = (variable: string) => {
-    const el = textareaRef.current;
-    if (!el) {
-      setMessage((m) => m + variable);
-      return;
-    }
-    const start = el.selectionStart ?? message.length;
-    const end = el.selectionEnd ?? message.length;
-    const next = message.slice(0, start) + variable + message.slice(end);
-    setMessage(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = start + variable.length;
-      el.setSelectionRange(pos, pos);
+  /** WhatsApp テンプレ送信用の変数指定 ({{n}} 順) */
+  const whatsappParams = useMemo(() => {
+    if (!waTpl) return [];
+    return Array.from({ length: waTpl.bodyVarCount }, (_, i): { auto?: string; value?: string } => {
+      if (i === 0) return { auto: "パートナー名" };
+      if (i === 1) return { auto: "担当者名" };
+      if (i === 2) return { auto: "account:姓" };
+      return { value: (waValues[i - AUTO_COUNT] ?? "").trim() };
     });
-  };
+  }, [waTpl, waValues]);
 
   /** プレビュー: 1 件目のパートナーで変数展開 (なければダミー) */
   const previewMessage = useMemo(() => {
-    if (!message.trim()) return "";
+    if (!messageTemplate) return "";
     const samplePartner: PartnerForBroadcast =
       targetPartners.length > 0
         ? {
@@ -408,40 +399,36 @@ export default function BroadcastClient({
             introducibleFields: targetPartners[0].introducibleFields,
           }
         : PREVIEW_PARTNER;
-    return expandTemplate(message, { partner: samplePartner, openDeals, urgentDeals });
-  }, [message, targetPartners, openDeals, urgentDeals]);
+    return expandTemplate(messageTemplate, { partner: samplePartner, openDeals, urgentDeals });
+  }, [messageTemplate, targetPartners, openDeals, urgentDeals]);
 
   const previewPartnerName =
     targetPartners.length > 0 ? targetPartners[0].name : "サンプル";
 
+  /** 送信前の共通検証。問題があればメッセージを返す */
+  const validateSend = (scheduled: boolean): string | null => {
+    if (!waTpl) return "テンプレートが読み込めていないため送信できません";
+    const emptyField = manualFields.find((f, i) => !(waValues[i] ?? "").trim());
+    if (emptyField) return `「${emptyField.label}」が未入力です`;
+    if (scheduled && !scheduleDate) return "日時を選択してください";
+    if (targetPartners.length === 0) return "送信対象がいません";
+    return null;
+  };
+
   /** 「配信」「予約」ボタン → まず確認モーダルを開く */
   const requestSend = (scheduled: boolean) => {
-    if (!message.trim() && !selectedTmplObj?.whatsappTemplateName) {
-      alert("メッセージを入力するか、WhatsApp テンプレを選択してください");
-      return;
-    }
-    if (scheduled && !scheduleDate) {
-      alert("日時を選択してください");
-      return;
-    }
-    if (targetPartners.length === 0) {
-      alert("送信対象がいません");
+    const err = validateSend(scheduled);
+    if (err) {
+      alert(err);
       return;
     }
     setConfirmingScheduled(scheduled);
   };
 
   const handleSend = async (scheduled = false) => {
-    if (!message.trim() && !selectedTmplObj?.whatsappTemplateName) {
-      alert("メッセージを入力するか、WhatsApp テンプレを選択してください");
-      return;
-    }
-    if (scheduled && !scheduleDate) {
-      alert("日時を選択してください");
-      return;
-    }
-    if (targetPartners.length === 0) {
-      alert("送信対象がいません");
+    const err = validateSend(scheduled);
+    if (err) {
+      alert(err);
       return;
     }
     // 明示的なホワイトリスト: プレビューに表示されている partner のみ送信対象
@@ -465,10 +452,12 @@ export default function BroadcastClient({
           introField: introField === ALL ? null : introField,
           groupId: selectedGroup ? Number(selectedGroup) : null,
           partnerIds,
-          message,
+          message: messageTemplate,
           emailSubject: emailSubject.trim() || null,
           scheduledAt: scheduled ? scheduleDate : null,
-          templateId: selectedTemplate ? Number(selectedTemplate) : null,
+          whatsappTemplateName: waTpl?.name ?? null,
+          whatsappTemplateLang: waTpl?.language ?? null,
+          whatsappParams,
           fileIds: attachedImages.map((a) => a.id),
         }),
       });
@@ -568,33 +557,56 @@ export default function BroadcastClient({
           )}
         </div>
 
-        {/* メッセージ */}
+        {/* メッセージ (承認済みテンプレート固定 + 変数入力) */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-[var(--color-text-dark)]">メッセージ</p>
-            <p className="text-[10px] text-gray-400">
-              急ぎ案件 {urgentDeals.length} 件 / 募集中 {openDeals.length} 件
-            </p>
+            {waTpl ? (
+              <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#15803D]">
+                テンプレート: {waTpl.name}
+              </span>
+            ) : null}
           </div>
-          <Select
-            label="テンプレート"
-            value={selectedTemplate}
-            onChange={applyTemplate}
-            options={["", ...templates.map((t) => String(t.id))]}
-            labels={["テンプレートを選択", ...templates.map((t) => t.name)]}
-          />
 
-          {/* WhatsApp 送信プレビュー (テンプレに保存された内容で届く文面) */}
-          {waPreview !== null && (
-            <div className="mt-3 rounded-lg border border-gray-200 bg-[#E7F7EE] p-3">
-              <p className="mb-2 text-[10px] font-semibold text-[#15803D]">
-                WhatsApp プレビュー（{previewPartnerName} 宛の例）
+          {waTplNote ? (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700">{waTplNote}</p>
+          ) : null}
+
+          {waTpl ? (
+            <>
+              <p className="mb-3 text-[11px] text-gray-500">
+                会社名・担当者名・あなたの姓は自動で入ります。以下の項目を入力してください
+                (全チャネル共通の文面として送信されます)。
               </p>
-              <div className="rounded-lg bg-white px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap text-[var(--color-text-dark)] shadow-sm">
-                {waPreview}
-              </div>
-            </div>
-          )}
+
+              {/* 手入力の変数フォーム */}
+              {manualFields.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {manualFields.map((f, i) => (
+                    <div key={f.n}>
+                      <label className="mb-0.5 block text-[11px] font-medium text-[var(--color-text-dark)]">
+                        {f.label}
+                      </label>
+                      <input
+                        type="text"
+                        value={waValues[i] ?? ""}
+                        onChange={(e) =>
+                          setWaValues((prev) => {
+                            const next = [...prev];
+                            next[i] = e.target.value;
+                            return next;
+                          })
+                        }
+                        placeholder={f.example ? `例: ${f.example}` : ""}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
           <div className="mt-3">
             <label className="block text-xs font-medium text-gray-500 mb-1">
               メール件名{" "}
@@ -606,34 +618,9 @@ export default function BroadcastClient({
               type="text"
               value={emailSubject}
               onChange={(e) => setEmailSubject(e.target.value)}
-              placeholder="例: 今週の急ぎ案件のご案内"
+              placeholder="例: 求人のご案内"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
             />
-          </div>
-          <textarea
-            ref={textareaRef}
-            className="w-full mt-3 border border-gray-300 rounded-lg px-3 py-2 text-sm h-32 resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
-            placeholder="パートナーへの一斉メッセージを入力してください。下のボタンから変数を挿入できます (例: パートナー名 → 受信者ごとに自動で展開)"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-          />
-          {/* 変数挿入チップ */}
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {BROADCAST_VARIABLES.map((v) => (
-              <button
-                key={v.key}
-                type="button"
-                onClick={() => insertVariable(v.label)}
-                title={v.description}
-                className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                  v.category === "案件"
-                    ? "border-[#FCA5A5] bg-[#FEF2F2] text-[#B91C1C] hover:bg-[#FEE2E2]"
-                    : "border-gray-300 bg-white text-gray-600 hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-                }`}
-              >
-                + {v.label}
-              </button>
-            ))}
           </div>
 
           {/* 画像添付 (LINE image message + メール添付として送る、最大 4 枚) */}
@@ -708,11 +695,11 @@ export default function BroadcastClient({
           </div>
         </div>
 
-        {/* 展開プレビュー */}
-        {message.trim() ? (
+        {/* 送信文面プレビュー (全チャネル共通) */}
+        {previewMessage ? (
           <div className="bg-[#FAF9F5] rounded-xl border border-gray-200 p-5 shadow-sm">
             <div className="flex items-baseline justify-between mb-2">
-              <p className="text-sm font-semibold text-[var(--color-text-dark)]">展開プレビュー</p>
+              <p className="text-sm font-semibold text-[var(--color-text-dark)]">送信文面プレビュー</p>
               <p className="text-[11px] text-gray-500">
                 {previewPartnerName} 宛のサンプル
               </p>
