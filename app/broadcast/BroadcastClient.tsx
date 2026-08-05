@@ -153,9 +153,17 @@ export default function BroadcastClient({
       .then((r) => r.json())
       .then((d) => {
         const list: WaTemplateInfo[] = d?.ok ? (d.templates ?? []) : [];
-        // WhatsApp まで送れる UTILITY を優先。無ければ先頭のものを文面として使う
+        // 末尾の版番号 (…_v7 など) が大きいものを「最新版」とみなす
+        const version = (name: string) => Number(name.match(/v(\d+)$/)?.[1] ?? 0);
+        const latest = (arr: WaTemplateInfo[]) =>
+          [...arr].sort(
+            (a, b) => version(b.name) - version(a.name) || b.name.localeCompare(a.name)
+          )[0];
+        // WhatsApp まで送れる UTILITY を優先し、その中の最新版を使う。
+        // UTILITY が無ければ最新版の文面だけ流用する
         // (MARKETING は課金が高いため WhatsApp には送らず LINE / メール のみ)
-        const picked = list.find((t) => t.category === "UTILITY") ?? list[0];
+        const utilities = list.filter((t) => t.category === "UTILITY");
+        const picked = utilities.length > 0 ? latest(utilities) : latest(list);
         if (!picked) {
           setWaTplNote(
             d?.error ?? d?.note ?? "承認済みテンプレートが見つかりません。設定を確認してください。"
