@@ -39,10 +39,11 @@ type Partner = {
   introducibleFields: string | null;
   introducibleResidenceStatuses: string | null;
 };
-/** Meta 承認済み WhatsApp テンプレート (一斉連絡で固定使用し、全チャネルの文面もこれで統一) */
+/** Meta 承認済みテンプレート (一斉連絡で固定使用し、全チャネルの文面もこれで統一) */
 type WaTemplateInfo = {
   name: string;
   language: string;
+  category: string | null;
   bodyVarCount: number;
   bodyText: string;
   examples: string[];
@@ -151,19 +152,28 @@ export default function BroadcastClient({
     fetch("/api/whatsapp/templates")
       .then((r) => r.json())
       .then((d) => {
-        const first: WaTemplateInfo | undefined = d?.ok ? (d.templates ?? [])[0] : undefined;
-        if (!first) {
+        const list: WaTemplateInfo[] = d?.ok ? (d.templates ?? []) : [];
+        // WhatsApp まで送れる UTILITY を優先。無ければ先頭のものを文面として使う
+        // (MARKETING は課金が高いため WhatsApp には送らず LINE / メール のみ)
+        const picked = list.find((t) => t.category === "UTILITY") ?? list[0];
+        if (!picked) {
           setWaTplNote(
             d?.error ?? d?.note ?? "承認済みテンプレートが見つかりません。設定を確認してください。"
           );
           return;
         }
-        setWaTpl(first);
+        setWaTpl(picked);
         setWaTplNote(null);
-        setWaValues(Array(Math.max(0, first.bodyVarCount - AUTO_COUNT)).fill(""));
+        setWaValues(Array(Math.max(0, picked.bodyVarCount - AUTO_COUNT)).fill(""));
       })
       .catch(() => setWaTplNote("テンプレートの取得に失敗しました (ネットワークエラー)"));
   }, []);
+  /**
+   * WhatsApp まで配信できるのは UTILITY テンプレのときだけ。
+   * MARKETING は単価が約 6.5 倍 かつ 24h 枠内でも常に課金されるため、
+   * 文面は LINE / Messenger / メール にのみ使い、WhatsApp へは送らない。
+   */
+  const waSendable = waTpl?.category === "UTILITY";
   /** ログイン中アカウントの姓 (WhatsApp テンプレの {{姓}} プレビュー用) */
   const [senderLastName, setSenderLastName] = useState("");
   useEffect(() => {
@@ -333,12 +343,14 @@ export default function BroadcastClient({
       for (const ch of channels) {
         if (ch === "LINE") line += linePerPartner;
         else if (ch === "Messenger") messenger += 1;
-        else if (ch === "WhatsApp") whatsapp += 1;
+        else if (ch === "WhatsApp") {
+          if (waSendable) whatsapp += 1;
+        }
         else if (ch === "mail" || ch === "メール" || ch === "Email") email += 1;
       }
     }
     return { line, messenger, email, whatsapp };
-  }, [targetPartners, attachedImages.length]);
+  }, [targetPartners, attachedImages.length, waSendable]);
 
   const lineUsage = usage?.find((u) => u.channel === "LINE");
   const lineAfter = (lineUsage?.used ?? 0) + plannedUsage.line;
@@ -572,11 +584,24 @@ export default function BroadcastClient({
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700">{waTplNote}</p>
           ) : null}
 
+          {waTpl && !waSendable ? (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <p className="text-[11px] font-semibold text-amber-800">
+                WhatsApp へは送信されません（LINE・Messenger・メール のみ配信）
+              </p>
+              <p className="mt-0.5 text-[11px] text-amber-700">
+                このテンプレートは {waTpl.category ?? "不明"} カテゴリのため、WhatsApp
+                で送ると1通あたりの単価が大きく上がります。文面はそのまま他チャネルへの配信に使用します。
+                UTILITY のテンプレートが承認されると、自動的に WhatsApp も配信対象になります。
+              </p>
+            </div>
+          ) : null}
+
           {waTpl ? (
             <>
               <p className="mb-3 text-[11px] text-gray-500">
                 会社名・担当者名・あなたの姓は自動で入ります。以下の項目を入力してください
-                (全チャネル共通の文面として送信されます)。
+                {waSendable ? "（全チャネル共通の文面として送信されます）" : "（LINE・メール等への配信文面になります）"}。
               </p>
 
               {/* 手入力の変数フォーム */}

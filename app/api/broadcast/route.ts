@@ -193,10 +193,51 @@ export async function POST(req: Request) {
     const waNameAllowed = (n: string) =>
       waAllow.length === 0 ||
       waAllow.some((a) => (a.endsWith("*") ? n.startsWith(a.slice(0, -1)) : n === a));
-    const waTemplate =
+    const requestedWaTemplate =
       whatsappTemplateName && whatsappTemplateLang && waNameAllowed(whatsappTemplateName)
         ? { name: whatsappTemplateName, lang: whatsappTemplateLang, specs: paramSpecs }
         : null;
+
+    /** Meta 上での承認済みテンプレのカテゴリを取得する (取得できなければ null) */
+    const fetchTemplateCategory = async (name: string): Promise<string | null> => {
+      const wabaId = process.env.WA_WABA_ID;
+      if (!waToken || !wabaId) return null;
+      try {
+        const res = await fetch(
+          `https://graph.facebook.com/v22.0/${encodeURIComponent(wabaId)}/message_templates` +
+            `?name=${encodeURIComponent(name)}&fields=name,status,category&limit=10` +
+            `&access_token=${encodeURIComponent(waToken)}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return null;
+        const data = (await res.json()) as {
+          data?: { name?: string; status?: string; category?: string }[];
+        };
+        return (
+          (data.data ?? []).find((t) => t.name === name && t.status === "APPROVED")?.category ??
+          null
+        );
+      } catch {
+        return null;
+      }
+    };
+
+    // WhatsApp のテンプレ送信は UTILITY のときだけ許可する。
+    // MARKETING は単価が UTILITY の約 6.5 倍 かつ 24h 枠内でも常に課金されるため、
+    // 文面は LINE / メール 用として使いつつ WhatsApp 送信だけをスキップする。
+    // (クライアントを迂回されても課金が発生しないよう、サーバー側で必ず検証する)
+    let waTemplate = requestedWaTemplate;
+    let waSkipReason: string | null = null;
+    if (requestedWaTemplate) {
+      const category = await fetchTemplateCategory(requestedWaTemplate.name);
+      if (category !== "UTILITY") {
+        waTemplate = null;
+        waSkipReason =
+          category === null
+            ? "テンプレートのカテゴリを確認できなかったため WhatsApp 送信をスキップしました"
+            : `テンプレートが ${category} カテゴリのため WhatsApp 送信をスキップしました (UTILITY のみ送信可)`;
+      }
+    }
 
     // 手入力の {{n}} が空だと Meta がテンプレ送信を拒否するため、送信前に弾く。
     if (waTemplate) {
@@ -335,7 +376,7 @@ export async function POST(req: Request) {
     let sentMessenger = 0;
     let sentEmail = 0;
     let failedCount = 0;
-    const skippedCount = 0;
+    let skippedCount = 0;
     const failures: { name: string; channel: string; error: string }[] = [];
 
     /** ヘルパー: 1 受信者ぶんの WhatsApp テンプレ用パラメータを組み立てる */
@@ -526,6 +567,13 @@ export async function POST(req: Request) {
     };
 
     const sendViaWhatsapp = async (t: Target, personalizedMessage: string) => {
+      // UTILITY テンプレが使えない場合は WhatsApp だけ送らずスキップ (課金回避)。
+      // 他チャネル (LINE / メール) への配信はそのまま継続される。
+      if (waSkipReason) {
+        skippedCount++;
+        failures.push({ name: t.name, channel: "WhatsApp", error: waSkipReason });
+        return;
+      }
       if (!t.whatsappId) {
         failedCount++;
         failures.push({ name: t.name, channel: "WhatsApp", error: "WhatsApp 番号未登録" });

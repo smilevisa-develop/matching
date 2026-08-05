@@ -63,11 +63,13 @@ export async function GET() {
       category?: string;
       components?: MetaComponent[];
     };
-    // MARKETING カテゴリは 1 通あたりの単価が UTILITY の約 6.5 倍 かつ 24h 枠内でも常に課金される。
-    // 意図しない高額配信を防ぐため、UTILITY のテンプレだけを選択候補にする。
-    // (Meta 側でテンプレが MARKETING に再分類された場合も自動的に候補から外れる)
+    // 承認済みテンプレを category 付きで返す。
+    // category は配信側の判断材料になる:
+    //   UTILITY  … 全チャネル (WhatsApp 含む) で送信可
+    //   MARKETING… 単価が UTILITY の約 6.5 倍 かつ 24h 枠内でも常に課金されるため、
+    //              文面のみ LINE / メール に流用し、WhatsApp 送信は行わない
     const templates = ((data.data ?? []) as MetaTemplate[])
-      .filter((t) => t.status === "APPROVED" && t.category === "UTILITY" && isAllowed(t.name))
+      .filter((t) => t.status === "APPROVED" && isAllowed(t.name))
       .map((t) => {
         const body = (t.components ?? []).find((c) => c.type === "BODY");
         const nums = [...(body?.text ?? "").matchAll(/\{\{(\d+)\}\}/g)].map((m) =>
@@ -94,7 +96,7 @@ export async function GET() {
       templates,
       note:
         templates.length === 0
-          ? "使用できるテンプレートがありません (承認済み かつ UTILITY カテゴリ のものだけが対象です)。審査中のテンプレは承認され次第ここに表示されます。"
+          ? "使用できるテンプレートがありません。審査中のテンプレは承認され次第ここに表示されます。"
           : undefined,
     });
   } catch (e) {
