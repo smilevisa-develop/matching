@@ -78,6 +78,24 @@ function formatDateJapanese(dateInput?: string | null) {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
+/**
+ * 日付を「年月日」まで表示する (在留カードの有効期限など、日付が重要な項目用)。
+ * 日が含まれていれば "2027年3月31日"、年月しか無ければ "2027年3月" に整形する
+ * (存在しない日を勝手に補完しない)。
+ */
+function formatDateFull(input?: string | null) {
+  if (!input) return "";
+  const s = input.trim();
+  if (!s) return "";
+  // yyyy-mm-dd (日あり: 区切りは - / . 年月日 に対応)
+  const ymd = s.match(/^(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})/);
+  if (ymd) return `${Number(ymd[1])}年${Number(ymd[2])}月${Number(ymd[3])}日`;
+  // yyyy-mm (日なし)
+  const ym = s.match(/^(\d{4})[-/.年](\d{1,2})/);
+  if (ym) return `${Number(ym[1])}年${Number(ym[2])}月`;
+  return s;
+}
+
 /** "2017-07-01" or "2017-07" → "2017年7月" */
 function formatYearMonth(input?: string | null) {
   if (!input) return "";
@@ -200,7 +218,7 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
   // 日本就労ビザ: 在留資格が「持っていない」/空欄/未設定なら「無」、
   // それ以外 (技能実習/特定技能/技人国/留学生/特定活動/永住/不明 など何か選択されていれば) → 「有」
   const visaTypeLabel = valueOrBlank(profile?.visaType) || valueOrBlank(person.residenceStatus);
-  const visaExpiry = formatYearMonth(profile?.visaExpiryDate);
+  const visaExpiry = formatDateFull(profile?.visaExpiryDate);
   const NO_VISA = ["持っていない", "", "未設定", "なし"];
   const hasResidenceStatus = !!visaTypeLabel && !NO_VISA.includes(visaTypeLabel);
   const visaWorkAriNashi = hasResidenceStatus ? "有" : "無";
@@ -221,7 +239,7 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
     メール: valueOrBlank(person.email),
     ビザの種類: visaTypeLabel,
     在留資格: valueOrBlank(person.residenceStatus),
-    在留資格の有効期限: formatYearMonth(profile?.visaExpiryDate),
+    在留資格の有効期限: formatDateFull(profile?.visaExpiryDate),
     // 「日本就労」の判定 (有 / 無)。テンプレの表記ゆれに対応
     日本就労: visaWorkAriNashi,
     日本就労ビザ: visaWorkAriNashi,
