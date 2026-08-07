@@ -35,6 +35,8 @@ type StoredRecording = {
   driveFileId: string | null;
   driveFileUrl: string | null;
   mimeType: string;
+  /** 録音の長さ (秒)。話す速さの算出に使う。切り出し前の古いデータには無い */
+  seconds?: number | null;
 };
 
 async function getDriveClient() {
@@ -94,7 +96,7 @@ export async function POST(_req: Request, ctx: { params: Params }) {
           { responseType: "arraybuffer" },
         );
         const base64 = Buffer.from(res.data as ArrayBuffer).toString("base64");
-        forJudge.push({ key: r.key, mimeType, base64 });
+        forJudge.push({ key: r.key, mimeType, base64, seconds: r.seconds ?? null });
       } catch {
         // 1 ファイル取得失敗は無視して続行
       }
@@ -117,6 +119,7 @@ export async function POST(_req: Request, ctx: { params: Params }) {
       driveFileId: s.driveFileId,
       driveFileUrl: s.driveFileUrl,
       mimeType: s.mimeType,
+      seconds: s.seconds ?? null,
     }));
 
     const updated = await prisma.personJapaneseCheck.update({
@@ -128,6 +131,9 @@ export async function POST(_req: Request, ctx: { params: Params }) {
         vocabulary: judged.vocabulary,
         grammar: judged.grammar,
         summary: judged.summary,
+        levelReason: judged.levelReason,
+        confidence: judged.confidence,
+        evidence: judged.evidence as unknown as object,
         recordings,
         assessedAt: new Date(),
       },
@@ -142,6 +148,9 @@ export async function POST(_req: Request, ctx: { params: Params }) {
         vocabulary: updated.vocabulary,
         grammar: updated.grammar,
         summary: updated.summary,
+        levelReason: updated.levelReason,
+        confidence: updated.confidence,
+        evidence: updated.evidence,
         recordings,
         assessedAt: updated.assessedAt ? updated.assessedAt.toISOString() : null,
       },

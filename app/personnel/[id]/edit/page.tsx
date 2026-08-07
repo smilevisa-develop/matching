@@ -11,6 +11,7 @@ import DriveActionsPanel from "./DriveActionsPanel";
 import PhotoPanel from "./PhotoPanel";
 import CreateResumeButton from "./CreateResumeButton";
 import IntakeLinkButton from "./IntakeLinkButton";
+import JapaneseCheckLinkButton from "./JapaneseCheckLinkButton";
 import PreparationPanel, { type PreparationState } from "./PreparationPanel";
 import TestResetPanel from "./TestResetPanel";
 import RecommendedCompanySelect from "./RecommendedCompanySelect";
@@ -191,6 +192,9 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
         vocabulary: jc.vocabulary,
         grammar: jc.grammar,
         summary: jc.summary,
+        levelReason: jc.levelReason,
+        confidence: jc.confidence,
+        evidence: (jc.evidence ?? null) as JapaneseCheckView["evidence"],
         assessedAt: toDate(jc.assessedAt),
         recordings: (Array.isArray(jc.recordings) ? jc.recordings : []).map((r) => {
           const o = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
@@ -209,6 +213,11 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
   const preparationState: PreparationState = {
     resumeImported: Boolean(rp?.resumeFileUrl) || extractedFieldCount >= 5,
     extractedFieldCount,
+    // Step2: 日本語チェック (専用リンク)。録音が 1 件でも届いていれば実施済み
+    japaneseCheckIssued: Boolean(person.japaneseCheckToken),
+    japaneseCheckToken: person.japaneseCheckToken ?? null,
+    japaneseCheckRecorded: (japaneseCheckView?.recordings.length ?? 0) > 0,
+    japaneseCheckLevel: jc?.assessedAt ? jc.estimatedLevel : null,
     intakeIssued: Boolean(person.intakeToken),
     intakeToken: person.intakeToken ?? null,
     mustTotal: mustQuestions.length,
@@ -330,6 +339,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                   personName={person.name}
                   englishName={person.onboarding?.englishName ?? null}
                 />
+                <JapaneseCheckLinkButton personId={person.id} personName={person.name} />
                 <IntakeLinkButton
                   personId={person.id}
                   personName={person.name}

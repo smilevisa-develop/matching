@@ -55,7 +55,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       await prisma.dealCandidate.deleteMany({ where: { personId } });
       await prisma.person.update({
         where: { id: personId },
-        data: { photoUrl: null, recommendedCompany: null },
+        data: {
+          photoUrl: null,
+          recommendedCompany: null,
+          // 日本語チェックの専用リンクも失効させ、完全な「追加したて」に戻す
+          japaneseCheckToken: null,
+        },
       });
       return Response.json({ ok: true, action: "clear" });
     }
@@ -157,9 +162,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       // ── 日本語チェックのデモ結果を投入 (録音音声なしのダミー判定) ──
       const demoTranscripts: Record<string, string> = {
-        read_aloud: "私は日本で働きたいです。毎日、日本語を勉強しています。仕事では、安全に気をつけて頑張ります。",
-        self_intro: "はじめまして。テスト タロウです。ミャンマーから来ました。工場で三年、働きました。",
-        motivation: "日本の技術を勉強したいです。家族のために、長く働きたいです。",
+        read_aloud:
+          "私は日本で働きたいです。毎日、日本語を勉強しています。仕事のときは、安全に気をつけます。分からないことは、すぐに先輩に聞きます。",
+        self_intro:
+          "はじめまして。テスト タロウです。ミャンマーから来ました。工場で三年、働きました。よろしくお願いします。",
+        daily_qa: "きのうは、朝、掃除をしました。それから、友達と買い物に行きました。夜は日本語を勉強しました。",
+        work_scenario:
+          "はい、まず機械を止めます。それから、すぐに先輩に報告します。自分で直さないで、指示を待ちます。",
+        explain_past:
+          "一番大変だったのは、納期が近いときです。仕事が多くて、時間がありませんでした。だから、チームで手順を考えて、みんなで協力しました。",
       };
       const demoRecordings = JAPANESE_CHECK_QUESTIONS.map((q) => ({
         key: q.key,
@@ -168,6 +179,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         driveFileId: null,
         driveFileUrl: null,
         mimeType: "audio/webm",
+        seconds: q.seconds,
       }));
       const jcDemo = {
         estimatedLevel: "N3 相当",
@@ -175,8 +187,43 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         fluency: 3,
         vocabulary: 4,
         grammar: 3,
+        confidence: "高",
         summary:
-          "【デモ】発音は概ね明瞭で、自己紹介・志望動機は問題なく伝わる。長文や敬語はやや不安。製造・農業なら十分通用、接客はやや練習が必要。",
+          "【デモ】N3 相当（確からしさ: 高）。現場の指示と報告は概ね可能。接客や電話は練習が必要です。",
+        levelReason:
+          "【デモ】使えた録音 5/5 件 / 聞き取れた割合 平均 82% / 音読の正確さ 88% / 話す速さ 2.9 拍/秒 → 発音3・流暢さ3・語彙4・文法3（重みづけ総合 3.2）から N3 相当。",
+        evidence: {
+          perQuestion: demoRecordings.map((r) => ({
+            key: r.key,
+            question: r.question,
+            transcript: r.transcript,
+            audioIssue: "none",
+            intelligibility: 82,
+            taskAchieved: "full",
+            grammarErrorCount: 1,
+            grammarErrorExamples: [],
+            hesitationCount: 1,
+            vocabLevel: 4,
+            readingAccuracy: r.key === "read_aloud" ? 88 : null,
+            mora: 40,
+            seconds: 20,
+            moraPerSec: 2.9,
+            usable: true,
+          })),
+          metrics: {
+            usableCount: demoRecordings.length,
+            totalQuestions: demoRecordings.length,
+            intelligibilityAvg: 82,
+            readingAccuracy: 88,
+            freeMoraTotal: 160,
+            moraPerSecAvg: 2.9,
+            grammarErrorPer100Mora: 2.5,
+            hesitationPer100Mora: 2.5,
+            achievementRate: 1,
+            composite: 3.2,
+          },
+          appliedRules: ["【デモ】実際の判定ではここに適用ルールが入ります"],
+        },
         recordings: demoRecordings,
         assessedAt: new Date(),
       };

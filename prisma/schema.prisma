@@ -31,6 +31,9 @@ model Person {
   /// 公開フォームの設定 (除外する質問キー / 個別追加質問)
   ///   形式: { excludedKeys: string[], customQuestions: [{ key, label, required, type }] }
   intakeConfig    Json?
+  /// 日本語チェック (録音) 専用の共有トークン。
+  /// 入力フォーム (intakeToken) とは完全に別のリンクとして発行・再発行できる
+  japaneseCheckToken String? @unique
   /// スプシ DB へ最後に反映した日時。
   /// この候補者 (本人 / onboarding / resumeProfile / 案件紐づけ) の updatedAt が
   /// これより新しいときだけスプシに書き込む。
@@ -514,8 +517,18 @@ model PersonJapaneseCheck {
   fluency        Int?
   vocabulary     Int?
   grammar        Int?
-  /// 面接官向けの一言所見 (Gemini 生成)
+  /// 面接官向けの一言所見
   summary        String?
+  /// なぜこのレベルになったかのルールの足あと (lib/japanese-check.ts が生成)
+  levelReason    String?
+  /// 判定の確からしさ ("高" / "中" / "低")。判定に使えた録音の数で決まる
+  confidence     String?
+
+  /// 判定の根拠データ (Json)。
+  /// { perQuestion: [...観察された事実と派生値], metrics: {...}, appliedRules: [...] }
+  /// AI は事実の観察のみを行い、レベルはコードのルールで決めているため、
+  /// ここを見れば「なぜその判定か」を後から検証できる。
+  evidence   Json?
 
   /// 録音した各問の情報 (Json 配列)。
   /// [{ key, question, transcript, driveFileId, driveFileUrl, mimeType }]

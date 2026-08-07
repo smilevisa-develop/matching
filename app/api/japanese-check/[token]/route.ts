@@ -1,12 +1,11 @@
 /**
- * 旧: 入力フォームに同梱されていた日本語チェックの受け口 (intake token 認証)。
+ * 日本語チェック専用リンクの受け口 (token 認証、未ログイン可)。
  *
- * 現在、日本語チェックは入力フォームから切り離され、専用リンク
- *   /japanese-check/[token]  →  POST /api/japanese-check/[token]
- * で実施する。
+ * POST /api/japanese-check/[token]
+ *   body: { recordings: [{ key, dataUrl, seconds }] }   dataUrl は "data:audio/...;base64,..."
  *
- * このルートは、切り離し前に候補者へ配った intake リンクが開かれたままの場合の
- * 救済用として残している。処理内容は共通ロジック (lib/japanese-check-submit.ts) と同じ。
+ * 入力フォーム (intake) とは独立したトークンで動く。
+ * 音声は個人情報なので、フォーム側で同意を得た上で送る前提。
  */
 
 import { prisma } from "@/lib/prisma";
@@ -24,7 +23,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     }
 
     const person = await prisma.person.findUnique({
-      where: { intakeToken: token },
+      where: { japaneseCheckToken: token },
       select: { id: true },
     });
     if (!person) {

@@ -22,6 +22,9 @@ export function proxy(request: NextRequest) {
     // 候補者向け公開フォーム (intake) は token 認証で動作するため未ログイン可
     pathname.startsWith("/intake/") ||
     pathname.startsWith("/api/intake/") ||
+    // 日本語チェック (公開・専用 token 認証。入力フォームとは別リンク)
+    pathname.startsWith("/japanese-check/") ||
+    pathname.startsWith("/api/japanese-check/") ||
     // 母国語 求人票チェックリスト (公開・token 認証)
     pathname.startsWith("/checklist/") ||
     pathname.startsWith("/api/checklist/") ||

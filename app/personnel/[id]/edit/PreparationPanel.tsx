@@ -4,9 +4,10 @@ import { useState } from "react";
 
 /**
  * 事前面談の準備パネル。
- * 履歴書取込 → フォーム送信 → 本人の回答 → 面談 の 4 ステップの進行状況を
- * 候補者詳細の最上部に常設表示する。
+ * 履歴書取込 → 日本語チェック → フォーム送信 → 本人の回答 → 求人票確認
+ * の 5 ステップの進行状況を候補者詳細の最上部に常設表示する。
  *
+ * 日本語チェックと入力フォームは別のリンクなので、ステップも別々に置く。
  * 各ステップの判定はサーバー側 (page.tsx) で計算して props で受け取る。
  */
 export type PreparationState = {
@@ -14,7 +15,12 @@ export type PreparationState = {
   resumeImported: boolean;
   /** AI 抽出で埋まっている主要項目数 (表示用) */
   extractedFieldCount: number;
-  /** Step2: intake フォーム URL 発行済みか */
+  /** Step2: 日本語チェック (専用リンク) の状況 */
+  japaneseCheckIssued: boolean;
+  japaneseCheckToken: string | null;
+  japaneseCheckRecorded: boolean;
+  japaneseCheckLevel: string | null;
+  /** Step3: intake フォーム URL 発行済みか */
   intakeIssued: boolean;
   intakeToken: string | null;
   /** Step3: 必須質問の回答状況 */
@@ -43,6 +49,19 @@ export default function PreparationPanel({
   const [copied, setCopied] = useState(false);
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [checklistCopied, setChecklistCopied] = useState(false);
+  const [jcCopied, setJcCopied] = useState(false);
+
+  const copyJapaneseCheckLink = async () => {
+    if (!state.japaneseCheckToken) return;
+    const url = `${window.location.origin}/japanese-check/${state.japaneseCheckToken}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setJcCopied(true);
+      setTimeout(() => setJcCopied(false), 2000);
+    } catch {
+      prompt("コピーできませんでした。以下を手動でコピーしてください:", url);
+    }
+  };
 
   const copyChecklistLink = async () => {
     if (!state.checklistToken) return;
@@ -93,11 +112,39 @@ export default function PreparationPanel({
           }
         />
 
-        {/* Step 2: フォーム送信 */}
+        {/* Step 2: 日本語チェック (専用リンク) */}
+        <StepCard
+          done={state.japaneseCheckRecorded}
+          active={state.resumeImported && !state.japaneseCheckRecorded}
+          title="2. 日本語チェック"
+          doneNote={`録音受信済み${state.japaneseCheckLevel ? ` ・ ${state.japaneseCheckLevel}` : ""}`}
+          extra={
+            state.japaneseCheckToken && !state.japaneseCheckRecorded ? (
+              <button
+                type="button"
+                onClick={() => void copyJapaneseCheckLink()}
+                className="mt-2 w-full rounded-lg border border-[var(--color-primary)] bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+              >
+                {jcCopied ? "コピーしました" : "🔗 リンクをコピー"}
+              </button>
+            ) : null
+          }
+          pendingNote={
+            state.japaneseCheckIssued ? (
+              "リンク送付済み（録音待ち）"
+            ) : (
+              <>
+                上の <MicChip /> ボタンからリンクを発行
+              </>
+            )
+          }
+        />
+
+        {/* Step 3: フォーム送信 */}
         <StepCard
           done={state.intakeIssued}
-          active={state.resumeImported && !state.intakeIssued}
-          title="2. フォーム送信"
+          active={state.japaneseCheckRecorded && !state.intakeIssued}
+          title="3. フォーム送信"
           doneNote={`URL 発行済み ・ 必須 ${state.mustTotal} 問`}
           pendingNote={
             <>
@@ -106,11 +153,11 @@ export default function PreparationPanel({
           }
         />
 
-        {/* Step 3: 本人の回答 */}
+        {/* Step 4: 本人の回答 */}
         <StepCard
           done={step3Done}
           active={answering}
-          title="3. 本人の回答"
+          title="4. 本人の回答"
           doneNote="全問回答済み"
           pendingNote={
             state.intakeIssued
@@ -130,11 +177,11 @@ export default function PreparationPanel({
           }
         />
 
-        {/* Step 4: 求人票確認 (母国語チェックリスト) — クリックでポップアップ */}
+        {/* Step 5: 求人票確認 (母国語チェックリスト) — クリックでポップアップ */}
         <StepCard
           done={state.checklistCompleted}
           active={step3Done && !state.checklistCompleted}
-          title="4. 求人票確認"
+          title="5. 求人票確認"
           doneNote="候補者が確認済み"
           onClick={checklistContent ? () => setChecklistOpen(true) : undefined}
           extra={
@@ -163,15 +210,6 @@ export default function PreparationPanel({
                   : "本人の回答の後に送信"
           }
         />
-
-        {/* Step 5: 面談へ */}
-        <StepCard
-          done={false}
-          active={step3Done}
-          title="5. 面談へ"
-          doneNote=""
-          pendingNote={step3Done ? "準備完了。面談に進めます" : "全問回答で準備完了"}
-        />
       </div>
 
       {/* Step4 の操作 (母国語チェックリスト) はステップ4クリックでポップアップ表示 */}
@@ -185,7 +223,7 @@ export default function PreparationPanel({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm font-bold text-[var(--color-text-dark)]">4. 求人票確認</p>
+              <p className="text-sm font-bold text-[var(--color-text-dark)]">5. 求人票確認</p>
               <button
                 type="button"
                 onClick={() => setChecklistOpen(false)}
@@ -282,6 +320,30 @@ function SparkleChip() {
         <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z" fill="currentColor" />
         <path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13z" fill="currentColor" />
         <path d="M5 16l.6 1.6L7.2 18l-1.6.4L5 20l-.6-1.6L2.8 18l1.6-.4L5 16z" fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
+
+/** 実際の「日本語チェック」ボタン (白地 + マイク) を小さく再現 */
+function MicChip() {
+  return (
+    <span className="mx-0.5 inline-flex h-[18px] w-[18px] translate-y-[3px] items-center justify-center rounded-md border border-gray-200 bg-white text-[var(--color-primary)] shadow-sm align-baseline">
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+        <line x1="12" y1="19" x2="12" y2="23" />
+        <line x1="8" y1="23" x2="16" y2="23" />
       </svg>
     </span>
   );

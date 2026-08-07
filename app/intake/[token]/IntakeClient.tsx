@@ -7,8 +7,6 @@ import {
   parseLocationAnswer,
   type InterviewQuestion,
 } from "@/lib/interview-questions";
-import { JAPANESE_CHECK_QUESTIONS } from "@/lib/japanese-check-questions";
-import JapaneseCheckSection, { type Recorded } from "./JapaneseCheckSection";
 
 type ExistingFields = "motivation" | "selfIntroduction" | "japanPurpose" | "currentJob" | "retirementReason";
 
@@ -28,8 +26,6 @@ type BasicInfo = { englishName: string; birthDate: string; address: string };
 type PageBlock = {
   title: string;
   description?: string;
-  /** 日本語チェック (録音) ページなら true。この場合 questions は空 */
-  japaneseCheck?: boolean;
   /** 基本情報 (氏名・生年月日・住所) ページなら true */
   basicInfo?: boolean;
   questions: (
@@ -45,7 +41,6 @@ export default function IntakeClient({
   residenceStatus,
   excludedKeys,
   customQuestions,
-  japaneseCheckEnabled = true,
   basic,
   initial,
 }: {
@@ -55,7 +50,6 @@ export default function IntakeClient({
   residenceStatus: string | null;
   excludedKeys: string[];
   customQuestions: CustomQuestion[];
-  japaneseCheckEnabled?: boolean;
   basic?: BasicInfo;
   initial: InitialAnswers;
 }) {
@@ -72,9 +66,6 @@ export default function IntakeClient({
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pageIdx, setPageIdx] = useState(0);
-  // 日本語チェック: 録音と同意
-  const [recordings, setRecordings] = useState<Recorded[]>([]);
-  const [audioConsent, setAudioConsent] = useState(false);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   // ファイル型の個別質問: 選択されたファイル (key → dataUrl/fileName)
   const [customFiles, setCustomFiles] = useState<Record<string, { dataUrl: string; fileName: string }>>({});
@@ -122,19 +113,9 @@ export default function IntakeClient({
         questions: customQuestions.map((q) => ({ kind: "custom" as const, q })),
       });
     }
-    // 最後に日本語チェック (録音) ページを付ける (設定で ON のときだけ)
-    if (japaneseCheckEnabled) {
-      blocks.push({
-        title: "日本語チェック / Japanese check",
-        description:
-          "3 つの質問に声で答えてください。ボタンを押して話し、もう一度押すと止まります。/ Please answer 3 questions by voice.",
-        japaneseCheck: true,
-        questions: [],
-      });
-    }
     return blocks;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [residenceStatus, location, employmentStatus, excludedKeys, customQuestions, isAnswered, japaneseCheckEnabled]);
+  }, [residenceStatus, location, employmentStatus, excludedKeys, customQuestions, isAnswered]);
 
   const totalPages = pages.length;
   // 居住地の回答で分岐が変わりページ数が減ることがあるので、必ず範囲内に丸める
@@ -150,25 +131,9 @@ export default function IntakeClient({
     setForm((c) => ({ ...c, interviewAnswers: { ...c.interviewAnswers, [key]: value } }));
   };
 
-  const recordedKeys = useMemo(() => new Set(recordings.map((r) => r.key)), [recordings]);
-  const allRecorded = JAPANESE_CHECK_QUESTIONS.every((q) => recordedKeys.has(q.key));
-  const recordingRemaining = JAPANESE_CHECK_QUESTIONS.filter((q) => !recordedKeys.has(q.key)).length;
-
-  // 日本語チェックページで「あと何をすればいいか」を示すヒント
-  const japaneseHint = (() => {
-    if (!currentPage?.japaneseCheck) return null;
-    if (recordingRemaining > 0) return `あと ${recordingRemaining} 問、録音してください`;
-    if (!audioConsent) return "下の「同意します」にチェックを入れてください";
-    return null;
-  })();
-
   // 必須の未充足チェック (現ページ分)
   const currentPageInvalid = useMemo(() => {
     if (!currentPage) return false;
-    if (currentPage.japaneseCheck) {
-      // 全問録音 + 同意 が揃うまで進めない
-      return !allRecorded || !audioConsent;
-    }
     for (const item of currentPage.questions) {
       if (item.kind === "custom" && item.q.required) {
         if (item.q.type === "file") {
@@ -180,7 +145,7 @@ export default function IntakeClient({
       }
     }
     return false;
-  }, [currentPage, form, allRecorded, audioConsent, customFiles]);
+  }, [currentPage, form, customFiles]);
 
   const next = () => {
     if (currentPageInvalid) {
@@ -191,29 +156,6 @@ export default function IntakeClient({
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // 録音を判定エンドポイントに送る。成否 + エラー詳細を返す
-  const uploadRecordings = async (): Promise<{ ok: boolean; error?: string }> => {
-    if (recordings.length === 0) return { ok: true };
-    try {
-      setUploadNote("録音を送信しています… / Sending your recordings…");
-      const res = await fetch(`/api/intake/${token}/japanese-check`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recordings: recordings.map((r) => ({ key: r.key, dataUrl: r.dataUrl })),
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      setUploadNote(null);
-      if (!res.ok || !data.ok) {
-        return { ok: false, error: data.error ?? `HTTP ${res.status}` };
-      }
-      return { ok: true };
-    } catch (e) {
-      setUploadNote(null);
-      return { ok: false, error: e instanceof Error ? e.message : "通信エラー" };
-    }
-  };
   const prev = () => {
     setPageIdx((i) => Math.max(i - 1, 0));
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -265,17 +207,6 @@ export default function IntakeClient({
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setError(data.error ?? "送信に失敗しました");
-        return;
-      }
-      // フォーム送信が成功したら、録音も送る。録音の保存に失敗したら完了にしない
-      // (候補者が「送れたつもり」で分析側に届かない事故を防ぐ)
-      const uploaded = await uploadRecordings();
-      if (!uploaded.ok) {
-        setError(
-          `録音の送信に失敗しました。もう一度「送信する」を押してください。 / Failed to send recordings.${
-            uploaded.error ? `（${uploaded.error}）` : ""
-          }`,
-        );
         return;
       }
       setSubmitted(true);
@@ -342,7 +273,7 @@ export default function IntakeClient({
           </p>
           <p className="mt-1 text-sm text-gray-500">Submitting your answers…</p>
           <p className="mt-4 max-w-xs text-xs leading-relaxed text-gray-500">
-            {uploadNote ?? "音声やファイルの送信に少し時間がかかることがあります。"}
+            {uploadNote ?? "ファイルの送信に少し時間がかかることがあります。"}
             <br />
             <span className="font-medium text-[var(--color-primary)]">
               この画面を閉じずにお待ちください。
@@ -422,28 +353,6 @@ export default function IntakeClient({
                 onChange={(v) => setBasicForm((b) => ({ ...b, address: v }))}
               />
             </div>
-          ) : currentPage.japaneseCheck ? (
-            <div className="mt-5 space-y-4">
-              <JapaneseCheckSection
-                questions={JAPANESE_CHECK_QUESTIONS}
-                onChange={setRecordings}
-              />
-              <label className="flex items-start gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-600">
-                <input
-                  type="checkbox"
-                  checked={audioConsent}
-                  onChange={(e) => setAudioConsent(e.target.checked)}
-                  className="mt-0.5 accent-[var(--color-primary)]"
-                />
-                <span>
-                  録音した音声を、選考のために保存・利用することに同意します。<br />
-                  I agree that my voice recordings may be stored and used for screening.
-                </span>
-              </label>
-              {uploadNote ? (
-                <p className="text-[11px] text-amber-600">{uploadNote}</p>
-              ) : null}
-            </div>
           ) : (
             <div className="mt-5 space-y-5">
               {currentPage.questions.map((item) =>
@@ -500,12 +409,6 @@ export default function IntakeClient({
 
         {/* ナビゲーション (sticky 下部) */}
         <div className="sticky bottom-3 z-10 rounded-2xl bg-white px-4 py-3 shadow-xl">
-          {japaneseHint ? (
-            <p className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-amber-700">
-              <span aria-hidden>👉</span>
-              {japaneseHint}
-            </p>
-          ) : null}
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
@@ -519,7 +422,7 @@ export default function IntakeClient({
               <button
                 type="button"
                 onClick={() => void submit()}
-                disabled={submitting || (currentPage.japaneseCheck === true && currentPageInvalid)}
+                disabled={submitting || currentPageInvalid}
                 className="rounded-full bg-[var(--color-primary)] px-6 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {submitting ? "送信中..." : "送信する / Submit"}

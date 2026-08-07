@@ -14,9 +14,11 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const isLegal = pathname.startsWith("/legal");
   // 母国語チェックリスト (公開・token 認証)
   const isChecklist = pathname.startsWith("/checklist");
+  // 日本語チェック (公開・専用 token 認証。入力フォームとは別リンク)
+  const isJapaneseCheck = pathname.startsWith("/japanese-check");
 
   useEffect(() => {
-    if (isPortal || isAuth || isIntake || isLegal || isChecklist) return;
+    if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck) return;
 
     const checkSession = async () => {
       try {
@@ -31,9 +33,9 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     };
 
     void checkSession();
-  }, [isAuth, isPortal, isIntake, isLegal, isChecklist]);
+  }, [isAuth, isPortal, isIntake, isLegal, isChecklist, isJapaneseCheck]);
 
-  if (isPortal || isAuth || isIntake || isLegal || isChecklist) {
+  if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck) {
     return (
       <body className={`min-h-full ${isAuth ? "bg-[var(--color-text-dark)] text-white" : "bg-[var(--color-light)] text-[var(--color-text-dark)]"}`}>
         {children}

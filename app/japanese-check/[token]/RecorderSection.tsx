@@ -3,15 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * 日本語チェックの録音セクション。intake フォームの最後に置く。
+ * 日本語チェックの録音セクション (専用ページ用)。
  *
  * 迷わせない設計:
- *   - 上部に進捗ドット (●●○ 2/3) で今どこか一目で分かる
  *   - 1 問ずつ、大きな録音ボタン (押す→録音, もう一度押す→停止)
  *   - 録音中は声に反応するレベルメーターで「ちゃんと録れている」を可視化
  *   - 空 / 短すぎる録音は自動で弾いて「もう一度」を促す (中身の無い送信を防ぐ)
  *   - 録音後に再生して確認、録り直しOK
  *   - Android (webm/opus) と iOS Safari (mp4) の両方に対応
+ *
+ * 録音の長さ (seconds) も一緒に返す。サーバー側で「話す速さ (拍/秒)」を
+ * 算出して日本語レベルの判定に使うため、これが無いと流暢さは代替推定になる。
  */
 
 type Question = {
@@ -21,7 +23,7 @@ type Question = {
   seconds: number;
 };
 
-export type Recorded = { key: string; dataUrl: string; mimeType: string };
+export type Recorded = { key: string; dataUrl: string; mimeType: string; seconds: number };
 
 /** これ未満は「録れていない」とみなす (空 blob / 誤タップ対策) */
 const MIN_BYTES = 1500;
@@ -52,7 +54,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-export default function JapaneseCheckSection({
+export default function RecorderSection({
   questions,
   onChange,
 }: {
@@ -214,7 +216,12 @@ function RecorderCard({
         }
         try {
           const dataUrl = await blobToDataUrl(blob);
-          onRecorded({ key: question.key, dataUrl, mimeType: type });
+          onRecorded({
+            key: question.key,
+            dataUrl,
+            mimeType: type,
+            seconds: Number(durSec.toFixed(2)),
+          });
         } catch {
           setError("録音の保存に失敗しました。もう一度お試しください。");
         }

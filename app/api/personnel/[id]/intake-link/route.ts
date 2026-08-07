@@ -62,16 +62,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return Response.json({ ok: false, error: "候補者が見つかりません" }, { status: 404 });
     }
 
-    // 日本語簡易調査を含めるか (未指定は既定で ON)
-    const japaneseCheckEnabled = body.japaneseCheckEnabled !== false;
-
     let token = person.intakeToken;
     if (!token || regenerate) token = generateToken();
     await prisma.person.update({
       where: { id: personId },
       data: {
         intakeToken: token,
-        intakeConfig: { excludedKeys, customQuestions, japaneseCheckEnabled },
+        intakeConfig: { excludedKeys, customQuestions },
       },
     });
     return Response.json({ ok: true, token, path: `/intake/${token}` });
@@ -109,7 +106,6 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
       path: person.intakeToken ? `/intake/${person.intakeToken}` : null,
       excludedKeys: Array.isArray(config.excludedKeys) ? config.excludedKeys : [],
       customQuestions: Array.isArray(config.customQuestions) ? config.customQuestions : [],
-      japaneseCheckEnabled: config.japaneseCheckEnabled !== false,
     });
   } catch (error) {
     return Response.json(
