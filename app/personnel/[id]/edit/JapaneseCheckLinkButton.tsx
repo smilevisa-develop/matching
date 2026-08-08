@@ -127,6 +127,40 @@ function JapaneseCheckLinkModal({
           <CloseButton onClick={onClose} />
         </div>
 
+        {/* 発行済みの URL はヘッダー直下に固定表示。
+            スクロール位置によって見えたり隠れたりしないようにする */}
+        {url ? (
+          <div className="border-b border-[#16A34A]/30 bg-[#F0FDF4] px-6 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold text-[#15803D]">✓ リンクを発行済み</p>
+                <p className="mt-0.5 break-all font-mono text-[11px] text-gray-700">{url}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  プレビュー
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm("リンクを再発行すると、旧リンクは使えなくなります。よろしいですか?")) {
+                      void issue(true);
+                    }
+                  }}
+                  className="text-[10px] text-gray-500 hover:underline"
+                >
+                  再発行
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
           {loading ? (
             <p className="text-center text-sm text-gray-400">読み込み中...</p>
@@ -187,54 +221,6 @@ function JapaneseCheckLinkModal({
                 </ol>
               </div>
 
-              {/* リンク */}
-              {url ? (
-                <div className="rounded-2xl border border-[#16A34A]/30 bg-[#F0FDF4] px-4 py-3">
-                  <p className="text-[11px] font-semibold text-[#15803D]">✓ リンクを発行済み</p>
-                  <p className="mt-0.5 break-all font-mono text-[11px] text-gray-700">{url}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => void copy(url, "url")}
-                      className="rounded-lg border border-[var(--color-primary)] bg-white px-3 py-1.5 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
-                    >
-                      {copied === "url" ? "コピー完了" : "URL をコピー"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void copy(messageText, "message")}
-                      className="rounded-lg border border-[var(--color-primary)] bg-white px-3 py-1.5 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
-                    >
-                      {copied === "message" ? "コピー完了" : "送付文をコピー"}
-                    </button>
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      プレビュー
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (
-                          confirm("リンクを再発行すると、旧リンクは使えなくなります。よろしいですか?")
-                        ) {
-                          void issue(true);
-                        }
-                      }}
-                      className="text-[10px] text-gray-500 hover:underline"
-                    >
-                      再発行
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="rounded-2xl border border-dashed border-gray-200 px-4 py-5 text-center text-sm text-gray-400">
-                  まだリンクを発行していません
-                </p>
-              )}
             </>
           )}
         </div>
@@ -247,6 +233,8 @@ function JapaneseCheckLinkModal({
           >
             閉じる
           </button>
+          {/* 発行前も発行後も、主な操作は同じ「閉じるの右」に置く。
+              発行した途端にボタンの位置が変わって探させないため */}
           {!url ? (
             <button
               type="button"
@@ -256,7 +244,24 @@ function JapaneseCheckLinkModal({
             >
               {issuing ? "発行中..." : "リンクを発行"}
             </button>
-          ) : null}
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => void copy(url, "url")}
+                className="rounded-lg border border-[var(--color-primary)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+              >
+                {copied === "url" ? "コピー完了" : "URL をコピー"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void copy(messageText, "message")}
+                className="rounded-lg bg-[var(--color-primary)] px-5 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)]"
+              >
+                {copied === "message" ? "コピー完了" : "送付文をコピー"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
