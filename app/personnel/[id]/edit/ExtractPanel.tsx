@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import CloseButton from "@/app/components/CloseButton";
-import IconTooltip from "./IconTooltip";
+import IconAction from "./IconAction";
+import { PANEL_ACTION, usePanelActions } from "./PanelActions";
 import { ALL_DOCUMENT_KINDS, getDocumentKindLabel } from "@/lib/file-classifier";
 
 type UploadedFileWithKind = {
@@ -114,17 +115,23 @@ export default function ExtractPanel({
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
 
+  // 準備パネルの「1. 履歴書取込」からも開けるようにする
+  const panelActions = usePanelActions();
+  useEffect(
+    () => panelActions?.register(PANEL_ACTION.extract, () => setModalOpen(true)),
+    [panelActions],
+  );
+
   return (
     <>
-      <IconTooltip label="AI 取込み">
-        <button
-          type="button"
-          onClick={() => setModalOpen(true)}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#A78BFA] via-[#F472B6] to-[#F59E0B] text-white shadow-md transition-transform hover:scale-110"
-        >
-          <SparkIcon />
-        </button>
-      </IconTooltip>
+      <IconAction
+        label="AI取込"
+        title="履歴書などを AI で読み取って項目に反映"
+        accent
+        onClick={() => setModalOpen(true)}
+      >
+        <SparkIcon />
+      </IconAction>
 
       {modalOpen ? (
         <ExtractModal

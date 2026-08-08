@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import CloseButton from "@/app/components/CloseButton";
-import IconTooltip from "./IconTooltip";
+import IconAction from "./IconAction";
+import { PANEL_ACTION, usePanelActions } from "./PanelActions";
 import { JAPANESE_CHECK_QUESTIONS } from "@/lib/japanese-check-questions";
 
 /**
@@ -28,17 +29,23 @@ export default function JapaneseCheckLinkButton({
   personName: string;
 }) {
   const [open, setOpen] = useState(false);
+
+  // 準備パネルの「2. 日本語チェック」からも開けるようにする
+  const panelActions = usePanelActions();
+  useEffect(
+    () => panelActions?.register(PANEL_ACTION.japaneseCheck, () => setOpen(true)),
+    [panelActions],
+  );
+
   return (
     <>
-      <IconTooltip label="日本語チェック リンク作成 / 送信">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-primary)] transition-transform hover:scale-110 hover:bg-[var(--color-light)]"
-        >
-          <MicIcon />
-        </button>
-      </IconTooltip>
+      <IconAction
+        label="日本語"
+        title="日本語チェック (録音) のリンクを発行"
+        onClick={() => setOpen(true)}
+      >
+        <MicIcon />
+      </IconAction>
       {open ? (
         <JapaneseCheckLinkModal
           personId={personId}

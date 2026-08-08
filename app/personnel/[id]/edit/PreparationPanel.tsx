@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { PANEL_ACTION, usePanelActions } from "./PanelActions";
+
 /**
  * 事前面談の準備パネル。
  * 履歴書取込 → 日本語チェック → フォーム送信 → 本人の回答 → 求人票確認
@@ -9,6 +11,9 @@ import { useState } from "react";
  *
  * 日本語チェックと入力フォームは別のリンクなので、ステップも別々に置く。
  * 各ステップの判定はサーバー側 (page.tsx) で計算して props で受け取る。
+ *
+ * 各カードはそのままボタンで、クリックすると対応する操作が開く
+ * (上部アイコンと同じモーダル。PanelActions 経由で呼び出す)。
  */
 export type PreparationState = {
   /** Step1: 履歴書 (原本ファイル or AI 抽出) が取り込まれているか */
@@ -50,6 +55,7 @@ export default function PreparationPanel({
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [checklistCopied, setChecklistCopied] = useState(false);
   const [jcCopied, setJcCopied] = useState(false);
+  const panelActions = usePanelActions();
 
   const copyJapaneseCheckLink = async () => {
     if (!state.japaneseCheckToken) return;
@@ -105,11 +111,8 @@ export default function PreparationPanel({
           active={!state.resumeImported}
           title="1. 履歴書取込"
           doneNote={`AI 読み取り済み${state.extractedFieldCount > 0 ? ` ・ ${state.extractedFieldCount} 項目` : ""}`}
-          pendingNote={
-            <>
-              上の <SparkleChip /> ボタンから履歴書を AI 取込み
-            </>
-          }
+          onClick={() => panelActions?.trigger(PANEL_ACTION.extract)}
+          pendingNote="クリックして履歴書を AI 取込み"
         />
 
         {/* Step 2: 日本語チェック (専用リンク) */}
@@ -122,21 +125,21 @@ export default function PreparationPanel({
             state.japaneseCheckToken && !state.japaneseCheckRecorded ? (
               <button
                 type="button"
-                onClick={() => void copyJapaneseCheckLink()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void copyJapaneseCheckLink();
+                }}
                 className="mt-2 w-full rounded-lg border border-[var(--color-primary)] bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
               >
                 {jcCopied ? "コピーしました" : "🔗 リンクをコピー"}
               </button>
             ) : null
           }
+          onClick={() => panelActions?.trigger(PANEL_ACTION.japaneseCheck)}
           pendingNote={
-            state.japaneseCheckIssued ? (
-              "リンク送付済み（録音待ち）"
-            ) : (
-              <>
-                上の <MicChip /> ボタンからリンクを発行
-              </>
-            )
+            state.japaneseCheckIssued
+              ? "リンク発行済み（録音待ち）"
+              : "クリックしてリンクを発行"
           }
         />
 
@@ -146,11 +149,8 @@ export default function PreparationPanel({
           active={state.japaneseCheckRecorded && !state.intakeIssued}
           title="3. フォーム送信"
           doneNote={`URL 発行済み ・ 必須 ${state.mustTotal} 問`}
-          pendingNote={
-            <>
-              上の <PaperPlaneChip /> ボタンからフォーム URL を発行
-            </>
-          }
+          onClick={() => panelActions?.trigger(PANEL_ACTION.intakeForm)}
+          pendingNote="クリックしてフォーム URL を発行"
         />
 
         {/* Step 4: 本人の回答 */}
@@ -159,6 +159,7 @@ export default function PreparationPanel({
           active={answering}
           title="4. 本人の回答"
           doneNote="全問回答済み"
+          onClick={() => panelActions?.trigger(PANEL_ACTION.intakeForm)}
           pendingNote={
             state.intakeIssued
               ? `${state.mustAnswered} / ${state.mustTotal} 問 回答済み`
@@ -168,7 +169,10 @@ export default function PreparationPanel({
             answering && state.intakeToken ? (
               <button
                 type="button"
-                onClick={() => void copyRemind()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void copyRemind();
+                }}
                 className="mt-2 rounded-lg border border-[var(--color-primary)] bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
               >
                 {copied ? "コピーしました" : "リマインド文をコピー"}
@@ -274,10 +278,27 @@ function StepCard({
   onClick?: () => void;
 }) {
   return (
+    // 中にコピーボタンを置くため <button> にはできない。
+    // role/tabIndex/Enter・Space で同等に操作できるようにしておく。
     <div
       onClick={onClick}
-      className={`rounded-xl border px-3 py-2.5 ${
-        onClick ? "cursor-pointer transition hover:shadow-md" : ""
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      className={`rounded-xl border px-3 py-2.5 text-left ${
+        onClick
+          ? "cursor-pointer transition hover:border-[var(--color-primary)] hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/40"
+          : ""
       } ${
         done
           ? "border-[#BBF7D0] bg-[#F0FDF4]"
@@ -312,61 +333,5 @@ function StepCard({
   );
 }
 
-/** 実際の「AI 取込」ボタン (グラデ枠 + スパークル) を小さく再現 */
-function SparkleChip() {
-  return (
-    <span className="mx-0.5 inline-flex h-[18px] w-[18px] translate-y-[3px] items-center justify-center rounded-md bg-gradient-to-br from-[#A78BFA] via-[#F472B6] to-[#F59E0B] text-white shadow-sm align-baseline">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z" fill="currentColor" />
-        <path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13z" fill="currentColor" />
-        <path d="M5 16l.6 1.6L7.2 18l-1.6.4L5 20l-.6-1.6L2.8 18l1.6-.4L5 16z" fill="currentColor" />
-      </svg>
-    </span>
-  );
-}
 
-/** 実際の「日本語チェック」ボタン (白地 + マイク) を小さく再現 */
-function MicChip() {
-  return (
-    <span className="mx-0.5 inline-flex h-[18px] w-[18px] translate-y-[3px] items-center justify-center rounded-md border border-gray-200 bg-white text-[var(--color-primary)] shadow-sm align-baseline">
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-      >
-        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-        <line x1="12" y1="19" x2="12" y2="23" />
-        <line x1="8" y1="23" x2="16" y2="23" />
-      </svg>
-    </span>
-  );
-}
 
-/** 実際の「フォーム送信」ボタン (白地 + 紙飛行機) を小さく再現 */
-function PaperPlaneChip() {
-  return (
-    <span className="mx-0.5 inline-flex h-[18px] w-[18px] translate-y-[3px] items-center justify-center rounded-md border border-gray-200 bg-white text-[var(--color-primary)] shadow-sm align-baseline">
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-      >
-        <line x1="22" y1="2" x2="11" y2="13" />
-        <polygon points="22 2 15 22 11 13 2 9 22 2" />
-      </svg>
-    </span>
-  );
-}

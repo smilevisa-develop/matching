@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import IntakeFormBuilderModal from "./IntakeFormBuilderModal";
-import IconTooltip from "./IconTooltip";
+import IconAction from "./IconAction";
+import { PANEL_ACTION, usePanelActions } from "./PanelActions";
 
 type Answers = {
   motivation: string;
@@ -23,17 +24,23 @@ export default function IntakeLinkButton({
   answers: Answers;
 }) {
   const [open, setOpen] = useState(false);
+
+  // 準備パネルの「3. フォーム送信」からも開けるようにする
+  const panelActions = usePanelActions();
+  useEffect(
+    () => panelActions?.register(PANEL_ACTION.intakeForm, () => setOpen(true)),
+    [panelActions],
+  );
+
   return (
     <>
-      <IconTooltip label="入力フォーム作成 / 送信">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-primary)] transition-transform hover:scale-110 hover:bg-[var(--color-light)]"
-        >
-          <PaperPlaneIcon />
-        </button>
-      </IconTooltip>
+      <IconAction
+        label="フォーム"
+        title="入力フォームを作成して URL を発行"
+        onClick={() => setOpen(true)}
+      >
+        <PaperPlaneIcon />
+      </IconAction>
       {open ? (
         <IntakeFormBuilderModal
           personId={personId}

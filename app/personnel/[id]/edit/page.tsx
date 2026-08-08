@@ -12,6 +12,8 @@ import PhotoPanel from "./PhotoPanel";
 import CreateResumeButton from "./CreateResumeButton";
 import IntakeLinkButton from "./IntakeLinkButton";
 import JapaneseCheckLinkButton from "./JapaneseCheckLinkButton";
+import { PanelActionsProvider } from "./PanelActions";
+import { IconActionDivider } from "./IconAction";
 import PreparationPanel, { type PreparationState } from "./PreparationPanel";
 import TestResetPanel from "./TestResetPanel";
 import RecommendedCompanySelect from "./RecommendedCompanySelect";
@@ -283,6 +285,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
             visaExpiryDate: person.resumeProfile?.visaExpiryDate ?? null,
           }}
         >
+          <PanelActionsProvider>
           <PhotoPanel
             personId={person.id}
             personName={person.name}
@@ -339,6 +342,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                   personName={person.name}
                   englishName={person.onboarding?.englishName ?? null}
                 />
+                <IconActionDivider />
                 <JapaneseCheckLinkButton personId={person.id} personName={person.name} />
                 <IntakeLinkButton
                   personId={person.id}
@@ -356,6 +360,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                         : {},
                   }}
                 />
+                <IconActionDivider />
                 <DriveActionsPanel personId={person.id} initialDriveFolderUrl={person.driveFolderUrl ?? null} />
               </>
             }
@@ -375,6 +380,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
               />
             }
           />
+          </PanelActionsProvider>
 
           <EditPersonForm
             person={person}
