@@ -88,26 +88,6 @@ export const CONDITION_FIELDS: { key: string; label: string; group: string; mult
 
 const FIELD_GROUPS = ["基本", "勤務", "給与", "控除", "生活", "移住・応募", "募集条件", "選考", "その他"];
 
-const CHAT_GPT_PROMPT = `以下の求人票 PDF / 画像を読み取り、構造化されたテキストとして抽出してください。
-
-# 出力ルール
-- 各項目を「ラベル: 値」の 1 行形式で出力 (項目間は改行)
-- 読み取れない項目は省略 (推測しない)
-- 金額は数字のみ (例: 180000)
-- 時刻は HH:MM 形式
-- 余計な説明文・コードブロック・前置きは不要
-
-# 抽出してほしい項目
-タイトル / 仕事内容 / 勤務地 / 最寄り駅 / 募集人数 / 性別 / 国籍 /
-勤務開始1 / 勤務終了1 / 勤務開始2 / 勤務終了2 / 残業有無 / 月間平均残業時間 /
-固定残業時間 / 固定残業代 / 休日 /
-月総支給額 / 基本給 / 給与計算方法(月給/時給) / 皆勤手当 / 住宅手当 / 深夜手当 / 通勤手当 /
-社会保険料 / 雇用保険料 / 健康保険料 / 厚生年金保険料 / 所得税 / 住民税 /
-食費支給(有/無) / 食費金額 / 寮支給(有/無) / 寮費金額 / 光熱費支給(有/無) / 光熱費金額 /
-その他手当・福利厚生 / 特記事項
-
-(以下に対象の求人票を貼り付けてください)`;
-
 export type ConditionsRecord = Record<string, string | null | undefined>;
 
 export type JobPostingTemplateOption = { id: number; name: string };
@@ -129,7 +109,7 @@ export default function ConditionsPanel({
   const [form, setForm] = useState<ConditionsRecord>(() => normalize(initialConditions));
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [importMode, setImportMode] = useState<null | "ai" | "chatgpt">(null);
+  const [importMode, setImportMode] = useState<null | "ai">(null);
   const [creatingJobPosting, setCreatingJobPosting] = useState(false);
 
   const setField = (key: string, value: string) => {
@@ -197,13 +177,6 @@ export default function ConditionsPanel({
             </button>
             <button
               type="button"
-              onClick={() => setImportMode("chatgpt")}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-secondary)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
-            >
-              <ChatGptIcon /> ChatGPT から貼り付け
-            </button>
-            <button
-              type="button"
               onClick={() => void save()}
               disabled={saving || !dirty}
               className="rounded-lg bg-[var(--color-primary)] px-5 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
@@ -262,13 +235,6 @@ export default function ConditionsPanel({
       {importMode === "ai" ? (
         <GeminiImportModal onClose={() => setImportMode(null)} onApply={applyExtracted} />
       ) : null}
-      {importMode === "chatgpt" ? (
-        <ChatGptPasteModal
-          prompt={CHAT_GPT_PROMPT}
-          onClose={() => setImportMode(null)}
-          onApply={applyExtracted}
-        />
-      ) : null}
       {creatingJobPosting ? (
         <CreateJobPostingModal
           dealId={dealId}
@@ -323,18 +289,6 @@ function SparkIcon() {
       <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z" fill="currentColor" stroke="none" />
       <path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13z" fill="currentColor" stroke="none" />
       <path d="M5 16l.6 1.6L7.2 18l-1.6.4L5 20l-.6-1.6L2.8 18l1.6-.4L5 16z" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function ChatGptIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="10" fill="#10A37F" />
-      <path
-        d="M8 9.5 C8 8.4 8.9 7.5 10 7.5 L14 7.5 C15.1 7.5 16 8.4 16 9.5 L16 14.5 C16 15.6 15.1 16.5 14 16.5 L10 16.5 C8.9 16.5 8 15.6 8 14.5 Z"
-        fill="white"
-      />
     </svg>
   );
 }
@@ -440,116 +394,6 @@ function GeminiImportModal({
         </>
       ) : (
         <Spinner label="Gemini が読み取っています..." />
-      )}
-    </Modal>
-  );
-}
-
-/* ----------------- ChatGPT 貼り付け ----------------- */
-
-function ChatGptPasteModal({
-  prompt,
-  onClose,
-  onApply,
-}: {
-  prompt: string;
-  onClose: () => void;
-  onApply: (extracted: ConditionsRecord) => void;
-}) {
-  const [text, setText] = useState("");
-  const [stage, setStage] = useState<"input" | "extracting">("input");
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const copyPrompt = async () => {
-    try {
-      await navigator.clipboard.writeText(prompt);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      alert("クリップボードにコピーできませんでした");
-    }
-  };
-
-  const run = async () => {
-    if (!text.trim()) {
-      alert("テキストを貼り付けてください");
-      return;
-    }
-    setStage("extracting");
-    setError(null);
-    try {
-      const res = await fetch("/api/job-postings/extract-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setError(data.error ?? "抽出に失敗しました");
-        setStage("input");
-        return;
-      }
-      onApply(data.extracted ?? {});
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "error");
-      setStage("input");
-    }
-  };
-
-  return (
-    <Modal
-      title="ChatGPT から貼り付け"
-      subtitle="ChatGPT に求人票を読ませて、抽出されたテキストを下に貼り付けてください"
-      onClose={onClose}
-    >
-      {error ? (
-        <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
-      ) : null}
-
-      {stage === "input" ? (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-gray-200 bg-[var(--color-light)] p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-[var(--color-text-dark)]">ChatGPT 用プロンプト</p>
-              <button
-                type="button"
-                onClick={() => void copyPrompt()}
-                className="rounded-lg bg-[var(--color-primary)] px-3 py-1 text-[11px] font-medium text-white hover:bg-[var(--color-primary-hover)]"
-              >
-                {copied ? "コピーしました" : "プロンプトをコピー"}
-              </button>
-            </div>
-            <pre className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg bg-white p-3 text-[11px] leading-relaxed text-gray-700">
-              {prompt}
-            </pre>
-            <p className="mt-2 text-[11px] text-gray-500">
-              ※ ChatGPT に上記プロンプトと求人票 (PDF or 画像) を渡し、出力された「ラベル: 値」テキストを下に貼り付けてください。
-            </p>
-          </div>
-
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="w-full min-h-[220px] rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
-            placeholder="ChatGPT が出力したテキストを貼り付け..."
-          />
-
-          <div className="flex justify-end gap-2">
-            <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50">
-              キャンセル
-            </button>
-            <button
-              onClick={() => void run()}
-              disabled={!text.trim()}
-              className="rounded-lg bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
-            >
-              この内容を条件に反映
-            </button>
-          </div>
-        </div>
-      ) : (
-        <Spinner label="貼り付けたテキストから抽出中..." />
       )}
     </Modal>
   );
