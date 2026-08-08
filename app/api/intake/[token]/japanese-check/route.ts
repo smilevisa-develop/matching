@@ -10,7 +10,11 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { submitJapaneseCheck } from "@/lib/japanese-check-submit";
+import { after } from "next/server";
+import {
+  judgeStoredJapaneseCheck,
+  storeJapaneseCheckRecordings,
+} from "@/lib/japanese-check-submit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,11 +36,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     }
 
     const body = await req.json();
-    const result = await submitJapaneseCheck(person.id, body?.recordings);
-    if (!result.ok) {
-      return Response.json({ ok: false, error: result.error }, { status: result.status });
+
+    // 保存までは応答前に完了させる (届いていないのに「送信完了」と出す事故を防ぐ)
+    const stored = await storeJapaneseCheckRecordings(person.id, body?.recordings);
+    if (!stored.ok) {
+      return Response.json({ ok: false, error: stored.error }, { status: stored.status });
     }
-    return Response.json(result);
+
+    // AI 判定は 20〜60 秒かかるうえ、結果が要るのは採用担当であって候補者ではない。
+    // 応答を返したあとに走らせ、候補者を待たせない。
+    after(async () => {
+      await judgeStoredJapaneseCheck(person.id, stored.forJudge);
+    });
+
+    return Response.json({ ok: true, saved: stored.count });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "error" },

@@ -72,12 +72,13 @@ export const JAPANESE_CHECK_QUESTIONS: JapaneseCheckQuestion[] = [
     expectedMora: 40,
   },
   {
+    // 職歴のない候補者 (留学生・新卒など) も答えられるよう「仕事や勉強」にしている
     key: "explain_past",
     prompt:
-      "今までの仕事で、一番大変だったことは何ですか。なぜ大変でしたか。 / What was the hardest thing in your past work? Why was it hard?",
+      "今までの仕事や勉強で、一番大変だったことは何ですか。なぜ大変でしたか。 / What was the hardest thing in your work or studies? Why was it hard?",
     readAloud: null,
     seconds: 40,
-    focus: "長めの説明と理由づけ。接続表現が使えるかで N3 以上が分かれる",
+    focus: "長めの説明と理由づけ。接続表現が使えるかで N3 以上が分かれる（職歴が無くても答えられる）",
     expectedMora: 60,
   },
 ];

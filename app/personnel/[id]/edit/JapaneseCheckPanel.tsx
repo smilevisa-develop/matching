@@ -226,7 +226,10 @@ export default function JapaneseCheckPanel({
         <div className="border-t border-gray-100 bg-[#FBFCFE] px-5 py-5">
           {!assessed ? (
             <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <span>録音は保存済みですが、AI 判定が未完了です。</span>
+              <span>
+                録音は保存済みです。AI 判定は送信の 1 分ほど後に自動で終わります（画面を再読み込みすると反映）。
+                時間が経っても変わらない場合は「再判定する」を押してください。
+              </span>
               <button
                 type="button"
                 onClick={() => void rejudge()}

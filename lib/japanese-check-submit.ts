@@ -5,11 +5,19 @@
  *   - POST /api/japanese-check/[token]        (日本語チェック専用リンク: 現行)
  *   - POST /api/intake/[token]/japanese-check (旧: 入力フォーム同梱版。既存リンク救済用)
  *
- * 流れ: 録音を Drive の「日本語チェック音声」フォルダへ保存 → AI で判定 → DB へ upsert。
- * 判定に失敗しても録音は残し、管理画面から再判定できる状態にする。
+ * ── 候補者を待たせない二段構え ──
+ * AI 判定は 20〜60 秒かかるが、その結果が必要なのは採用担当であって候補者ではない。
+ * そこで処理を 2 つに分けている:
+ *   1. storeJapaneseCheckRecordings … Drive へ保存 + DB 登録 (判定前)。ここまでで応答を返す
+ *   2. judgeStoredJapaneseCheck    … AI 判定して DB を更新。応答後に after() で走らせる
+ *
+ * 保存だけは応答前に完了させる。そうしないと候補者が「送れたつもり」なのに
+ * 実際は届いていない、という事故が起きるため。
+ * 判定に失敗しても録音は残るので、管理画面の「再判定」でやり直せる。
  */
 
 import { prisma } from "./prisma";
+import { Prisma } from "@/generated/prisma/client";
 import {
   buildPersonAssetName,
   buildPersonFolderName,
@@ -32,9 +40,9 @@ export type IncomingRecording = {
   seconds?: number | null;
 };
 
-export type SubmitResult =
-  | { ok: true; assessed: true; estimatedLevel: string }
-  | { ok: true; assessed: false; warning: string }
+/** 保存まで終わった時点の結果。forJudge は後段の AI 判定に渡す */
+export type StoreResult =
+  | { ok: true; count: number; forJudge: JapaneseCheckRecording[] }
   | { ok: false; error: string; status: number };
 
 function parseDataUrl(dataUrl: string): { mimeType: string; base64: string } | null {
@@ -60,14 +68,14 @@ function extForMime(mime: string): string {
 }
 
 /**
- * 録音を保存し、日本語レベルを判定して DB に書き込む。
+ * 録音を Drive に保存し、判定前の状態で DB に登録する (応答前に行う処理)。
  * @param personId 対象候補者
  * @param incoming クライアントから届いた録音の配列
  */
-export async function submitJapaneseCheck(
+export async function storeJapaneseCheckRecordings(
   personId: number,
   incoming: unknown,
-): Promise<SubmitResult> {
+): Promise<StoreResult> {
   const person = await prisma.person.findUnique({
     where: { id: personId },
     select: {
@@ -123,32 +131,28 @@ export async function submitJapaneseCheck(
     folderName: "日本語チェック音声",
   });
 
-  // 各録音を Drive に保存
-  const stored: {
-    key: string;
-    driveFileId: string | null;
-    driveFileUrl: string;
-    mimeType: string;
-    seconds: number | null;
-  }[] = [];
-  for (const r of parsed) {
-    const q = JAPANESE_CHECK_QUESTIONS.find((x) => x.key === r.key);
-    const assetName = `日本語チェック_${q?.key ?? r.key}`;
-    const uploaded = await uploadDataUrlToDrive({
-      dataUrl: r.dataUrl,
-      fileName: `${buildPersonAssetName({ person: personForName, assetName })}${extForMime(r.mimeType)}`,
-      folderUrl: audioFolder.folderUrl,
-    });
-    stored.push({
-      key: r.key,
-      driveFileId: extractDriveFileId(uploaded.fileUrl),
-      driveFileUrl: uploaded.fileUrl,
-      mimeType: r.mimeType,
-      seconds: r.seconds,
-    });
-  }
+  // 各録音を Drive に保存。
+  // 5 件を順番に上げると待ち時間がそのまま 5 倍になるので並列で投げる。
+  const stored = await Promise.all(
+    parsed.map(async (r) => {
+      const q = JAPANESE_CHECK_QUESTIONS.find((x) => x.key === r.key);
+      const assetName = `日本語チェック_${q?.key ?? r.key}`;
+      const uploaded = await uploadDataUrlToDrive({
+        dataUrl: r.dataUrl,
+        fileName: `${buildPersonAssetName({ person: personForName, assetName })}${extForMime(r.mimeType)}`,
+        folderUrl: audioFolder.folderUrl,
+      });
+      return {
+        key: r.key,
+        driveFileId: extractDriveFileId(uploaded.fileUrl),
+        driveFileUrl: uploaded.fileUrl,
+        mimeType: r.mimeType,
+        seconds: r.seconds,
+      };
+    }),
+  );
 
-  /** DB に残す録音メタ (文字起こしは判定後に合流する) */
+  /** DB に残す録音メタ (文字起こしと判定結果は後段で合流する) */
   const baseRecordings = stored.map((s) => ({
     key: s.key,
     question: JAPANESE_CHECK_QUESTIONS.find((q) => q.key === s.key)?.prompt ?? "",
@@ -159,55 +163,87 @@ export async function submitJapaneseCheck(
     seconds: s.seconds,
   }));
 
-  // AI で観察 → ルールで判定
-  const forJudge: JapaneseCheckRecording[] = parsed.map((r) => ({
-    key: r.key,
-    mimeType: r.mimeType,
-    base64: r.base64,
-    seconds: r.seconds,
-  }));
-  let judged;
-  try {
-    judged = await judgeJapaneseFromAudio(forJudge);
-  } catch (err) {
-    // 判定に失敗しても録音は保存済み。管理側から再判定できるよう
-    // recordings だけ保存して assessedAt は null にする
-    await prisma.personJapaneseCheck.upsert({
-      where: { personId: person.id },
-      create: { personId: person.id, recordings: baseRecordings },
-      update: { recordings: baseRecordings, assessedAt: null },
-    });
-    return {
-      ok: true,
-      assessed: false,
-      warning: `録音は保存しましたが、AI 判定に失敗しました: ${err instanceof Error ? err.message : "error"}`,
-    };
-  }
-
-  // recordings に文字起こしを合流
-  const recordings = baseRecordings.map((r) => ({
-    ...r,
-    transcript: judged.transcripts.find((t) => t.key === r.key)?.transcript ?? "",
-  }));
-
-  const data = {
-    estimatedLevel: judged.estimatedLevel,
-    pronunciation: judged.pronunciation,
-    fluency: judged.fluency,
-    vocabulary: judged.vocabulary,
-    grammar: judged.grammar,
-    summary: judged.summary,
-    levelReason: judged.levelReason,
-    confidence: judged.confidence,
-    evidence: judged.evidence as unknown as object,
-    recordings,
-    assessedAt: new Date(),
-  };
+  // 判定前の状態で登録する。管理画面では「判定待ち」と表示される。
   await prisma.personJapaneseCheck.upsert({
     where: { personId: person.id },
-    create: { personId: person.id, ...data },
-    update: data,
+    create: { personId: person.id, recordings: baseRecordings },
+    update: {
+      recordings: baseRecordings,
+      // 録り直しの再送なので、前回の判定結果は残さない
+      assessedAt: null,
+      estimatedLevel: null,
+      pronunciation: null,
+      fluency: null,
+      vocabulary: null,
+      grammar: null,
+      summary: null,
+      levelReason: null,
+      confidence: null,
+      // Json 列を SQL NULL に戻すには DbNull を渡す (undefined は「変更しない」の意味)
+      evidence: Prisma.DbNull,
+    },
   });
 
-  return { ok: true, assessed: true, estimatedLevel: judged.estimatedLevel };
+  return {
+    ok: true,
+    count: baseRecordings.length,
+    forJudge: parsed.map((r) => ({
+      key: r.key,
+      mimeType: r.mimeType,
+      base64: r.base64,
+      seconds: r.seconds,
+    })),
+  };
+}
+
+/**
+ * 保存済みの録音を AI に観察させ、ルールで判定して DB を更新する (応答後に走らせる処理)。
+ * 失敗しても録音は残っているので、管理画面の「再判定」でやり直せる。
+ */
+export async function judgeStoredJapaneseCheck(
+  personId: number,
+  forJudge: JapaneseCheckRecording[],
+): Promise<void> {
+  if (forJudge.length === 0) return;
+  try {
+    const judged = await judgeJapaneseFromAudio(forJudge);
+
+    // 保存済みの録音メタに文字起こしを合流させる
+    const existing = await prisma.personJapaneseCheck.findUnique({
+      where: { personId },
+      select: { recordings: true },
+    });
+    const base = Array.isArray(existing?.recordings)
+      ? (existing.recordings as unknown as Record<string, unknown>[])
+      : [];
+    const recordings = base.map((r) => ({
+      ...r,
+      transcript:
+        judged.transcripts.find((t) => t.key === r.key)?.transcript ?? r.transcript ?? "",
+    }));
+
+    await prisma.personJapaneseCheck.update({
+      where: { personId },
+      data: {
+        estimatedLevel: judged.estimatedLevel,
+        pronunciation: judged.pronunciation,
+        fluency: judged.fluency,
+        vocabulary: judged.vocabulary,
+        grammar: judged.grammar,
+        summary: judged.summary,
+        levelReason: judged.levelReason,
+        confidence: judged.confidence,
+        evidence: judged.evidence as unknown as object,
+        recordings,
+        assessedAt: new Date(),
+      },
+    });
+  } catch (err) {
+    // 判定できなくても録音は残す。assessedAt は null のままなので
+    // 管理画面には「判定待ち」と出て、再判定ボタンからやり直せる。
+    console.warn(
+      `japanese-check 判定に失敗 (personId=${personId}):`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
