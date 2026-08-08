@@ -61,12 +61,14 @@ export const JAPANESE_CHECK_QUESTIONS: JapaneseCheckQuestion[] = [
     expectedMora: 35,
   },
   {
+    // 業種を問わない場面にすること。
+    // (以前は「機械が止まったら」だったが、飲食・介護の候補者には答えようがなかった)
     key: "work_scenario",
     prompt:
-      "仕事中に、機械が急に止まりました。あなたはどうしますか。 / A machine suddenly stops while you are working. What do you do?",
+      "仕事中に、あなたが何か失敗をしてしまいました。そのあと、どうしますか。 / You made a mistake at work. What do you do next?",
     readAloud: null,
     seconds: 30,
-    focus: "仮定の場面への対応（報告・連絡ができるか）。実務で使えるかの証拠",
+    focus: "困ったときに報告・相談できるか。製造・飲食・介護など職種を問わず答えられる場面にしている",
     expectedMora: 40,
   },
   {
