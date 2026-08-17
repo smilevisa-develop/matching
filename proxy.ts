@@ -28,6 +28,9 @@ export function proxy(request: NextRequest) {
     // 母国語 求人票チェックリスト (公開・token 認証)
     pathname.startsWith("/checklist/") ||
     pathname.startsWith("/api/checklist/") ||
+    // 内定後の事前確認資料 (公開・token 認証)
+    pathname.startsWith("/document-check/") ||
+    pathname.startsWith("/api/document-check/") ||
     // 法的文書ページ (Meta App Review 要件) は完全公開
     pathname.startsWith("/legal/") ||
     // アップロード画像の配信 (LINE / Messenger / メール添付の originalContentUrl)。

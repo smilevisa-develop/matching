@@ -12,6 +12,7 @@ import PhotoPanel from "./PhotoPanel";
 import CreateResumeButton from "./CreateResumeButton";
 import IntakeLinkButton from "./IntakeLinkButton";
 import JapaneseCheckLinkButton from "./JapaneseCheckLinkButton";
+import DocumentCheckPanel from "./DocumentCheckPanel";
 import { PanelActionsProvider } from "./PanelActions";
 import { IconActionDivider } from "./IconAction";
 import PreparationPanel, { type PreparationState } from "./PreparationPanel";
@@ -387,7 +388,11 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
             partners={partners}
             customTabContent={<CustomQuestionsList />}
             japaneseCheckContent={
-              <JapaneseCheckPanel personId={person.id} initial={japaneseCheckView} />
+              <>
+                <JapaneseCheckPanel personId={person.id} initial={japaneseCheckView} />
+                {/* 内定後: 企業の事前確認資料を母国語で確認してもらう */}
+                <DocumentCheckPanel personId={person.id} defaultLanguage={defaultChecklistLang} />
+              </>
             }
             placementTabContent={
               <PlacementPanel

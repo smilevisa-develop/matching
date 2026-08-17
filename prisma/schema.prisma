@@ -50,6 +50,7 @@ model Person {
   resumeProfile   ResumeProfile?
   japaneseCheck   PersonJapaneseCheck?
   checklistDeliveries JobChecklistDelivery[]
+  documentDeliveries CompanyDocumentDelivery[]
   resumeDocuments ResumeDocument[]
   dealCandidates  DealCandidate[]
   customQuestions PersonCustomQuestion[]
@@ -91,6 +92,7 @@ model Company {
 
   deals Deal[]
   checklistDeliveries JobChecklistDelivery[]
+  documents CompanyDocument[]
 }
 
 /// 母国語の求人票チェックリストを候補者へ送った記録。
@@ -118,6 +120,61 @@ model JobChecklistDelivery {
 
   @@index([personId])
   @@index([companyId])
+}
+
+/// 内定後に企業から渡される資料 (会社の考え方・ルールなど) の原本。
+/// 企業ごとに登録し、候補者への配信 (CompanyDocumentDelivery) で使い回す。
+/// 求人票チェックリスト (JobChecklistDelivery) とは目的も送るタイミングも違うため別管理。
+model CompanyDocument {
+  id         Int     @id @default(autoincrement())
+  companyId  Int
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// 資料名 (例: 特定技能生 事前確認資料)
+  title      String
+  /// 貼り付けられた原文。分割し直したいときのために保持する
+  sourceText String
+  /// AI が分割した日本語セクション
+  /// [{ key, title, body, kind: "read" | "check" }]
+  ///   read  = 会社の考え方など。読むだけ (チェック不要)
+  ///   check = ルールなど。候補者にチェックしてもらう
+  sections   Json
+  /// 言語ごとの翻訳キャッシュ { vi: [{ key, title, body }], id: [...] }。
+  /// 候補者ごとに訳し直さず、資料に紐づけて使い回す
+  translations Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  deliveries CompanyDocumentDelivery[]
+
+  @@index([companyId])
+}
+
+/// 事前確認資料を候補者へ送った記録。開封 / チェック / 「わからない」を追跡する。
+model CompanyDocumentDelivery {
+  id           Int             @id @default(autoincrement())
+  personId     Int
+  person       Person          @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  documentId   Int
+  document     CompanyDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  /// 母国語コード: vi / id / my / ne
+  language     String
+  /// 公開URL用トークン
+  token        String          @unique
+  /// 配信時点のスナップショット
+  /// [{ key, title, body, trTitle, trBody, kind }]
+  items        Json
+  sentAt       DateTime?
+  openedAt     DateTime?
+  /// 候補者が「確認しました」を付けた項目 { key: true }
+  checkedItems Json?
+  /// 候補者が「わからない」を付けた項目 { key: true }。面談で説明すべき箇所
+  unclearItems Json?
+  completedAt  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([personId])
+  @@index([documentId])
 }
 
 model Partner {
