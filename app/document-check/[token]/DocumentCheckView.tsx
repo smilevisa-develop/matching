@@ -21,12 +21,77 @@ export type DocumentItemView = {
   kind: "read" | "check";
 };
 
-/** 母国語コード → 「わからない」ボタンの母国語表記 */
-const UNCLEAR_LABEL: Record<string, string> = {
-  vi: "Không hiểu",
-  id: "Tidak paham",
-  my: "နားမလည်ပါ",
-  ne: "बुझिनँ",
+/**
+ * 画面の固定文言 (母国語)。
+ * 読むのは候補者なので、母国語を主・日本語を従にして表示する。
+ * 説明文がボタン名を指すため、ボタンの表記と必ず揃えること。
+ */
+type UiText = {
+  intro: string;
+  check: string;
+  unclear: string;
+  readOnly: string;
+  /** 全部確認できたときのメッセージ */
+  done: string;
+  /** 残り件数。{n} が件数に置き換わる */
+  remaining: string;
+  /** 「わからない」が付いているときの補足。{n} が件数に置き換わる */
+  unclearNote: string;
+};
+
+const UI_TEXT: Record<string, UiText> = {
+  vi: {
+    intro:
+      "Trước khi bắt đầu làm việc, chúng tôi xin nói những điều quan trọng.\nHãy đọc. Nếu bạn đã hiểu, hãy nhấn「Đã hiểu」.\nChỗ nào không hiểu, hãy nhấn「Không hiểu」. Người phụ trách sẽ giải thích sau.",
+    check: "Đã hiểu",
+    unclear: "Không hiểu",
+    readOnly: "Chỉ cần đọc",
+    done: "Bạn đã xác nhận xong tất cả. Cảm ơn bạn.",
+    remaining: "Còn {n} mục",
+    unclearNote: "Người phụ trách sẽ giải thích {n} chỗ bạn chưa hiểu.",
+  },
+  id: {
+    intro:
+      "Sebelum mulai bekerja, kami sampaikan hal-hal yang penting.\nSilakan baca. Kalau sudah paham, tekan「Saya paham」.\nKalau ada yang tidak paham, tekan「Tidak paham」. Nanti penanggung jawab akan menjelaskan.",
+    check: "Saya paham",
+    unclear: "Tidak paham",
+    readOnly: "Cukup dibaca",
+    done: "Semua sudah dikonfirmasi. Terima kasih.",
+    remaining: "Sisa {n} item",
+    unclearNote: "Penanggung jawab akan menjelaskan {n} bagian yang belum Anda pahami.",
+  },
+  my: {
+    intro:
+      "အလုပ်မစခင် အရေးကြီးတဲ့အချက်တွေကို ပြောပြပါမယ်။\nဖတ်ပါ။ နားလည်ရင်「နားလည်ပါပြီ」ကို နှိပ်ပါ။\nနားမလည်တဲ့နေရာကို「နားမလည်ပါ」ကို နှိပ်ပါ။ တာဝန်ခံက နောက်မှ ရှင်းပြပါမယ်။",
+    check: "နားလည်ပါပြီ",
+    unclear: "နားမလည်ပါ",
+    readOnly: "ဖတ်ရုံသာ",
+    done: "အားလုံး အတည်ပြုပြီးပါပြီ။ ကျေးဇူးတင်ပါတယ်။",
+    remaining: "နောက်ထပ် {n} ခု",
+    unclearNote: "နားမလည်တဲ့ {n} နေရာကို တာဝန်ခံက ရှင်းပြပါမယ်။",
+  },
+  ne: {
+    intro:
+      "काम सुरु गर्नु अघि महत्त्वपूर्ण कुराहरू बताउँछौं।\nपढ्नुहोस्। बुझ्नुभयो भने「बुझें」थिच्नुहोस्।\nनबुझेको ठाउँमा「बुझिनँ」थिच्नुहोस्। पछि जिम्मेवार व्यक्तिले बुझाउनुहुनेछ।",
+    check: "बुझें",
+    unclear: "बुझिनँ",
+    readOnly: "पढ्ने मात्र",
+    done: "सबै पुष्टि भयो। धन्यवाद।",
+    remaining: "बाँकी {n} वटा",
+    unclearNote: "तपाईंले नबुझेको {n} ठाउँ जिम्मेवार व्यक्तिले बुझाउनुहुनेछ।",
+  },
+};
+
+/** 日本語 (対訳として下に小さく出す) */
+const JA_TEXT: UiText = {
+  intro:
+    "働く前に、大切なことをお伝えします。\n読んで、分かったら「確認しました」を押してください。\n分からないところは「わからない」を押してください。あとで担当者が説明します。",
+  check: "確認しました",
+  unclear: "わからない",
+  readOnly: "読むだけ",
+  done: "すべて確認できました。ありがとうございました。",
+  remaining: "あと {n} 項目",
+  unclearNote: "「わからない」{n} 件は、担当者があとで説明します。",
 };
 
 export default function DocumentCheckView({
@@ -115,7 +180,11 @@ export default function DocumentCheckView({
     scheduleSave();
   };
 
-  const unclearLabel = UNCLEAR_LABEL[language] ?? "わからない";
+  // 未対応の言語コードが来ても落ちないよう、日本語にフォールバックする
+  const t = UI_TEXT[language] ?? JA_TEXT;
+  const unclearLabel = t.unclear;
+  /** 文言の {n} を件数に置き換える */
+  const fill = (template: string, n: number) => template.replace("{n}", String(n));
 
   return (
     <div className="min-h-screen bg-[var(--color-light)] px-4 py-6">
@@ -127,12 +196,15 @@ export default function DocumentCheckView({
           </p>
           <h1 className="mt-1 text-lg font-bold text-[var(--color-text-dark)]">{documentTitle}</h1>
           <p className="mt-1 text-sm text-gray-600">{companyName}</p>
-          <p className="mt-2 text-xs leading-relaxed text-gray-500">
-            働く前に、大切なことをお伝えします。読んで、分かったら「確認しました」を押してください。
-            <br />
-            分からないところは<span className="font-semibold">「{unclearLabel}」</span>
-            を押してください。あとで担当者が説明します。
+          {/* 説明: 母国語を主、日本語を対訳として下に置く */}
+          <p className="mt-3 whitespace-pre-wrap text-[13px] font-medium leading-relaxed text-[var(--color-text-dark)]">
+            {t.intro}
           </p>
+          {t !== JA_TEXT ? (
+            <p className="mt-2 whitespace-pre-wrap border-t border-gray-100 pt-2 text-[11px] leading-relaxed text-gray-500">
+              {JA_TEXT.intro}
+            </p>
+          ) : null}
           {/* 進捗 (チェックが必要な項目だけ) */}
           <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
             <div
@@ -168,7 +240,7 @@ export default function DocumentCheckView({
                 </span>
                 {!needsCheck ? (
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">
-                    読むだけ / Read only
+                    {t === JA_TEXT ? t.readOnly : `${t.readOnly} / ${JA_TEXT.readOnly}`}
                   </span>
                 ) : null}
               </div>
@@ -204,7 +276,7 @@ export default function DocumentCheckView({
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
-                    {on ? "確認しました" : "確認しました / OK"}
+                    {t === JA_TEXT ? t.check : `${t.check} / ${JA_TEXT.check}`}
                   </button>
                 ) : null}
                 <button
@@ -226,20 +298,35 @@ export default function DocumentCheckView({
         {/* まとめ */}
         <div className="rounded-2xl bg-white p-5 text-center shadow-md">
           {allChecked ? (
-            <p className="text-sm font-semibold text-[#15803D]">
-              すべて確認できました。ありがとうございました。
-              <br />
-              All checked. Thank you!
-            </p>
+            <>
+              <p className="text-sm font-semibold text-[#15803D]">{t.done}</p>
+              {t !== JA_TEXT ? (
+                <p className="mt-0.5 text-[11px] text-gray-500">{JA_TEXT.done}</p>
+              ) : null}
+            </>
           ) : (
-            <p className="text-sm text-gray-500">
-              あと {checkTargets.length - doneCount} 項目
-            </p>
+            <>
+              <p className="text-sm font-medium text-[var(--color-text-dark)]">
+                {fill(t.remaining, checkTargets.length - doneCount)}
+              </p>
+              {t !== JA_TEXT ? (
+                <p className="mt-0.5 text-[11px] text-gray-500">
+                  {fill(JA_TEXT.remaining, checkTargets.length - doneCount)}
+                </p>
+              ) : null}
+            </>
           )}
           {unclearCount > 0 ? (
-            <p className="mt-1 text-[12px] font-medium text-amber-700">
-              「{unclearLabel}」{unclearCount} 件は、担当者があとで説明します。
-            </p>
+            <>
+              <p className="mt-2 text-[12px] font-medium text-amber-700">
+                {fill(t.unclearNote, unclearCount)}
+              </p>
+              {t !== JA_TEXT ? (
+                <p className="text-[10px] text-amber-600">
+                  {fill(JA_TEXT.unclearNote, unclearCount)}
+                </p>
+              ) : null}
+            </>
           ) : null}
           {saving ? <p className="mt-1 text-[11px] text-gray-400">保存中…</p> : null}
           {savedNote ? <p className="mt-1 text-[11px] text-[#15803D]">{savedNote}</p> : null}
