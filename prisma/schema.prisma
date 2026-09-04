@@ -691,6 +691,11 @@ model Deal {
   declineCount     Int           @default(0) // 内定辞退
   rejectCount      Int           @default(0) // 不合格
   notes            String?
+  /// 企業データベース(スプシ)「案件情報」で、この案件に対応する 案件ID (例 "011")。
+  /// 通常は Deal.id と同じ番号だが、系とスプシで番号がずれた案件があるため、
+  /// 一度対応づいたら実際の番号をここに記録して以後ずらさない。
+  /// null = 未同期 (初回は Deal.id を候補にする)
+  sheetDealNo      String?       @unique
   /// 求人票の元になる条件 (Json: ExtractedJobPosting と同じキー集合)
   /// AI 取り込み / ChatGPT 貼り付け / 手動入力のいずれかで埋め、
   /// ここから 求人票 (JobPosting) を生成する

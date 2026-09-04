@@ -61,6 +61,7 @@ export async function GET(req: Request) {
         orderBy: { id: "asc" },
         select: {
           id: true,
+          sheetDealNo: true,
           title: true,
           field: true,
           status: true,
@@ -79,6 +80,7 @@ export async function GET(req: Request) {
       });
       const mapped: DealForSheet[] = deals.map((d) => ({
         id: d.id,
+        sheetDealNo: d.sheetDealNo,
         title: d.title,
         field: d.field,
         status: d.status,
@@ -95,7 +97,17 @@ export async function GET(req: Request) {
         ownerName: d.owner?.name ?? null,
         partnerName: d.partner?.name ?? null,
       }));
-      out.deals = await syncDealsToSheet({ spreadsheetId, deals: mapped, apply });
+      const dealResult = await syncDealsToSheet({ spreadsheetId, deals: mapped, apply });
+      // 実行時のみ、割り当てた案件IDを系に記録する (次回から番号がずれない)
+      if (apply && dealResult.assignments.length > 0) {
+        for (const a of dealResult.assignments) {
+          await prisma.deal.update({
+            where: { id: a.dealId },
+            data: { sheetDealNo: a.sheetDealNo },
+          });
+        }
+      }
+      out.deals = dealResult;
     }
 
     return Response.json(out);

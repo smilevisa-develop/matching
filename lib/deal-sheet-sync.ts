@@ -116,6 +116,8 @@ export function jobCode(field: string | null | undefined): string | null {
 /** 同期対象の案件 */
 export type DealForSheet = {
   id: number;
+  /** スプシ「案件情報」の 案件ID。一度対応づいたらこれを使う (null なら id を候補にする) */
+  sheetDealNo: string | null;
   title: string;
   field: string | null;
   status: string;
@@ -226,6 +228,11 @@ export type DealSyncResult = {
   skipped: { dealId: number; company: string; reason: string }[];
   /** 変更が無かった件数 */
   unchanged: number;
+  /**
+   * 系に記録する 案件ID の割り当て。
+   * 呼び出し側が Deal.sheetDealNo に保存することで、次回以降ずれない。
+   */
+  assignments: { dealId: number; sheetDealNo: string }[];
 };
 
 /**
@@ -272,6 +279,7 @@ export function planDealSync(args: {
     conflicts: [],
     skipped: [],
     unchanged: 0,
+    assignments: [],
   };
 
   /** 既存行に書き込む値 (空文字/null は「変更しない」) */
@@ -303,67 +311,9 @@ export function planDealSync(args: {
   const updates: { range: string; values: (string | number)[][] }[] = [];
   const appendRows: (string | number)[][] = [];
 
-  for (const d of deals) {
-    const key = String(d.id);
-    const hit = byDealNo.get(key);
-
-    if (hit) {
-      // 企業IDが食い違う行は 別会社の行 なので絶対に触らない
-      const sheetCid = String(hit.cells[DEAL_COL.companyId] ?? "").trim().toLowerCase();
-      const sysCid = (d.companyExternalId ?? "").trim().toLowerCase();
-      if (!sysCid || sheetCid !== sysCid) {
-        result.conflicts.push({
-          dealNo: formatDealNo(d.id),
-          row: hit.row,
-          sheetCompany: `${sheetCid || "(空)"} ${hit.cells[DEAL_COL.companyName] ?? ""}`.trim(),
-          systemCompany: `${sysCid || "(空)"} ${d.companyName}`.trim(),
-        });
-        continue;
-      }
-
-      // 値が変わる列だけ書き込む (系が空の列は既存値を残す)
-      const changes: string[] = [];
-      for (const col of UPDATABLE_COLS) {
-        const next = valueFor(d, col);
-        if (next === null || next === "") continue;
-        const cur = String(hit.cells[col] ?? "").trim();
-        // 空欄の人数列に 0 を書き込まない (意味のない変更で差分が埋まるのを防ぐ)
-        if (!cur && next === 0 && COUNT_COLS.includes(col)) continue;
-        const nextStr = typeof next === "number" ? String(next) : next.trim();
-        if (cur === nextStr) continue;
-        changes.push(`${colLetter(col)}: ${cur || "(空)"} → ${nextStr}`);
-        updates.push({ range: `${quote(tab)}!${colLetter(col)}${hit.row}`, values: [[next]] });
-      }
-      if (changes.length === 0) result.unchanged++;
-      else
-        result.updated.push({
-          dealNo: formatDealNo(d.id),
-          row: hit.row,
-          company: d.companyName,
-          changes,
-        });
-      continue;
-    }
-
-    // スプシに無い案件 → 末尾に追記する
-    if (usedDealNos.has(key)) {
-      result.skipped.push({
-        dealId: d.id,
-        company: d.companyName,
-        reason: `案件ID ${formatDealNo(d.id)} は既にスプシの別の行で使われています`,
-      });
-      continue;
-    }
-    if (!d.companyExternalId) {
-      result.skipped.push({
-        dealId: d.id,
-        company: d.companyName,
-        reason: "企業IDが未設定のため追記できません (企業マスタで企業IDを付けてください)",
-      });
-      continue;
-    }
-
-    const cid = d.companyExternalId.trim().toLowerCase();
+  /** 案件を指定の 案件ID で末尾行として組み立てる */
+  const appendDeal = (d: DealForSheet, dealNo: string) => {
+    const cid = (d.companyExternalId ?? "").trim().toLowerCase();
     const date = d.acceptedAt ?? d.createdAt;
     const ymd = toSheetDate(date).replace(/\//g, "");
     const code = jobCode(d.field);
@@ -372,7 +322,7 @@ export function planDealSync(args: {
     const dealName = code ? `${ymd}_${code}_${d.companyName}` : `${ymd}_${d.companyName}`;
 
     const row: (string | number)[] = new Array(DEAL_COL_COUNT).fill("");
-    row[DEAL_COL.dealNo] = formatDealNo(d.id);
+    row[DEAL_COL.dealNo] = dealNo;
     row[DEAL_COL.companyName] = d.companyName;
     row[DEAL_COL.companyId] = cid;
     row[DEAL_COL.dealKey] = dealKey;
@@ -391,8 +341,101 @@ export function planDealSync(args: {
     if (price !== null) row[DEAL_COL.unitPrice] = price;
 
     appendRows.push(row);
-    usedDealNos.add(key);
-    result.appended.push({ dealNo: formatDealNo(d.id), company: d.companyName, title: d.title });
+    usedDealNos.add(String(Number(dealNo)));
+    result.appended.push({ dealNo, company: d.companyName, title: d.title });
+    // 次回以降ずれないよう、割り当てた番号を系に記録させる
+    result.assignments.push({ dealId: d.id, sheetDealNo: dealNo });
+  };
+
+  /** スプシで未使用の 案件ID を採番する (系とスプシで番号がずれた案件の受け皿) */
+  const nextFreeNo = (): number => {
+    let n = 1;
+    while (usedDealNos.has(String(n))) n++;
+    return n;
+  };
+
+  for (const d of deals) {
+    // 一度対応づいた番号があればそれを使う。無ければ Deal.id を候補にする
+    const key = d.sheetDealNo ? String(Number(d.sheetDealNo)) : String(d.id);
+    const hit = byDealNo.get(key);
+
+    if (hit) {
+      // 企業IDが食い違う行は 別会社の行 なので絶対に触らない
+      const sheetCid = String(hit.cells[DEAL_COL.companyId] ?? "").trim().toLowerCase();
+      const sysCid = (d.companyExternalId ?? "").trim().toLowerCase();
+      if (!sysCid || sheetCid !== sysCid) {
+        // 別会社の行なので絶対に書き換えない。
+        // 企業IDが分かっているなら、空いている番号で新しい行として追記する
+        // (系とスプシの番号ずれを、既存行を壊さずに解消する)。
+        result.conflicts.push({
+          dealNo: formatDealNo(Number(key)),
+          row: hit.row,
+          sheetCompany: `${sheetCid || "(空)"} ${hit.cells[DEAL_COL.companyName] ?? ""}`.trim(),
+          systemCompany: `${sysCid || "(空)"} ${d.companyName}`.trim(),
+        });
+        if (!sysCid) {
+          result.skipped.push({
+            dealId: d.id,
+            company: d.companyName,
+            reason: "企業IDが未設定のため、別番号での追記もできません",
+          });
+          continue;
+        }
+        appendDeal(d, formatDealNo(nextFreeNo()));
+        continue;
+      }
+
+      // 値が変わる列だけ書き込む (系が空の列は既存値を残す)
+      const changes: string[] = [];
+      for (const col of UPDATABLE_COLS) {
+        const next = valueFor(d, col);
+        if (next === null || next === "") continue;
+        const cur = String(hit.cells[col] ?? "").trim();
+        // 空欄の人数列に 0 を書き込まない (意味のない変更で差分が埋まるのを防ぐ)
+        if (!cur && next === 0 && COUNT_COLS.includes(col)) continue;
+        const nextStr = typeof next === "number" ? String(next) : next.trim();
+        if (cur === nextStr) continue;
+        changes.push(`${colLetter(col)}: ${cur || "(空)"} → ${nextStr}`);
+        updates.push({ range: `${quote(tab)}!${colLetter(col)}${hit.row}`, values: [[next]] });
+      }
+      // 対応づいた番号を記録して、以後ずれないようにする
+      if (d.sheetDealNo !== formatDealNo(Number(key))) {
+        result.assignments.push({ dealId: d.id, sheetDealNo: formatDealNo(Number(key)) });
+      }
+      if (changes.length === 0) result.unchanged++;
+      else
+        result.updated.push({
+          dealNo: formatDealNo(d.id),
+          row: hit.row,
+          company: d.companyName,
+          changes,
+        });
+      continue;
+    }
+
+    // スプシに無い案件 → 末尾に追記する
+    if (usedDealNos.has(key)) {
+      // 自分の番号が既に別の行で使われている → 空き番号で追記する
+      if (!d.companyExternalId) {
+        result.skipped.push({
+          dealId: d.id,
+          company: d.companyName,
+          reason: "企業IDが未設定のため追記できません (企業マスタで企業IDを付けてください)",
+        });
+        continue;
+      }
+      appendDeal(d, formatDealNo(nextFreeNo()));
+      continue;
+    }
+    if (!d.companyExternalId) {
+      result.skipped.push({
+        dealId: d.id,
+        company: d.companyName,
+        reason: "企業IDが未設定のため追記できません (企業マスタで企業IDを付けてください)",
+      });
+      continue;
+    }
+    appendDeal(d, formatDealNo(Number(key)));
   }
 
   return { result, updates, appendRows };
