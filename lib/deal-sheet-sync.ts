@@ -2,41 +2,49 @@
  * 企業データベース (Google スプレッドシート) への 系 → スプシ 一方向 差分同期。
  *
  * 対象タブ:
- *   「案件情報」 … SMILE MATCHING の案件 (Deal) を反映する
+ *   「案件管理」   … SMILE MATCHING の案件 (Deal) を反映する
  *   「企業マスタ」 … 系にあってマスタに無い企業を 追記 する
  *
- * ── なぜ単純な上書きにしないか ──
+ * ── 実物のシート構造に合わせた重要な制約 ──
+ *
+ * 1. 案件管理の C/D/E 列は数式で、書き込んではいけない
+ *      C 企業ID  = XLOOKUP(企業名, 企業マスタ)          ← B を書けば自動で埋まる
+ *      D 案件 ID = 企業ID_受注日_職種コード             ← C/F/G から自動生成
+ *      E 案件名  = 受注日_職種コード_企業名             ← F/G/B から自動生成
+ *    これらに値を書くと数式が壊れるので、系からは B/F/G など「元の値」だけを書く。
+ *
+ * 2. C/D/E の数式は 1002 行目まで引かれている
+ *    そのため values.append は「最後の値がある行」を 1002 と判断し、
+ *    はるか下に行を足してしまう。追記は 企業名(B) が空の最初の行を自分で探して
+ *    values.update で書き込む。
+ *
+ * 3. 企業マスタの見出しは A1 が「列 1」で、「企業ID」ではない
+ *    見出しの検出は「企業名」を基準にし、企業ID列はその 1 つ左とみなす。
+ *
+ * ── 同期の方針 (候補者同期と同じ) ──
+ *   変更があった値だけ書く / 系が空の項目は既存値を残す / 新規は追記
+ *
+ * ── なぜ単純に番号で上書きしないか ──
  * 当初はスプシの「案件ID(001,002…)」と系の Deal.id が一致していたが、
  * その後どちらにも独立して案件が足され、番号がずれた。
  * 例: 系の案件11 = 株式会社イワタ(55sv) / スプシの011 = 有限会社山王(50sv)
- * 番号だけで書き込むと 別会社の行を壊す ため、
- *   「案件ID が一致し、かつ 企業ID も一致する行」だけを更新対象にする。
- * 一致しない行は触らず、報告 (conflicts) に出して人が直せるようにする。
- *
- * ── 更新する列 / 触らない列 ──
- * 既存行は運用値だけを更新する。
- *   更新する: G 職種 / H ステータス / I 担当者 / K〜O 各人数 / R 単価
- *   触らない: A 案件ID / B 企業名 / C 企業ID / D 案件 ID / E 案件名 / F 受注日 /
- *             P 流入 / Q 案件獲得者 / T〜W 請求系 / その他の空列
- * 案件名・案件 ID・受注日 はスプシ独自の命名規則で、他シートが参照している可能性が
- * あるため既存行では書き換えない。新規追記時のみ規則に沿って生成する。
- *
- * 空欄は上書きしない (系が空の項目は既存のスプシ値を残す)。候補者同期と同じ方針。
+ * そこで「案件IDが一致し、かつ企業IDも一致する行」だけを更新し、
+ * 食い違う行は触らずに 空いている番号で新規追記する。
  */
 
 import type { sheets_v4 } from "googleapis";
 import { getSheetsClient } from "@/lib/sheets-sync";
 
-export const DEAL_SHEET_TAB = "案件情報";
+export const DEAL_SHEET_TAB = "案件管理";
 export const COMPANY_MASTER_TAB = "企業マスタ";
 
-/** 案件情報の列 (0 始まり) */
+/** 案件管理の列 (0 始まり) */
 export const DEAL_COL = {
   dealNo: 0, // A 案件ID (001…)
-  companyName: 1, // B 企業名
-  companyId: 2, // C 企業ID
-  dealKey: 3, // D 案件 ID (企業ID_受注日_職種コード)
-  dealName: 4, // E 案件名
+  companyName: 1, // B 企業名   ← C/D/E の数式の入力になる
+  companyId: 2, // C 企業ID   【数式・書込禁止】
+  dealKey: 3, // D 案件 ID  【数式・書込禁止】
+  dealName: 4, // E 案件名   【数式・書込禁止】
   acceptedAt: 5, // F 受注日
   job: 6, // G 職種
   status: 7, // H ステータス
@@ -51,15 +59,16 @@ export const DEAL_COL = {
   unitPrice: 17, // R 単価
 } as const;
 
+/** 数式が入っているため絶対に書き込まない列 */
+const FORMULA_COLS: number[] = [DEAL_COL.companyId, DEAL_COL.dealKey, DEAL_COL.dealName];
+
 /**
  * 既存行で更新してよい列 = 系が正しく持っている「進捗」だけ。
  *
- * 実データで試したところ、次の 3 つは上書きすると スプシを劣化させる ため外した:
- *   - 職種 (G)   … スプシは職種コード表の表記 (外食 / 機械加工)、
- *                  系は分野名 (外食業 / 工業製品製造業) で体系が違う
- *   - 単価 (R)   … 系の値が実態と食い違う例が複数あり (¥300,000 → 150000 など)、
- *                  かつスプシの単価は請求シートが参照する
- *   - 成約人数 (O) … 系では UI 上廃止された項目で、常に 0 が入っている
+ * 実データで試したところ、次の 3 つは上書きすると スプシを劣化させるため外した:
+ *   職種 (G)     … スプシは職種コード表の表記 (外食 / 機械加工)、系は分野名で体系が違う
+ *   単価 (R)     … 系の値が実態と食い違う例が複数あり、請求シートが参照する列
+ *   成約人数 (O) … 系では UI 上廃止済みで常に 0
  */
 const UPDATABLE_COLS = [
   DEAL_COL.status,
@@ -70,6 +79,22 @@ const UPDATABLE_COLS = [
   DEAL_COL.offer,
 ] as const;
 
+/** 新規行で書き込む列 (数式列は含めない) */
+const NEW_ROW_COLS: number[] = [
+  DEAL_COL.dealNo,
+  DEAL_COL.companyName,
+  DEAL_COL.acceptedAt,
+  DEAL_COL.job,
+  DEAL_COL.status,
+  DEAL_COL.owner,
+  DEAL_COL.required,
+  DEAL_COL.recommended,
+  DEAL_COL.interview,
+  DEAL_COL.offer,
+  DEAL_COL.inflow,
+  DEAL_COL.unitPrice,
+];
+
 /** 人数の列 (空欄に 0 を書き込まない判定に使う) */
 const COUNT_COLS: number[] = [
   DEAL_COL.required,
@@ -79,44 +104,10 @@ const COUNT_COLS: number[] = [
   DEAL_COL.contract,
 ];
 
-/** 案件情報の総列数 (A〜W) */
-const DEAL_COL_COUNT = 23;
-
-/**
- * 職種 → コード (スプシ「職種コード」表に準拠)。
- * 系の分野名は「外食業」「工業製品製造業」のように末尾が揺れるため、
- * 前方一致で引けるように短い順に並べている。
- */
-const JOB_CODES: [string, string][] = [
-  ["リネンサプライ", "linen"],
-  ["ビルクリーニング", "clean"],
-  ["飲食料品製造", "fdmfg"],
-  ["工業製品製造", "indus"],
-  ["自動車整備", "auto"],
-  ["機械加工", "mach"],
-  ["ドライブ", "driver"],
-  ["自動車運送", "driver"],
-  ["宿泊", "hotel"],
-  ["外食", "food"],
-  ["介護", "care"],
-  ["建設", "const"],
-  ["農業", "agri"],
-];
-
-/** 分野名から職種コードを引く (見つからなければ null) */
-export function jobCode(field: string | null | undefined): string | null {
-  const f = (field ?? "").trim();
-  if (!f) return null;
-  for (const [name, code] of JOB_CODES) {
-    if (f.startsWith(name) || f.includes(name)) return code;
-  }
-  return null;
-}
-
 /** 同期対象の案件 */
 export type DealForSheet = {
   id: number;
-  /** スプシ「案件情報」の 案件ID。一度対応づいたらこれを使う (null なら id を候補にする) */
+  /** スプシ「案件管理」の 案件ID。一度対応づいたらこれを使う (null なら id を候補にする) */
   sheetDealNo: string | null;
   title: string;
   field: string | null;
@@ -135,7 +126,7 @@ export type DealForSheet = {
   partnerName: string | null;
 };
 
-/** 系にあってマスタに無いか判定するための企業 */
+/** 企業マスタへの追記対象 */
 export type CompanyForMaster = {
   externalId: string | null;
   name: string;
@@ -151,7 +142,6 @@ export function formatDealNo(id: number): string {
 export function parseMoney(value: string | null | undefined): number | null {
   const s = (value ?? "").trim();
   if (!s) return null;
-  // 桁区切りに使われている , と . を除去してから数字を拾う
   const digits = s.replace(/[，,]/g, "").replace(/\.(?=\d{3}\b)/g, "").replace(/[^0-9]/g, "");
   if (!digits) return null;
   const n = Number(digits);
@@ -186,7 +176,7 @@ export function colLetter(index: number): string {
 type SheetTable = {
   /** ヘッダ行の 1 始まり行番号 */
   headerRow: number;
-  /** 全行 (ヘッダ含む、0 始まり配列) */
+  /** 全行 (0 始まり配列) */
   rows: string[][];
 };
 
@@ -197,10 +187,22 @@ async function readTable(
   tab: string,
   headerKeyword: string,
 ): Promise<SheetTable> {
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `${quote(tab)}!A1:AZ2000`,
-  });
+  let res;
+  try {
+    res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${quote(tab)}!A1:AZ2000`,
+    });
+  } catch (e) {
+    // タブ名が違うときにすぐ気づけるよう、実在するタブ名を添えて投げ直す
+    const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties.title" });
+    const names = (meta.data.sheets ?? []).map((s) => s.properties?.title).filter(Boolean);
+    throw new Error(
+      `「${tab}」タブを読めません (実在するタブ: ${names.join(" / ")})。元エラー: ${
+        e instanceof Error ? e.message : "error"
+      }`,
+    );
+  }
   const rows = (res.data.values ?? []).map((r) => r.map((c) => String(c ?? "")));
   let headerRow = -1;
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
@@ -210,45 +212,44 @@ async function readTable(
     }
   }
   if (headerRow < 0) {
-    throw new Error(`「${tab}」タブに ヘッダ (${headerKeyword}) が見つかりません`);
+    throw new Error(`「${tab}」タブに見出し (${headerKeyword}) が見つかりません`);
   }
   return { headerRow, rows };
+}
+
+/**
+ * 追記してよい最初の行を探す。
+ * C/D/E に数式が下まで引かれているため、行の有無は「目印の列」だけで判断する。
+ */
+function firstEmptyRow(rows: string[][], headerRow: number, markerCol: number): number {
+  let last = headerRow; // 1 始まり
+  for (let i = headerRow; i < rows.length; i++) {
+    if (String(rows[i]?.[markerCol] ?? "").trim()) last = i + 1;
+  }
+  return last + 1;
 }
 
 export type DealSyncResult = {
   apply: boolean;
   sheetRowCount: number;
-  /** 更新した (する) 案件 */
   updated: { dealNo: string; row: number; company: string; changes: string[] }[];
-  /** 追記した (する) 案件 */
-  appended: { dealNo: string; company: string; title: string }[];
+  appended: { dealNo: string; row: number; company: string; title: string }[];
   /** 案件ID は在るが企業IDが食い違うため触らなかった行 */
   conflicts: { dealNo: string; row: number; sheetCompany: string; systemCompany: string }[];
-  /** 案件ID が既にスプシで使われていて追記できなかった案件 */
   skipped: { dealId: number; company: string; reason: string }[];
-  /** 変更が無かった件数 */
   unchanged: number;
-  /**
-   * 系に記録する 案件ID の割り当て。
-   * 呼び出し側が Deal.sheetDealNo に保存することで、次回以降ずれない。
-   */
+  /** 系に記録する 案件ID の割り当て (Deal.sheetDealNo に保存する) */
   assignments: { dealId: number; sheetDealNo: string }[];
 };
 
-/**
- * 案件 (Deal) を「案件情報」タブへ差分同期する。
- * @param apply false ならドライラン (書き込まない)
- */
-/** 差分計算の結果 (書き込み前の計画) */
 export type DealSyncPlan = {
   result: DealSyncResult;
   updates: { range: string; values: (string | number)[][] }[];
-  appendRows: (string | number)[][];
 };
 
 /**
  * どの行をどう書き換えるかを決める純粋関数 (Sheets API を触らない)。
- * ここを分けているのは、本番のスプシに書く前に実データで挙動を検証できるようにするため。
+ * 本番のスプシに書く前に実データで挙動を検証できるよう分離している。
  */
 export function planDealSync(args: {
   headerRow: number;
@@ -281,10 +282,19 @@ export function planDealSync(args: {
     unchanged: 0,
     assignments: [],
   };
+  const updates: { range: string; values: (string | number)[][] }[] = [];
 
-  /** 既存行に書き込む値 (空文字/null は「変更しない」) */
+  // 企業名(B)を目印に、書き込んでよい最初の空行を求める
+  let writeRow = firstEmptyRow(rows, headerRow, DEAL_COL.companyName);
+
   const valueFor = (d: DealForSheet, col: number): string | number | null => {
     switch (col) {
+      case DEAL_COL.dealNo:
+        return null; // 追記時に個別指定する
+      case DEAL_COL.companyName:
+        return d.companyName;
+      case DEAL_COL.acceptedAt:
+        return toSheetDate(d.acceptedAt ?? d.createdAt);
       case DEAL_COL.job:
         return d.field ?? "";
       case DEAL_COL.status:
@@ -301,6 +311,8 @@ export function planDealSync(args: {
         return d.offerCount;
       case DEAL_COL.contract:
         return d.contractCount;
+      case DEAL_COL.inflow:
+        return d.partnerName ? "パートナー" : "直";
       case DEAL_COL.unitPrice:
         return parseMoney(d.unitPrice);
       default:
@@ -308,50 +320,26 @@ export function planDealSync(args: {
     }
   };
 
-  const updates: { range: string; values: (string | number)[][] }[] = [];
-  const appendRows: (string | number)[][] = [];
-
-  /** 案件を指定の 案件ID で末尾行として組み立てる */
-  const appendDeal = (d: DealForSheet, dealNo: string) => {
-    const cid = (d.companyExternalId ?? "").trim().toLowerCase();
-    const date = d.acceptedAt ?? d.createdAt;
-    const ymd = toSheetDate(date).replace(/\//g, "");
-    const code = jobCode(d.field);
-    // スプシの命名規則: 案件 ID = 企業ID_受注日_職種コード / 案件名 = 受注日_職種コード_企業名
-    const dealKey = code ? `${cid}_${ymd}_${code}` : `${cid}_${ymd}`;
-    const dealName = code ? `${ymd}_${code}_${d.companyName}` : `${ymd}_${d.companyName}`;
-
-    const row: (string | number)[] = new Array(DEAL_COL_COUNT).fill("");
-    row[DEAL_COL.dealNo] = dealNo;
-    row[DEAL_COL.companyName] = d.companyName;
-    row[DEAL_COL.companyId] = cid;
-    row[DEAL_COL.dealKey] = dealKey;
-    row[DEAL_COL.dealName] = dealName;
-    row[DEAL_COL.acceptedAt] = toSheetDate(date);
-    row[DEAL_COL.job] = d.field ?? "";
-    row[DEAL_COL.status] = d.status ?? "";
-    row[DEAL_COL.owner] = d.ownerName ?? "";
-    row[DEAL_COL.required] = d.requiredCount;
-    row[DEAL_COL.recommended] = d.recommendedCount;
-    row[DEAL_COL.interview] = d.interviewCount;
-    row[DEAL_COL.offer] = d.offerCount;
-    row[DEAL_COL.contract] = d.contractCount;
-    row[DEAL_COL.inflow] = d.partnerName ? "パートナー" : "直";
-    const price = parseMoney(d.unitPrice);
-    if (price !== null) row[DEAL_COL.unitPrice] = price;
-
-    appendRows.push(row);
-    usedDealNos.add(String(Number(dealNo)));
-    result.appended.push({ dealNo, company: d.companyName, title: d.title });
-    // 次回以降ずれないよう、割り当てた番号を系に記録させる
-    result.assignments.push({ dealId: d.id, sheetDealNo: dealNo });
-  };
-
-  /** スプシで未使用の 案件ID を採番する (系とスプシで番号がずれた案件の受け皿) */
+  /** 空いている 案件ID を採番する */
   const nextFreeNo = (): number => {
     let n = 1;
     while (usedDealNos.has(String(n))) n++;
     return n;
+  };
+
+  /** 案件を新しい行として書き込む (数式列 C/D/E には触れない) */
+  const appendDeal = (d: DealForSheet, dealNo: string) => {
+    const row = writeRow;
+    for (const col of NEW_ROW_COLS) {
+      if (FORMULA_COLS.includes(col)) continue; // 保険: 数式列は絶対に書かない
+      const v = col === DEAL_COL.dealNo ? dealNo : valueFor(d, col);
+      if (v === null || v === "") continue;
+      updates.push({ range: `${quote(tab)}!${colLetter(col)}${row}`, values: [[v]] });
+    }
+    writeRow++;
+    usedDealNos.add(String(Number(dealNo)));
+    result.appended.push({ dealNo, row, company: d.companyName, title: d.title });
+    result.assignments.push({ dealId: d.id, sheetDealNo: dealNo });
   };
 
   for (const d of deals) {
@@ -360,13 +348,10 @@ export function planDealSync(args: {
     const hit = byDealNo.get(key);
 
     if (hit) {
-      // 企業IDが食い違う行は 別会社の行 なので絶対に触らない
       const sheetCid = String(hit.cells[DEAL_COL.companyId] ?? "").trim().toLowerCase();
       const sysCid = (d.companyExternalId ?? "").trim().toLowerCase();
       if (!sysCid || sheetCid !== sysCid) {
-        // 別会社の行なので絶対に書き換えない。
-        // 企業IDが分かっているなら、空いている番号で新しい行として追記する
-        // (系とスプシの番号ずれを、既存行を壊さずに解消する)。
+        // 別会社の行なので書き換えない。空き番号で新しい行として追記する
         result.conflicts.push({
           dealNo: formatDealNo(Number(key)),
           row: hit.row,
@@ -385,7 +370,6 @@ export function planDealSync(args: {
         continue;
       }
 
-      // 値が変わる列だけ書き込む (系が空の列は既存値を残す)
       const changes: string[] = [];
       for (const col of UPDATABLE_COLS) {
         const next = valueFor(d, col);
@@ -398,14 +382,13 @@ export function planDealSync(args: {
         changes.push(`${colLetter(col)}: ${cur || "(空)"} → ${nextStr}`);
         updates.push({ range: `${quote(tab)}!${colLetter(col)}${hit.row}`, values: [[next]] });
       }
-      // 対応づいた番号を記録して、以後ずれないようにする
       if (d.sheetDealNo !== formatDealNo(Number(key))) {
         result.assignments.push({ dealId: d.id, sheetDealNo: formatDealNo(Number(key)) });
       }
       if (changes.length === 0) result.unchanged++;
       else
         result.updated.push({
-          dealNo: formatDealNo(d.id),
+          dealNo: formatDealNo(Number(key)),
           row: hit.row,
           company: d.companyName,
           changes,
@@ -413,20 +396,6 @@ export function planDealSync(args: {
       continue;
     }
 
-    // スプシに無い案件 → 末尾に追記する
-    if (usedDealNos.has(key)) {
-      // 自分の番号が既に別の行で使われている → 空き番号で追記する
-      if (!d.companyExternalId) {
-        result.skipped.push({
-          dealId: d.id,
-          company: d.companyName,
-          reason: "企業IDが未設定のため追記できません (企業マスタで企業IDを付けてください)",
-        });
-        continue;
-      }
-      appendDeal(d, formatDealNo(nextFreeNo()));
-      continue;
-    }
     if (!d.companyExternalId) {
       result.skipped.push({
         dealId: d.id,
@@ -435,16 +404,13 @@ export function planDealSync(args: {
       });
       continue;
     }
-    appendDeal(d, formatDealNo(Number(key)));
+    appendDeal(d, formatDealNo(usedDealNos.has(key) ? nextFreeNo() : Number(key)));
   }
 
-  return { result, updates, appendRows };
+  return { result, updates };
 }
 
-/**
- * 案件 (Deal) を「案件情報」タブへ差分同期する。
- * @param apply false ならドライラン (書き込まない)
- */
+/** 案件を「案件管理」タブへ差分同期する */
 export async function syncDealsToSheet(args: {
   spreadsheetId: string;
   deals: DealForSheet[];
@@ -456,41 +422,27 @@ export async function syncDealsToSheet(args: {
   const sheets = await getSheetsClient();
   const { headerRow, rows } = await readTable(sheets, spreadsheetId, tab, "案件ID");
 
-  const { result, updates, appendRows } = planDealSync({ headerRow, rows, deals, tab, apply });
+  const { result, updates } = planDealSync({ headerRow, rows, deals, tab, apply });
 
-  if (apply) {
-    if (updates.length > 0) {
-      await sheets.spreadsheets.values.batchUpdate({
-        spreadsheetId,
-        requestBody: { valueInputOption: "USER_ENTERED", data: updates },
-      });
-    }
-    if (appendRows.length > 0) {
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: `${quote(tab)}!A${headerRow + 1}`,
-        valueInputOption: "USER_ENTERED",
-        insertDataOption: "INSERT_ROWS",
-        requestBody: { values: appendRows },
-      });
-    }
+  if (apply && updates.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      requestBody: { valueInputOption: "USER_ENTERED", data: updates },
+    });
   }
-
   return result;
 }
 
 export type MasterSyncResult = {
   apply: boolean;
   masterRowCount: number;
-  appended: { externalId: string; name: string; industry: string }[];
+  appended: { externalId: string; name: string; industry: string; row: number }[];
   skipped: { name: string; reason: string }[];
 };
 
 /**
  * 系にあって企業マスタに無い企業を、マスタの末尾に 追記 する。
- *
  * 企業マスタは「マスタが正」の運用なので、既存行は一切書き換えない。
- * 系で新しく作られた企業を取りこぼさないための片方向の追記だけを行う。
  */
 export async function appendCompaniesToMaster(args: {
   spreadsheetId: string;
@@ -501,14 +453,14 @@ export async function appendCompaniesToMaster(args: {
   const { spreadsheetId, companies, apply } = args;
   const tab = args.tab ?? COMPANY_MASTER_TAB;
   const sheets = await getSheetsClient();
-  const { headerRow, rows } = await readTable(sheets, spreadsheetId, tab, "企業ID");
+  // A1 の見出しは「列 1」で「企業ID」ではないため、企業名を基準に見出し行を探す
+  const { headerRow, rows } = await readTable(sheets, spreadsheetId, tab, "企業名");
 
-  // ヘッダから列位置を取る (企業マスタは列構成が変わりうるため)
   const header = rows[headerRow - 1].map((c) => c.trim());
-  const idCol = header.findIndex((c) => c === "企業ID");
   const nameCol = header.findIndex((c) => c === "企業名");
   const indCol = header.findIndex((c) => c === "分野");
-  const width = Math.max(header.length, idCol + 1, nameCol + 1, indCol + 1);
+  // 企業ID列は見出しが「企業ID」でないことがあるので、企業名の 1 つ左を採用する
+  const idCol = Math.max(0, nameCol - 1);
 
   const existing = new Set<string>();
   for (let i = headerRow; i < rows.length; i++) {
@@ -522,7 +474,9 @@ export async function appendCompaniesToMaster(args: {
     appended: [],
     skipped: [],
   };
-  const appendRows: string[][] = [];
+
+  let writeRow = firstEmptyRow(rows, headerRow, nameCol);
+  const updates: { range: string; values: (string | number)[][] }[] = [];
 
   for (const co of companies) {
     const id = (co.externalId ?? "").trim().toLowerCase();
@@ -530,31 +484,33 @@ export async function appendCompaniesToMaster(args: {
       result.skipped.push({ name: co.name, reason: "企業IDが未設定" });
       continue;
     }
-    // 企業IDの体裁 (英数字) から外れるものは、手入力ミスの可能性が高いので追記しない
+    // 企業IDの体裁 (英数字) から外れるものは手入力ミスの可能性が高いので追記しない
     if (!/^[a-z0-9]{2,}$/.test(id)) {
       result.skipped.push({ name: co.name, reason: `企業IDの形式が不正です (${co.externalId})` });
       continue;
     }
     if (existing.has(id)) continue;
 
-    const row = new Array(width).fill("");
-    if (idCol >= 0) row[idCol] = id;
-    if (nameCol >= 0) row[nameCol] = co.name;
-    if (indCol >= 0) row[indCol] = co.industry ?? "";
-    appendRows.push(row);
+    updates.push({ range: `${quote(tab)}!${colLetter(idCol)}${writeRow}`, values: [[id]] });
+    updates.push({ range: `${quote(tab)}!${colLetter(nameCol)}${writeRow}`, values: [[co.name]] });
+    if (indCol >= 0 && co.industry) {
+      updates.push({ range: `${quote(tab)}!${colLetter(indCol)}${writeRow}`, values: [[co.industry]] });
+    }
     existing.add(id);
-    result.appended.push({ externalId: id, name: co.name, industry: co.industry ?? "" });
+    result.appended.push({
+      externalId: id,
+      name: co.name,
+      industry: co.industry ?? "",
+      row: writeRow,
+    });
+    writeRow++;
   }
 
-  if (apply && appendRows.length > 0) {
-    await sheets.spreadsheets.values.append({
+  if (apply && updates.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId,
-      range: `${quote(tab)}!A${headerRow + 1}`,
-      valueInputOption: "USER_ENTERED",
-      insertDataOption: "INSERT_ROWS",
-      requestBody: { values: appendRows },
+      requestBody: { valueInputOption: "USER_ENTERED", data: updates },
     });
   }
-
   return result;
 }
