@@ -234,6 +234,8 @@ export type DealSyncResult = {
   sheetRowCount: number;
   updated: { dealNo: string; row: number; company: string; changes: string[] }[];
   appended: { dealNo: string; row: number; company: string; title: string }[];
+  /** 案件IDが空だった既存行を、企業IDで突き合わせて引き取った分 (重複行を作らないため) */
+  adopted: { dealNo: string; row: number; company: string }[];
   /** 案件ID は在るが企業IDが食い違うため触らなかった行 */
   conflicts: { dealNo: string; row: number; sheetCompany: string; systemCompany: string }[];
   skipped: { dealId: number; company: string; reason: string }[];
@@ -272,11 +274,25 @@ export function planDealSync(args: {
     if (!byDealNo.has(key)) byDealNo.set(key, { row: i + 1, cells });
   }
 
+  // 案件IDが空のまま残っている行 (デモ行や手入力途中の行)。
+  // 企業IDで一意に対応づく案件があれば、新しい行を足さずにこの行を使う。
+  const idlessByCompany = new Map<string, { row: number; cells: string[] }[]>();
+  for (let i = headerRow; i < rows.length; i++) {
+    const cells = rows[i] ?? [];
+    const no = String(cells[DEAL_COL.dealNo] ?? "").trim();
+    const cid = String(cells[DEAL_COL.companyId] ?? "").trim().toLowerCase();
+    const cname = String(cells[DEAL_COL.companyName] ?? "").trim();
+    if (no || !cid || !cname) continue;
+    if (!idlessByCompany.has(cid)) idlessByCompany.set(cid, []);
+    idlessByCompany.get(cid)!.push({ row: i + 1, cells });
+  }
+
   const result: DealSyncResult = {
     apply,
     sheetRowCount: byDealNo.size,
     updated: [],
     appended: [],
+    adopted: [],
     conflicts: [],
     skipped: [],
     unchanged: 0,
@@ -404,7 +420,37 @@ export function planDealSync(args: {
       });
       continue;
     }
-    appendDeal(d, formatDealNo(usedDealNos.has(key) ? nextFreeNo() : Number(key)));
+
+    const dealNo = formatDealNo(usedDealNos.has(key) ? nextFreeNo() : Number(key));
+
+    // 案件IDが空の行が、この企業でちょうど 1 行だけ残っていれば、それを使う。
+    // (同じ企業の行が複数あるとどれか分からないので、その場合は普通に追記する)
+    const cid = d.companyExternalId.trim().toLowerCase();
+    const candidates = idlessByCompany.get(cid);
+    if (candidates && candidates.length === 1) {
+      const hit = candidates[0];
+      idlessByCompany.delete(cid); // 二重に使わない
+      // 空いていた案件IDを書き込んで、以後この行と対応づける
+      updates.push({
+        range: `${quote(tab)}!${colLetter(DEAL_COL.dealNo)}${hit.row}`,
+        values: [[dealNo]],
+      });
+      // 併せて進捗も反映する (既存行と同じ規則: 系が空なら既存値を残す)
+      for (const col of UPDATABLE_COLS) {
+        const next = valueFor(d, col);
+        if (next === null || next === "") continue;
+        const cur = String(hit.cells[col] ?? "").trim();
+        if (!cur && next === 0 && COUNT_COLS.includes(col)) continue;
+        if (cur === (typeof next === "number" ? String(next) : next.trim())) continue;
+        updates.push({ range: `${quote(tab)}!${colLetter(col)}${hit.row}`, values: [[next]] });
+      }
+      usedDealNos.add(String(Number(dealNo)));
+      result.adopted.push({ dealNo, row: hit.row, company: d.companyName });
+      result.assignments.push({ dealId: d.id, sheetDealNo: dealNo });
+      continue;
+    }
+
+    appendDeal(d, dealNo);
   }
 
   return { result, updates };
