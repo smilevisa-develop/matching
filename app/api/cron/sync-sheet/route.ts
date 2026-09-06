@@ -9,7 +9,8 @@
  *      開発時のみ未設定で実行可。
  *      ※このパスは proxy.ts でログイン不要にしているため、ここが唯一の防御線。
  *
- * 動作: 系で変更があった候補者だけをスプシに反映する (apply=1 相当)。
+ * 動作: 系で変更があった候補者をスプシに反映し、続けて
+ *      案件・企業を企業データベース(案件情報 / 企業マスタ)へ差分同期する。
  */
 
 import { prisma } from "@/lib/prisma";
@@ -24,6 +25,12 @@ import {
   resolveCompanyMasterSpreadsheetId,
   upsertCompanyMaster,
 } from "@/lib/company-master-sync";
+import {
+  appendCompaniesToMaster,
+  syncDealsToSheet,
+  type CompanyForMaster,
+  type DealForSheet,
+} from "@/lib/deal-sheet-sync";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -141,7 +148,92 @@ export async function GET(req: Request) {
         result.syncedPersonIds,
       );
     }
-    return Response.json({ ok: true, result, companyMaster, at: new Date().toISOString() });
+    // 案件・企業を企業データベース(スプシ)へ反映する。
+    // 候補者と同じく「系で追加・変更したものが自動で載る」状態にするため cron に含める。
+    // 失敗しても候補者同期の結果は返す (この同期だけのために全体を落とさない)。
+    let deals: unknown = null;
+    let companies: unknown = null;
+    try {
+      const masterId = resolveCompanyMasterSpreadsheetId();
+      if (masterId) {
+        // 先に企業マスタへ未登録企業を追記する (案件の追記が企業IDに依存するため)
+        const companyRows = await prisma.company.findMany({
+          orderBy: { externalId: "asc" },
+          select: { externalId: true, name: true, industry: true },
+        });
+        companies = await appendCompaniesToMaster({
+          spreadsheetId: masterId,
+          companies: companyRows as CompanyForMaster[],
+          apply: true,
+        });
+
+        const dealRows = await prisma.deal.findMany({
+          orderBy: { id: "asc" },
+          select: {
+            id: true,
+            sheetDealNo: true,
+            title: true,
+            field: true,
+            status: true,
+            unitPrice: true,
+            acceptedAt: true,
+            createdAt: true,
+            requiredCount: true,
+            recommendedCount: true,
+            interviewCount: true,
+            offerCount: true,
+            contractCount: true,
+            company: { select: { externalId: true, name: true } },
+            owner: { select: { name: true } },
+            partner: { select: { name: true } },
+          },
+        });
+        const mapped: DealForSheet[] = dealRows.map((d) => ({
+          id: d.id,
+          sheetDealNo: d.sheetDealNo,
+          title: d.title,
+          field: d.field,
+          status: d.status,
+          unitPrice: d.unitPrice,
+          acceptedAt: d.acceptedAt,
+          createdAt: d.createdAt,
+          requiredCount: d.requiredCount,
+          recommendedCount: d.recommendedCount,
+          interviewCount: d.interviewCount,
+          offerCount: d.offerCount,
+          contractCount: d.contractCount,
+          companyExternalId: d.company.externalId,
+          companyName: d.company.name,
+          ownerName: d.owner?.name ?? null,
+          partnerName: d.partner?.name ?? null,
+        }));
+        const dealResult = await syncDealsToSheet({
+          spreadsheetId: masterId,
+          deals: mapped,
+          apply: true,
+        });
+        // 割り当てた案件IDを記録して、次回以降ずれない / 二重追記しないようにする
+        for (const a of dealResult.assignments) {
+          await prisma.deal.update({
+            where: { id: a.dealId },
+            data: { sheetDealNo: a.sheetDealNo },
+          });
+        }
+        deals = dealResult;
+      }
+    } catch (e) {
+      console.warn("案件・企業のスプシ同期に失敗:", e instanceof Error ? e.message : e);
+      deals = { error: e instanceof Error ? e.message : "error" };
+    }
+
+    return Response.json({
+      ok: true,
+      result,
+      companyMaster,
+      companies,
+      deals,
+      at: new Date().toISOString(),
+    });
   } catch (error) {
     console.error("cron/sync-sheet error:", error);
     return Response.json(
