@@ -104,6 +104,66 @@ const COUNT_COLS: number[] = [
   DEAL_COL.contract,
 ];
 
+/**
+ * スプシ「設定」タブの職種表 (職種 → コード)。
+ * 案件管理の D/E 列の数式はこの表で職種コードを引くため、G 列の職種は
+ * この表の表記と完全一致していないと「_etc」になってしまう。
+ */
+export const SHEET_JOB_LABELS = [
+  "農業",
+  "建設",
+  "介護",
+  "外食",
+  "飲食料品製造",
+  "ビルクリーニング",
+  "リネンサプライ",
+  "自動車整備",
+  "機械加工",
+  "工業製品製造",
+  "ドライブ",
+  "宿泊",
+] as const;
+
+/** 系の分野名 → スプシの職種ラベル。長い語から順に照合する */
+const JOB_ALIASES: [string, string][] = [
+  ["飲食料品製造", "飲食料品製造"],
+  ["工業製品製造", "工業製品製造"],
+  ["工業製品", "工業製品製造"],
+  ["ビルクリーニング", "ビルクリーニング"],
+  ["リネンサプライ", "リネンサプライ"],
+  ["自動車整備", "自動車整備"],
+  ["自動車運送", "ドライブ"],
+  ["ドライバー", "ドライブ"],
+  ["ドライブ", "ドライブ"],
+  ["機械加工", "機械加工"],
+  ["外食", "外食"],
+  ["介護", "介護"],
+  ["建設", "建設"],
+  ["農業", "農業"],
+  ["宿泊", "宿泊"],
+];
+
+/**
+ * 系の分野名をスプシの職種ラベルに揃える (例: 工業製品製造業 → 工業製品製造)。
+ * 案件に分野が無ければ企業の分野で補う。どちらも読めなければ null。
+ */
+export function normalizeJobLabel(
+  field: string | null | undefined,
+  fallback?: string | null,
+): string | null {
+  for (const src of [field, fallback]) {
+    const f = (src ?? "").trim();
+    if (!f) continue;
+    for (const [key, label] of JOB_ALIASES) if (f.includes(key)) return label;
+  }
+  return null;
+}
+
+/** スプシの職種表に載っている表記か */
+function isSheetJobLabel(v: string): boolean {
+  return (SHEET_JOB_LABELS as readonly string[]).includes(v.trim());
+}
+
 /** 同期対象の案件 */
 export type DealForSheet = {
   id: number;
@@ -122,6 +182,8 @@ export type DealForSheet = {
   contractCount: number;
   companyExternalId: string | null;
   companyName: string;
+  /** 企業の分野。案件に分野が無いとき職種の補完に使う */
+  companyIndustry?: string | null;
   ownerName: string | null;
   partnerName: string | null;
 };
@@ -132,6 +194,11 @@ export type CompanyForMaster = {
   name: string;
   industry: string | null;
 };
+
+/** 企業名の表記ゆれを吸収する (空白・ハイフン・中黒の違いを無視) */
+function normalizeCompanyName(name: string | null | undefined): string {
+  return String(name ?? "").replace(/[-－‐–—・\s　]/g, "").toLowerCase();
+}
 
 /** 案件ID を 3 桁に揃える (12 → "012") */
 export function formatDealNo(id: number): string {
@@ -242,11 +309,20 @@ export type DealSyncResult = {
   unchanged: number;
   /** 系に記録する 案件ID の割り当て (Deal.sheetDealNo に保存する) */
   assignments: { dealId: number; sheetDealNo: string }[];
+  /** 数式を補修したセル (例: "C40") */
+  repairedFormulas: string[];
 };
 
 export type DealSyncPlan = {
   result: DealSyncResult;
   updates: { range: string; values: (string | number)[][] }[];
+  /**
+   * 数式が抜けているセルの補修。
+   * 案件管理は C/D/E が数式だが、途中の行で数式が消えていることがある
+   * (実例: 行40 の C 列だけ空で、企業IDが引けていなかった)。
+   * 上にある同じ列の数式をコピーして埋める (値は書かない)。
+   */
+  formulaRepairs: { row: number; col: number; fromRow: number }[];
 };
 
 /**
@@ -259,8 +335,10 @@ export function planDealSync(args: {
   deals: DealForSheet[];
   tab: string;
   apply: boolean;
+  /** C/D/E 列の数式 (valueRenderOption=FORMULA で読んだもの)。補修の判定に使う */
+  formulas?: string[][];
 }): DealSyncPlan {
-  const { headerRow, rows, deals, tab, apply } = args;
+  const { headerRow, rows, deals, tab, apply, formulas } = args;
 
   // スプシ側: 案件ID → 行番号(1始まり) と 行データ
   const byDealNo = new Map<string, { row: number; cells: string[] }>();
@@ -297,8 +375,32 @@ export function planDealSync(args: {
     skipped: [],
     unchanged: 0,
     assignments: [],
+    repairedFormulas: [],
   };
   const updates: { range: string; values: (string | number)[][] }[] = [];
+  const formulaRepairs: { row: number; col: number; fromRow: number }[] = [];
+
+  /** この行の数式列 (C/D/E) が抜けていれば、上の行からコピーする予定を積む */
+  const repairFormulas = (row: number) => {
+    if (!formulas) return; // ドライラン用の呼び出しでは数式情報が無い
+    for (const col of FORMULA_COLS) {
+      const here = String(formulas[row - 1]?.[col - DEAL_COL.companyId] ?? "").trim();
+      if (here.startsWith("=")) continue;
+      // 数式は無くても値が手入力されているセル (例: 行23 の企業ID) は人の意図なので触らない
+      if (String(rows[row - 1]?.[col] ?? "").trim()) continue;
+      // 上に向かって、同じ列に数式がある最も近い行を探す
+      let from = -1;
+      for (let r = row - 1; r > headerRow; r--) {
+        if (String(formulas[r - 1]?.[col - DEAL_COL.companyId] ?? "").trim().startsWith("=")) {
+          from = r;
+          break;
+        }
+      }
+      if (from < 0) continue;
+      formulaRepairs.push({ row, col, fromRow: from });
+      result.repairedFormulas.push(`${colLetter(col)}${row}`);
+    }
+  };
 
   // 企業名(B)を目印に、書き込んでよい最初の空行を求める
   let writeRow = firstEmptyRow(rows, headerRow, DEAL_COL.companyName);
@@ -312,7 +414,7 @@ export function planDealSync(args: {
       case DEAL_COL.acceptedAt:
         return toSheetDate(d.acceptedAt ?? d.createdAt);
       case DEAL_COL.job:
-        return d.field ?? "";
+        return normalizeJobLabel(d.field, d.companyIndustry) ?? "";
       case DEAL_COL.status:
         return d.status ?? "";
       case DEAL_COL.owner:
@@ -336,6 +438,40 @@ export function planDealSync(args: {
     }
   };
 
+  /** 既存行が、この案件と同じ会社の行か (企業IDが空なら企業名で照合) */
+  const isSameCompany = (cells: string[], d: DealForSheet): boolean => {
+    const sheetCid = String(cells[DEAL_COL.companyId] ?? "").trim().toLowerCase();
+    const sysCid = (d.companyExternalId ?? "").trim().toLowerCase();
+    return sheetCid && sysCid
+      ? sheetCid === sysCid
+      : normalizeCompanyName(cells[DEAL_COL.companyName]) === normalizeCompanyName(d.companyName);
+  };
+
+  // 事前パス: 系の案件と対応づく既存行を洗い出す。
+  // 対応づかない行 (スプシにだけある行) は、同じ会社の案件が 1 件だけ宙に浮いていれば
+  // その案件の行として引き取る (前回ここを追記にしていたため重複行ができた)。
+  const claimedRows = new Set<number>();
+  const unmatchedByCompany = new Map<string, number>();
+  for (const d of deals) {
+    const key = d.sheetDealNo ? String(Number(d.sheetDealNo)) : String(d.id);
+    const hit = byDealNo.get(key);
+    if (hit && isSameCompany(hit.cells, d)) {
+      claimedRows.add(hit.row);
+    } else {
+      const k = normalizeCompanyName(d.companyName);
+      unmatchedByCompany.set(k, (unmatchedByCompany.get(k) ?? 0) + 1);
+    }
+  }
+  /** 誰にも対応していない、案件ID付きの既存行 (会社名 → 行) */
+  const orphanByCompany = new Map<string, { row: number; cells: string[]; no: string }[]>();
+  for (const [no, hit] of byDealNo) {
+    if (claimedRows.has(hit.row)) continue;
+    const k = normalizeCompanyName(hit.cells[DEAL_COL.companyName]);
+    if (!k) continue;
+    if (!orphanByCompany.has(k)) orphanByCompany.set(k, []);
+    orphanByCompany.get(k)!.push({ row: hit.row, cells: hit.cells, no });
+  }
+
   /** 空いている 案件ID を採番する */
   const nextFreeNo = (): number => {
     let n = 1;
@@ -352,6 +488,7 @@ export function planDealSync(args: {
       if (v === null || v === "") continue;
       updates.push({ range: `${quote(tab)}!${colLetter(col)}${row}`, values: [[v]] });
     }
+    repairFormulas(row);
     writeRow++;
     usedDealNos.add(String(Number(dealNo)));
     result.appended.push({ dealNo, row, company: d.companyName, title: d.title });
@@ -366,7 +503,27 @@ export function planDealSync(args: {
     if (hit) {
       const sheetCid = String(hit.cells[DEAL_COL.companyId] ?? "").trim().toLowerCase();
       const sysCid = (d.companyExternalId ?? "").trim().toLowerCase();
-      if (!sysCid || sheetCid !== sysCid) {
+      // 同じ会社の行か。企業ID(C)が数式抜けで空のことがあるので、その場合は企業名(B)で照合する
+      const sameCompany =
+        sheetCid && sysCid
+          ? sheetCid === sysCid
+          : normalizeCompanyName(hit.cells[DEAL_COL.companyName]) ===
+            normalizeCompanyName(d.companyName);
+      // 以前この案件用に書いた行か (Deal.sheetDealNo に記録済み)
+      const owned = Boolean(d.sheetDealNo) && Number(d.sheetDealNo) === Number(key);
+
+      if (!sameCompany && owned) {
+        // 自分の行のはずなのに会社が違う = 誰かが手で行を書き換えた可能性。
+        // ここで追記すると毎回重複行が増えるので、何もせず報告だけする。
+        result.conflicts.push({
+          dealNo: formatDealNo(Number(key)),
+          row: hit.row,
+          sheetCompany: `${sheetCid || "(空)"} ${hit.cells[DEAL_COL.companyName] ?? ""}`.trim(),
+          systemCompany: `${sysCid || "(空)"} ${d.companyName}`.trim(),
+        });
+        continue;
+      }
+      if (!sysCid || !sameCompany) {
         // 別会社の行なので書き換えない。空き番号で新しい行として追記する
         result.conflicts.push({
           dealNo: formatDealNo(Number(key)),
@@ -387,6 +544,17 @@ export function planDealSync(args: {
       }
 
       const changes: string[] = [];
+      // 職種は基本的に触らない (スプシ独自の表記)。ただし空欄や職種表に無い表記だと
+      // 案件ID(D)が「_etc」になってしまうので、そのときだけ職種表の表記で埋める。
+      const curJob = String(hit.cells[DEAL_COL.job] ?? "").trim();
+      if (!isSheetJobLabel(curJob)) {
+        const label = normalizeJobLabel(d.field, d.companyIndustry);
+        if (label && label !== curJob) {
+          changes.push(`G: ${curJob || "(空)"} → ${label}`);
+          updates.push({ range: `${quote(tab)}!G${hit.row}`, values: [[label]] });
+        }
+      }
+      repairFormulas(hit.row);
       for (const col of UPDATABLE_COLS) {
         const next = valueFor(d, col);
         if (next === null || next === "") continue;
@@ -421,6 +589,31 @@ export function planDealSync(args: {
       continue;
     }
 
+    // 案件IDは入っているが系の誰にも対応していない同じ会社の行が 1 行だけあり、
+    // かつこの会社で宙に浮いている案件が 1 件だけなら、その行を引き取る。
+    // (どちらかが複数あるとどれとどれが同じ案件か判断できないので、追記に回す)
+    {
+      const k = normalizeCompanyName(d.companyName);
+      const orphans = orphanByCompany.get(k);
+      if (orphans && orphans.length === 1 && unmatchedByCompany.get(k) === 1) {
+        const o = orphans[0];
+        orphanByCompany.delete(k);
+        repairFormulas(o.row);
+        for (const col of UPDATABLE_COLS) {
+          const next = valueFor(d, col);
+          if (next === null || next === "") continue;
+          const cur = String(o.cells[col] ?? "").trim();
+          if (!cur && next === 0 && COUNT_COLS.includes(col)) continue;
+          if (cur === (typeof next === "number" ? String(next) : next.trim())) continue;
+          updates.push({ range: `${quote(tab)}!${colLetter(col)}${o.row}`, values: [[next]] });
+        }
+        const no = formatDealNo(Number(o.no));
+        result.adopted.push({ dealNo: no, row: o.row, company: d.companyName });
+        result.assignments.push({ dealId: d.id, sheetDealNo: no });
+        continue;
+      }
+    }
+
     const dealNo = formatDealNo(usedDealNos.has(key) ? nextFreeNo() : Number(key));
 
     // 案件IDが空の行が、この企業でちょうど 1 行だけ残っていれば、それを使う。
@@ -444,6 +637,7 @@ export function planDealSync(args: {
         if (cur === (typeof next === "number" ? String(next) : next.trim())) continue;
         updates.push({ range: `${quote(tab)}!${colLetter(col)}${hit.row}`, values: [[next]] });
       }
+      repairFormulas(hit.row);
       usedDealNos.add(String(Number(dealNo)));
       result.adopted.push({ dealNo, row: hit.row, company: d.companyName });
       result.assignments.push({ dealId: d.id, sheetDealNo: dealNo });
@@ -453,7 +647,7 @@ export function planDealSync(args: {
     appendDeal(d, dealNo);
   }
 
-  return { result, updates };
+  return { result, updates, formulaRepairs };
 }
 
 /** 案件を「案件管理」タブへ差分同期する */
@@ -468,13 +662,63 @@ export async function syncDealsToSheet(args: {
   const sheets = await getSheetsClient();
   const { headerRow, rows } = await readTable(sheets, spreadsheetId, tab, "案件ID");
 
-  const { result, updates } = planDealSync({ headerRow, rows, deals, tab, apply });
+  // 数式が抜けたセルを見つけるため、C/D/E 列は計算結果ではなく数式そのものを読む
+  const formulaRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${quote(tab)}!C1:E2000`,
+    valueRenderOption: "FORMULA",
+  });
+  const formulas = (formulaRes.data.values ?? []).map((r) => r.map((c) => String(c ?? "")));
+
+  const { result, updates, formulaRepairs } = planDealSync({
+    headerRow,
+    rows,
+    deals,
+    tab,
+    apply,
+    formulas,
+  });
 
   if (apply && updates.length > 0) {
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId,
       requestBody: { valueInputOption: "USER_ENTERED", data: updates },
     });
+  }
+
+  // 数式の補修: 上の行の数式をコピーする (PASTE_FORMULA なので参照行は自動で合う)
+  if (apply && formulaRepairs.length > 0) {
+    const meta = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: "sheets.properties(sheetId,title)",
+    });
+    const sheetId = meta.data.sheets?.find((x) => x.properties?.title === tab)?.properties?.sheetId;
+    if (sheetId !== undefined && sheetId !== null) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: formulaRepairs.map((f) => ({
+            copyPaste: {
+              source: {
+                sheetId,
+                startRowIndex: f.fromRow - 1,
+                endRowIndex: f.fromRow,
+                startColumnIndex: f.col,
+                endColumnIndex: f.col + 1,
+              },
+              destination: {
+                sheetId,
+                startRowIndex: f.row - 1,
+                endRowIndex: f.row,
+                startColumnIndex: f.col,
+                endColumnIndex: f.col + 1,
+              },
+              pasteType: "PASTE_FORMULA",
+            },
+          })),
+        },
+      });
+    }
   }
   return result;
 }

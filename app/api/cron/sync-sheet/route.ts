@@ -183,7 +183,7 @@ export async function GET(req: Request) {
             interviewCount: true,
             offerCount: true,
             contractCount: true,
-            company: { select: { externalId: true, name: true } },
+            company: { select: { externalId: true, name: true, industry: true } },
             owner: { select: { name: true } },
             partner: { select: { name: true } },
           },
@@ -204,6 +204,7 @@ export async function GET(req: Request) {
           contractCount: d.contractCount,
           companyExternalId: d.company.externalId,
           companyName: d.company.name,
+          companyIndustry: d.company.industry,
           ownerName: d.owner?.name ?? null,
           partnerName: d.partner?.name ?? null,
         }));
