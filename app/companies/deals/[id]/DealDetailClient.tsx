@@ -120,9 +120,12 @@ type PersonOption = {
 export default function DealDetailClient({
   deal,
   persons,
+  staffOptions = [],
 }: {
   deal: DealDetail;
   persons: PersonOption[];
+  /** 「担当者」の選択肢 (社内スタッフ) */
+  staffOptions?: { id: number; name: string }[];
 }) {
   const router = useRouter();
   const [currentDeal, setCurrentDeal] = useState(deal);
@@ -142,6 +145,8 @@ export default function DealDetailClient({
     deadline: deal.deadline ? deal.deadline.slice(0, 10) : "",
     acceptedAt: deal.acceptedAt ? deal.acceptedAt.slice(0, 10) : "",
     notes: deal.notes ?? "",
+    // 担当者 (StaffAccount.id)。select の値として扱うため文字列で持つ
+    ownerId: deal.owner ? String(deal.owner.id) : "",
   });
 
   const handleDeleteDeal = async () => {
@@ -171,6 +176,7 @@ export default function DealDetailClient({
       deadline: currentDeal.deadline ? currentDeal.deadline.slice(0, 10) : "",
       acceptedAt: currentDeal.acceptedAt ? currentDeal.acceptedAt.slice(0, 10) : "",
       notes: currentDeal.notes ?? "",
+      ownerId: currentDeal.owner ? String(currentDeal.owner.id) : "",
     });
     setEditing(true);
   };
@@ -204,7 +210,10 @@ export default function DealDetailClient({
       const response = await fetch(`/api/deals/${currentDeal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+          ...editForm,
+          ownerId: editForm.ownerId ? Number(editForm.ownerId) : null,
+        }),
       });
       const result = await response.json();
       if (!response.ok || !result.ok) {
@@ -221,6 +230,9 @@ export default function DealDetailClient({
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
         acceptedAt: editForm.acceptedAt ? new Date(editForm.acceptedAt).toISOString() : null,
         notes: editForm.notes || null,
+        owner: editForm.ownerId
+          ? staffOptions.find((o) => String(o.id) === editForm.ownerId) ?? null
+          : null,
       }));
       setEditing(false);
       router.refresh();
@@ -387,6 +399,20 @@ export default function DealDetailClient({
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">円</span>
               </div>
+            </EditField>
+            <EditField label="担当者">
+              <select
+                className={EDIT_INPUT}
+                value={editForm.ownerId}
+                onChange={(e) => setEditForm((c) => ({ ...c, ownerId: e.target.value }))}
+              >
+                <option value="">未設定</option>
+                {staffOptions.map((o) => (
+                  <option key={o.id} value={String(o.id)}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
             </EditField>
             <EditField label="期限">
               <input className={EDIT_INPUT} type="date" value={editForm.deadline} onChange={(e) => setEditForm((c) => ({ ...c, deadline: e.target.value }))} />

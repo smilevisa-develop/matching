@@ -54,25 +54,29 @@ export async function readCompanyMasterFromSheet(spreadsheetId: string): Promise
   });
   const rows = res.data.values ?? [];
 
-  // ヘッダ行 (企業ID を含む行) を探す
+  // ヘッダ行を探す。
+  // 実物の企業マスタは A1 が「企業ID」ではなく「列 1」になっているため、
+  // 「企業ID」だけで探すと必ず失敗する (毎時の同期が無言で止まっていた)。
+  // 「企業名」を含む行をヘッダとし、企業ID列は「企業ID」見出しがあればそこ、
+  // 無ければ企業名の 1 つ左を採用する。
   let headerIdx = -1;
   let idCol = 0;
   let nameCol = 1;
   let indCol = 2;
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
     const row = rows[i].map((c) => String(c ?? "").trim());
-    const iId = row.findIndex((c) => c === "企業ID");
-    if (iId >= 0) {
+    const iName = row.findIndex((c) => c === "企業名");
+    if (iName >= 0) {
       headerIdx = i;
-      idCol = iId;
-      const iName = row.findIndex((c) => c === "企業名");
+      nameCol = iName;
+      const iId = row.findIndex((c) => c === "企業ID");
+      idCol = iId >= 0 ? iId : Math.max(0, iName - 1);
       const iInd = row.findIndex((c) => c === "分野");
-      if (iName >= 0) nameCol = iName;
       if (iInd >= 0) indCol = iInd;
       break;
     }
   }
-  if (headerIdx < 0) throw new Error("企業マスタのヘッダ (企業ID) が見つかりません");
+  if (headerIdx < 0) throw new Error("企業マスタのヘッダ (企業名) が見つかりません");
 
   const byId = new Map<string, MasterRow>();
   for (let i = headerIdx + 1; i < rows.length; i++) {

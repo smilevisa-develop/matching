@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function DealDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireCurrentAccount();
   const { id } = await params;
-  const [deal, persons, jobPostings, jobPostingTemplates] = await Promise.all([
+  const [deal, persons, jobPostings, jobPostingTemplates, staffOptions] = await Promise.all([
     prisma.deal.findUnique({
       where: { id: Number(id) },
       include: {
@@ -55,6 +55,8 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
       orderBy: { createdAt: "desc" },
       select: { id: true, name: true },
     }),
+    // 求人情報の「担当者」の選択肢
+    prisma.staffAccount.findMany({ orderBy: { id: "asc" }, select: { id: true, name: true } }),
   ]);
 
   if (!deal) notFound();
@@ -107,6 +109,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
               })),
             }}
             persons={persons}
+            staffOptions={staffOptions}
           />
         }
         conditionContent={

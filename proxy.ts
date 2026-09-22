@@ -9,6 +9,8 @@ export function proxy(request: NextRequest) {
 
   if (
     pathname.startsWith("/_next") ||
+    // Railway のデプロイ時 healthcheck (認証不要で 200 を返す)
+    pathname === "/api/health" ||
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/logo") ||
     pathname.startsWith("/api/auth") ||
