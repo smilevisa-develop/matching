@@ -311,7 +311,15 @@ export type DealSyncResult = {
   assignments: { dealId: number; sheetDealNo: string }[];
   /** 数式を補修したセル (例: "C40") */
   repairedFormulas: string[];
+  /**
+   * 既存行を引き取ったとき、系が未入力(0)でスプシに実績がある人数は
+   * スプシを消さずに系へ取り込む。呼び出し側が Deal に保存する。
+   */
+  pullbacks: { dealId: number; field: CountField; value: number }[];
 };
+
+/** スプシから系へ取り込める人数の項目 */
+export type CountField = "requiredCount" | "recommendedCount" | "interviewCount" | "offerCount";
 
 export type DealSyncPlan = {
   result: DealSyncResult;
@@ -376,6 +384,7 @@ export function planDealSync(args: {
     unchanged: 0,
     assignments: [],
     repairedFormulas: [],
+    pullbacks: [],
   };
   const updates: { range: string; values: (string | number)[][] }[] = [];
   const formulaRepairs: { row: number; col: number; fromRow: number }[] = [];
@@ -471,6 +480,38 @@ export function planDealSync(args: {
     if (!orphanByCompany.has(k)) orphanByCompany.set(k, []);
     orphanByCompany.get(k)!.push({ row: hit.row, cells: hit.cells, no });
   }
+
+  /** 列 → 系の人数項目 */
+  const COUNT_FIELD: Partial<Record<number, CountField>> = {
+    [DEAL_COL.required]: "requiredCount",
+    [DEAL_COL.recommended]: "recommendedCount",
+    [DEAL_COL.interview]: "interviewCount",
+    [DEAL_COL.offer]: "offerCount",
+  };
+
+  /**
+   * 既存行を「初めて」自分の行として引き取るときの反映。
+   * その行にはスプシ側の実績が入っていることがあり、系の案件は仮登録で人数が 0 のことが多い。
+   * そのまま書くと実績を 0 で消してしまう (安達農園で実際に起きた) ので、
+   * 系が 0 でスプシに数字があれば、スプシを残して系に取り込む。
+   */
+  const applyAdoption = (d: DealForSheet, row: number, cells: string[]) => {
+    for (const col of UPDATABLE_COLS) {
+      const next = valueFor(d, col);
+      if (next === null || next === "") continue;
+      const cur = String(cells[col] ?? "").trim();
+      const field = COUNT_FIELD[col];
+      if (field && next === 0) {
+        const n = Number(cur);
+        if (cur && Number.isFinite(n) && n > 0) {
+          result.pullbacks.push({ dealId: d.id, field, value: n });
+        }
+        continue; // 0 は書き込まない
+      }
+      if (cur === (typeof next === "number" ? String(next) : next.trim())) continue;
+      updates.push({ range: `${quote(tab)}!${colLetter(col)}${row}`, values: [[next]] });
+    }
+  };
 
   /** 空いている 案件ID を採番する */
   const nextFreeNo = (): number => {
@@ -599,14 +640,7 @@ export function planDealSync(args: {
         const o = orphans[0];
         orphanByCompany.delete(k);
         repairFormulas(o.row);
-        for (const col of UPDATABLE_COLS) {
-          const next = valueFor(d, col);
-          if (next === null || next === "") continue;
-          const cur = String(o.cells[col] ?? "").trim();
-          if (!cur && next === 0 && COUNT_COLS.includes(col)) continue;
-          if (cur === (typeof next === "number" ? String(next) : next.trim())) continue;
-          updates.push({ range: `${quote(tab)}!${colLetter(col)}${o.row}`, values: [[next]] });
-        }
+        applyAdoption(d, o.row, o.cells);
         const no = formatDealNo(Number(o.no));
         result.adopted.push({ dealNo: no, row: o.row, company: d.companyName });
         result.assignments.push({ dealId: d.id, sheetDealNo: no });
@@ -628,15 +662,8 @@ export function planDealSync(args: {
         range: `${quote(tab)}!${colLetter(DEAL_COL.dealNo)}${hit.row}`,
         values: [[dealNo]],
       });
-      // 併せて進捗も反映する (既存行と同じ規則: 系が空なら既存値を残す)
-      for (const col of UPDATABLE_COLS) {
-        const next = valueFor(d, col);
-        if (next === null || next === "") continue;
-        const cur = String(hit.cells[col] ?? "").trim();
-        if (!cur && next === 0 && COUNT_COLS.includes(col)) continue;
-        if (cur === (typeof next === "number" ? String(next) : next.trim())) continue;
-        updates.push({ range: `${quote(tab)}!${colLetter(col)}${hit.row}`, values: [[next]] });
-      }
+      // 進捗も反映する (人数は系が 0 ならスプシの実績を残して系へ取り込む)
+      applyAdoption(d, hit.row, hit.cells);
       repairFormulas(hit.row);
       usedDealNos.add(String(Number(dealNo)));
       result.adopted.push({ dealNo, row: hit.row, company: d.companyName });

@@ -107,6 +107,10 @@ export async function GET(req: Request) {
             data: { sheetDealNo: a.sheetDealNo },
           });
         }
+        // 引き取った行のスプシ実績を系へ取り込む (系が未入力 0 だった人数)
+        for (const pb of dealResult.pullbacks) {
+          await prisma.deal.update({ where: { id: pb.dealId }, data: { [pb.field]: pb.value } });
+        }
       }
       out.deals = dealResult;
     }
