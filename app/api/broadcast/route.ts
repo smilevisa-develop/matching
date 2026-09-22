@@ -11,6 +11,7 @@ import {
 import { sendEmail, textToBasicHtml, DEFAULT_EMAIL_SUBJECT, type EmailAttachment } from "@/lib/email";
 import { publicUrl } from "@/lib/public-url";
 import { incrementChannelUsage } from "@/lib/channel-usage";
+import { CHANNEL_TEXT_LIMITS, flattenForWhatsapp } from "@/lib/broadcast-message";
 
 /** LINE / メール 用に添付画像をまとめて事前ロード */
 type LoadedAttachment = {
@@ -117,6 +118,7 @@ export async function POST(req: Request) {
       whatsappTemplateLang,
       whatsappParams,
       fileIds,
+      kind,
     } = body as {
       mode: "filter" | "group";
       relationshipStatus: string | null;
@@ -145,7 +147,10 @@ export async function POST(req: Request) {
       whatsappParams?: Array<{ auto?: string; value?: string }>;
       /** 添付画像 (UploadedFile.id 配列、最大 4 件)。LINE 用に image message、メール用に添付。 */
       fileIds?: string[];
+      /** job = 求人情報 (テンプレの各項目を入力) / notice = お知らせ (本文を自由入力) */
+      kind?: "job" | "notice";
     };
+    const logTitle = kind === "notice" ? "一斉配信 お知らせ (パートナー)" : "一斉配信 (パートナー)";
 
     // ── 安全装置: partnerIds が明示指定されていない場合は送信を拒否する ──
     // プレビューと送信の不一致を防ぐため、フィルタ条件だけの送信は許可しない。
@@ -228,7 +233,14 @@ export async function POST(req: Request) {
     // (クライアントを迂回されても課金が発生しないよう、サーバー側で必ず検証する)
     let waTemplate = requestedWaTemplate;
     let waSkipReason: string | null = null;
-    if (requestedWaTemplate) {
+    if (!requestedWaTemplate) {
+      // テンプレ無しの自由文は、相手が 24 時間以内に送ってきた場合しか届かない。
+      // しかも届かなくても API は成功を返す (失敗は後から通知される) ため、
+      // 「送れたことになっているのに届いていない」を防ぐ目的で WhatsApp には送らない。
+      waSkipReason = whatsappTemplateName
+        ? "許可されていないテンプレートのため WhatsApp 送信をスキップしました"
+        : "WhatsApp 用の承認済みテンプレートが無いため送信しませんでした (WhatsApp はテンプレートでのみ送信します)";
+    } else {
       const category = await fetchTemplateCategory(requestedWaTemplate.name);
       if (category !== "UTILITY") {
         waTemplate = null;
@@ -348,7 +360,7 @@ export async function POST(req: Request) {
     if (scheduledAt) {
       await prisma.messageLog.create({
         data: {
-          title: "予約配信 (パートナー)",
+          title: `予約${logTitle}`,
           body: message,
           channel: "LINE/Messenger/WhatsApp",
           targetFilter: JSON.stringify({
@@ -393,6 +405,7 @@ export async function POST(req: Request) {
       //   { auto: "account:姓" } → ログイン中アカウントの姓
       //   { auto: 配信変数 }     → {{xxx}} を expandTemplate で展開 (パートナーごと)
       // WhatsApp テンプレ本文パラメータは改行・タブ・5 連続スペース禁止のため、必ず 1 行へ正規化する。
+      // (複数行の入力は「 ／ 」でつなぐ。LINE / メール 等は改行のまま届く)
       return waTemplate.specs.map((spec) => {
         let raw = "";
         if (spec.value !== undefined) {
@@ -402,7 +415,7 @@ export async function POST(req: Request) {
         } else if (spec.auto) {
           raw = expandTemplate(`{{${spec.auto}}}`, { partner, openDeals, urgentDeals });
         }
-        return raw.replace(/\s+/g, " ").trim();
+        return flattenForWhatsapp(raw);
       });
     };
 
@@ -539,6 +552,15 @@ export async function POST(req: Request) {
 
     // 各チャネル別の送信ロジック (per-partner, per-channel)
     const sendViaLine = async (t: Target, personalizedMessage: string) => {
+      if (personalizedMessage.length > CHANNEL_TEXT_LIMITS.LINE) {
+        failedCount++;
+        failures.push({
+          name: t.name,
+          channel: "LINE",
+          error: `本文が ${personalizedMessage.length} 文字あり、LINE の上限 ${CHANNEL_TEXT_LIMITS.LINE} 文字を超えています`,
+        });
+        return;
+      }
       const lineMsgCount = 1 + Math.min(attachments.length, 4);
       if (t.lineGroupId) {
         const r = await sendLine(t.lineGroupId, personalizedMessage, attachments);
@@ -595,6 +617,15 @@ export async function POST(req: Request) {
       if (!t.messengerPsid) {
         failedCount++;
         failures.push({ name: t.name, channel: "Messenger", error: "Messenger PSID 未登録" });
+        return;
+      }
+      if (personalizedMessage.length > CHANNEL_TEXT_LIMITS.Messenger) {
+        failedCount++;
+        failures.push({
+          name: t.name,
+          channel: "Messenger",
+          error: `本文が ${personalizedMessage.length} 文字あり、Messenger の上限 ${CHANNEL_TEXT_LIMITS.Messenger} 文字を超えています`,
+        });
         return;
       }
       const subToken =
@@ -701,7 +732,7 @@ export async function POST(req: Request) {
 
     await prisma.messageLog.create({
       data: {
-        title: "一斉配信 (パートナー)",
+        title: logTitle,
         body: message,
         channel: "LINE+Messenger",
         targetFilter: JSON.stringify({

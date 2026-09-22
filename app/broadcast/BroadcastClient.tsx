@@ -14,6 +14,14 @@ import {
   type DealForBroadcast,
   type PartnerForBroadcast,
 } from "@/lib/broadcast-variables";
+import {
+  CHANNEL_TEXT_LIMITS,
+  JOB_TEMPLATE_PATTERN,
+  NOTICE_FRAME,
+  NOTICE_TEMPLATE_PATTERN,
+  REFERRAL_FEE_LABEL,
+  flattenForWhatsapp,
+} from "@/lib/broadcast-message";
 
 type DealJson = Omit<DealForBroadcast, "deadline"> & { deadline: string | null };
 
@@ -143,6 +151,21 @@ export default function BroadcastClient({
   const [linkFilter, setLinkFilter] = useState<"all" | "linked" | "unlinked">("linked");
   const [selectedGroup, setSelectedGroup] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
+  /**
+   * 送る内容の種類:
+   *   job    … 求人情報 (承認テンプレの各項目を入力)
+   *   notice … お知らせ・その他の連絡 (本文を自由入力。書き出しと結びは求人情報と同じ型)
+   */
+  const [kind, setKind] = useState<"job" | "notice">("job");
+  /** お知らせの本文 (自由入力、複数行) */
+  const [noticeBody, setNoticeBody] = useState("");
+  /**
+   * 紹介料。テンプレに「紹介料」の枠があればそこへ、無ければ「内容」の末尾に
+   * 「■紹介料」として入れる (どのチャネルにも同じ文面が届くようにするため)。
+   */
+  const [referralFee, setReferralFee] = useState("");
+  /** お知らせ用の承認済みテンプレート (UTILITY のみ。無ければ WhatsApp へは送らない) */
+  const [noticeTpl, setNoticeTpl] = useState<WaTemplateInfo | null>(null);
   /** 固定使用する承認済みテンプレート (取得失敗時は null + note にエラー) */
   const [waTpl, setWaTpl] = useState<WaTemplateInfo | null>(null);
   const [waTplNote, setWaTplNote] = useState<string | null>("テンプレートを読み込み中...");
@@ -152,7 +175,12 @@ export default function BroadcastClient({
     fetch("/api/whatsapp/templates")
       .then((r) => r.json())
       .then((d) => {
-        const list: WaTemplateInfo[] = d?.ok ? (d.templates ?? []) : [];
+        const all: WaTemplateInfo[] = d?.ok ? (d.templates ?? []) : [];
+        // 求人情報テンプレとお知らせテンプレを名前で分ける
+        const list = all.filter((t) => JOB_TEMPLATE_PATTERN.test(t.name));
+        const notices = all.filter(
+          (t) => NOTICE_TEMPLATE_PATTERN.test(t.name) && t.category === "UTILITY",
+        );
         // 末尾の版番号 (…_v7 など) が大きいものを「最新版」とみなす
         const version = (name: string) => Number(name.match(/v(\d+)$/)?.[1] ?? 0);
         const latest = (arr: WaTemplateInfo[]) =>
@@ -163,6 +191,7 @@ export default function BroadcastClient({
         // UTILITY が無ければ最新版の文面だけ流用する
         // (MARKETING は課金が高いため WhatsApp には送らず LINE / メール のみ)
         const utilities = list.filter((t) => t.category === "UTILITY");
+        setNoticeTpl(notices.length > 0 ? latest(notices) : null);
         const picked = utilities.length > 0 ? latest(utilities) : latest(list);
         if (!picked) {
           setWaTplNote(
@@ -352,13 +381,14 @@ export default function BroadcastClient({
         if (ch === "LINE") line += linePerPartner;
         else if (ch === "Messenger") messenger += 1;
         else if (ch === "WhatsApp") {
-          if (waSendable) whatsapp += 1;
+          const tpl = kind === "notice" ? noticeTpl : waTpl;
+          if (tpl?.category === "UTILITY") whatsapp += 1;
         }
         else if (ch === "mail" || ch === "メール" || ch === "Email") email += 1;
       }
     }
     return { line, messenger, email, whatsapp };
-  }, [targetPartners, attachedImages.length, waSendable]);
+  }, [targetPartners, attachedImages.length, kind, noticeTpl, waTpl]);
 
   const lineUsage = usage?.find((u) => u.channel === "LINE");
   const lineAfter = (lineUsage?.used ?? 0) + plannedUsage.line;
@@ -378,6 +408,23 @@ export default function BroadcastClient({
     });
   }, [waTpl]);
 
+  /** テンプレに「紹介料」の枠があるか (あれば手入力欄の 1 つとして出る) */
+  const feeIndex = manualFields.findIndex((f) => f.label === REFERRAL_FEE_LABEL);
+  /** 「内容」の枠 (複数行入力にし、枠が無いときは紹介料もここに入れる) */
+  const contentIndex = manualFields.findIndex((f) => f.label === "内容");
+
+  /**
+   * 手入力欄の値を、送信に使う値にする。
+   * テンプレに紹介料の枠が無いときは「内容」の末尾に ■紹介料 を付ける。
+   */
+  const effectiveValues = useMemo(() => {
+    const vals = manualFields.map((_, i) => (i === feeIndex ? referralFee : waValues[i] ?? ""));
+    if (feeIndex < 0 && contentIndex >= 0 && referralFee.trim()) {
+      vals[contentIndex] = `${vals[contentIndex].trimEnd()}\n\n■${REFERRAL_FEE_LABEL}\n${referralFee.trim()}`;
+    }
+    return vals;
+  }, [manualFields, feeIndex, contentIndex, referralFee, waValues]);
+
   /**
    * 送信用メッセージ本文。テンプレ本文の {{n}} を:
    *   {{1}} → {{パートナー名}} / {{2}} → {{担当者名}} (受信者ごとにサーバーで展開)
@@ -386,26 +433,52 @@ export default function BroadcastClient({
    * に置換したもの。LINE / Messenger / メール にはこの文面がそのまま届く。
    */
   const messageTemplate = useMemo(() => {
+    const fill = (body: string, values: string[]) =>
+      body.replace(/\{\{(\d+)\}\}/g, (_, s) => {
+        const n = Number(s);
+        if (n === 1) return "{{パートナー名}}";
+        if (n === 2) return "{{担当者名}}";
+        if (n === 3) return senderLastName || "（担当者姓）";
+        return values[n - AUTO_COUNT - 1] ?? "";
+      });
+    if (kind === "notice") {
+      if (!noticeBody.trim()) return "";
+      // お知らせ用テンプレが承認済みならその文面、無ければ同じ内容の既定の型を使う
+      return fill(noticeTpl?.bodyText ?? NOTICE_FRAME, [noticeBody.trim()]);
+    }
     if (!waTpl) return "";
-    return waTpl.bodyText.replace(/\{\{(\d+)\}\}/g, (_, s) => {
-      const n = Number(s);
-      if (n === 1) return "{{パートナー名}}";
-      if (n === 2) return "{{担当者名}}";
-      if (n === 3) return senderLastName || "（担当者姓）";
-      return waValues[n - AUTO_COUNT - 1] ?? "";
-    });
-  }, [waTpl, senderLastName, waValues]);
+    return fill(waTpl.bodyText, effectiveValues);
+  }, [kind, noticeBody, noticeTpl, waTpl, senderLastName, effectiveValues]);
 
   /** WhatsApp テンプレ送信用の変数指定 ({{n}} 順) */
   const whatsappParams = useMemo(() => {
-    if (!waTpl) return [];
-    return Array.from({ length: waTpl.bodyVarCount }, (_, i): { auto?: string; value?: string } => {
+    const tpl = kind === "notice" ? noticeTpl : waTpl;
+    if (!tpl) return [];
+    const values = kind === "notice" ? [noticeBody.trim()] : effectiveValues;
+    return Array.from({ length: tpl.bodyVarCount }, (_, i): { auto?: string; value?: string } => {
       if (i === 0) return { auto: "パートナー名" };
       if (i === 1) return { auto: "担当者名" };
       if (i === 2) return { auto: "account:姓" };
-      return { value: (waValues[i - AUTO_COUNT] ?? "").trim() };
+      return { value: (values[i - AUTO_COUNT] ?? "").trim() };
     });
-  }, [waTpl, waValues]);
+  }, [kind, noticeTpl, noticeBody, waTpl, effectiveValues]);
+
+  /** この配信で WhatsApp に使うテンプレ (無ければ WhatsApp へは送られない) */
+  const sendTpl = kind === "notice" ? noticeTpl : waTpl;
+  const whatsappWillSend = Boolean(sendTpl && sendTpl.category === "UTILITY");
+
+  /** 対象のうち各チャネルを使うパートナー数 (注意表示用) */
+  const channelTargets = useMemo(() => {
+    const count = { whatsapp: 0, messenger: 0, line: 0 };
+    for (const p of targetPartners) {
+      const parsed = (p.preferredChannels ?? "").split(/[,、]/).map((x) => x.trim()).filter(Boolean);
+      const chs = parsed.length > 0 ? parsed : p.channel ? [p.channel] : [];
+      if (chs.includes("WhatsApp")) count.whatsapp++;
+      if (chs.includes("Messenger")) count.messenger++;
+      if (chs.includes("LINE")) count.line++;
+    }
+    return count;
+  }, [targetPartners]);
 
   /** プレビュー: 1 件目のパートナーで変数展開 (なければダミー) */
   const previewMessage = useMemo(() => {
@@ -427,9 +500,16 @@ export default function BroadcastClient({
 
   /** 送信前の共通検証。問題があればメッセージを返す */
   const validateSend = (scheduled: boolean): string | null => {
-    if (!waTpl) return "テンプレートが読み込めていないため送信できません";
-    const emptyField = manualFields.find((f, i) => !(waValues[i] ?? "").trim());
-    if (emptyField) return `「${emptyField.label}」が未入力です`;
+    if (kind === "notice") {
+      if (!noticeBody.trim()) return "メッセージ本文が未入力です";
+    } else {
+      if (!waTpl) return "テンプレートが読み込めていないため送信できません";
+      const emptyField = manualFields.find(
+        (f, i) => i !== feeIndex && !(waValues[i] ?? "").trim(),
+      );
+      if (emptyField) return `「${emptyField.label}」が未入力です`;
+      if (!referralFee.trim()) return `「${REFERRAL_FEE_LABEL}」が未入力です（未定なら「別途ご相談」などと入力してください）`;
+    }
     if (scheduled && !scheduleDate) return "日時を選択してください";
     if (targetPartners.length === 0) return "送信対象がいません";
     return null;
@@ -475,9 +555,10 @@ export default function BroadcastClient({
           message: messageTemplate,
           emailSubject: emailSubject.trim() || null,
           scheduledAt: scheduled ? scheduleDate : null,
-          whatsappTemplateName: waTpl?.name ?? null,
-          whatsappTemplateLang: waTpl?.language ?? null,
+          whatsappTemplateName: sendTpl?.name ?? null,
+          whatsappTemplateLang: sendTpl?.language ?? null,
           whatsappParams,
+          kind,
           fileIds: attachedImages.map((a) => a.id),
         }),
       });
@@ -577,68 +658,161 @@ export default function BroadcastClient({
           )}
         </div>
 
-        {/* メッセージ (承認済みテンプレート固定 + 変数入力) */}
+        {/* メッセージ (承認済みテンプレート固定 + 変数入力 / お知らせは本文を自由入力) */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-[var(--color-text-dark)]">メッセージ</p>
-            {waTpl ? (
+            {kind === "job" && waTpl ? (
               <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#15803D]">
                 テンプレート: {waTpl.name}
+              </span>
+            ) : kind === "notice" && noticeTpl ? (
+              <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#15803D]">
+                テンプレート: {noticeTpl.name}
               </span>
             ) : null}
           </div>
 
-          {waTplNote ? (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700">{waTplNote}</p>
-          ) : null}
+          {/* 送る内容の種類 */}
+          <div className="mb-4 flex gap-2">
+            {(
+              [
+                ["job", "求人情報"],
+                ["notice", "お知らせ・その他の連絡"],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setKind(k)}
+                className={`flex-1 rounded-lg border py-2 text-sm font-medium transition-colors ${
+                  kind === k
+                    ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
+                    : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-          {waTpl && !waSendable ? (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-              <p className="text-[11px] font-semibold text-amber-800">
-                WhatsApp へは送信されません（LINE・Messenger・メール のみ配信）
-              </p>
-              <p className="mt-0.5 text-[11px] text-amber-700">
-                このテンプレートは {waTpl.category ?? "不明"} カテゴリのため、WhatsApp
-                で送ると1通あたりの単価が大きく上がります。文面はそのまま他チャネルへの配信に使用します。
-                UTILITY のテンプレートが承認されると、自動的に WhatsApp も配信対象になります。
-              </p>
-            </div>
-          ) : null}
-
-          {waTpl ? (
+          {kind === "job" ? (
             <>
-              <p className="mb-3 text-[11px] text-gray-500">
-                会社名・担当者名・あなたの姓は自動で入ります。以下の項目を入力してください
-                {waSendable ? "（全チャネル共通の文面として送信されます）" : "（LINE・メール等への配信文面になります）"}。
-              </p>
+              {waTplNote ? (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] text-amber-700">{waTplNote}</p>
+              ) : null}
 
-              {/* 手入力の変数フォーム */}
-              {manualFields.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {manualFields.map((f, i) => (
-                    <div key={f.n}>
+              {waTpl && !waSendable ? (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-[11px] font-semibold text-amber-800">
+                    WhatsApp へは送信されません（LINE・Messenger・メール のみ配信）
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-amber-700">
+                    このテンプレートは {waTpl.category ?? "不明"} カテゴリのため、WhatsApp
+                    で送ると1通あたりの単価が大きく上がります。文面はそのまま他チャネルへの配信に使用します。
+                    UTILITY のテンプレートが承認されると、自動的に WhatsApp も配信対象になります。
+                  </p>
+                </div>
+              ) : null}
+
+              {waTpl ? (
+                <>
+                  <p className="mb-3 text-[11px] text-gray-500">
+                    会社名・担当者名・あなたの姓は自動で入ります。以下の項目を入力してください
+                    {waSendable ? "（全チャネル共通の文面として送信されます）" : "（LINE・メール等への配信文面になります）"}。
+                  </p>
+
+                  {/* 手入力の変数フォーム (「内容」は複数行、紹介料は常に入力) */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {manualFields.map((f, i) =>
+                      i === feeIndex ? null : (
+                        <div key={f.n} className={i === contentIndex ? "col-span-2" : undefined}>
+                          <label className="mb-0.5 block text-[11px] font-medium text-[var(--color-text-dark)]">
+                            {f.label}
+                          </label>
+                          {i === contentIndex ? (
+                            <textarea
+                              rows={6}
+                              value={waValues[i] ?? ""}
+                              onChange={(e) =>
+                                setWaValues((prev) => {
+                                  const next = [...prev];
+                                  next[i] = e.target.value;
+                                  return next;
+                                })
+                              }
+                              placeholder={f.example ? `例: ${f.example}` : ""}
+                              className="w-full resize-y border border-gray-300 rounded-lg px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              value={waValues[i] ?? ""}
+                              onChange={(e) =>
+                                setWaValues((prev) => {
+                                  const next = [...prev];
+                                  next[i] = e.target.value;
+                                  return next;
+                                })
+                              }
+                              placeholder={f.example ? `例: ${f.example}` : ""}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
+                            />
+                          )}
+                          {i === contentIndex ? (
+                            <p className="mt-0.5 text-[10px] text-gray-400">
+                              改行して書けます。WhatsApp だけは仕組み上 改行を送れないため、行を「 ／ 」でつないで届きます。
+                            </p>
+                          ) : null}
+                        </div>
+                      ),
+                    )}
+                    <div className="col-span-2">
                       <label className="mb-0.5 block text-[11px] font-medium text-[var(--color-text-dark)]">
-                        {f.label}
+                        {REFERRAL_FEE_LABEL}
                       </label>
                       <input
                         type="text"
-                        value={waValues[i] ?? ""}
-                        onChange={(e) =>
-                          setWaValues((prev) => {
-                            const next = [...prev];
-                            next[i] = e.target.value;
-                            return next;
-                          })
-                        }
-                        placeholder={f.example ? `例: ${f.example}` : ""}
+                        value={referralFee}
+                        onChange={(e) => setReferralFee(e.target.value)}
+                        placeholder="例: 1名あたり10万円（税別）／ 未定なら「別途ご相談」"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
                       />
+                      {feeIndex < 0 ? (
+                        <p className="mt-0.5 text-[10px] text-gray-400">
+                          「内容」の下に「■紹介料」として入ります（紹介料の枠がある新しいテンプレートが承認されると、独立した項目になります）。
+                        </p>
+                      ) : null}
                     </div>
-                  ))}
+                  </div>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <p className="mb-2 text-[11px] text-gray-500">
+                送りたい内容だけを入力してください。書き出し（会社名・担当者名・あなたの名前）と結びの挨拶は、求人情報と同じ形で自動で付きます。
+              </p>
+              <textarea
+                rows={9}
+                value={noticeBody}
+                onChange={(e) => setNoticeBody(e.target.value)}
+                placeholder={"例: 年末年始の営業日についてお知らせします。\n12月28日から1月4日までお休みをいただきます。"}
+                className="w-full resize-y border border-gray-300 rounded-lg px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
+              />
+              {!whatsappWillSend && channelTargets.whatsapp > 0 ? (
+                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-[11px] font-semibold text-amber-800">
+                    WhatsApp の {channelTargets.whatsapp} 社には送信されません
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-amber-700">
+                    WhatsApp は Meta に承認されたテンプレートでしか確実に届けられないため、お知らせ用テンプレートが承認されるまでは
+                    LINE・Messenger・メール のみに送ります。WhatsApp の相手へは個別にご連絡ください。
+                  </p>
                 </div>
               ) : null}
             </>
-          ) : null}
+          )}
 
           <div className="mt-3">
             <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -728,6 +902,22 @@ export default function BroadcastClient({
           </div>
         </div>
 
+        {/* 文字数の上限を超えるチャネルがあれば警告 (超えると送信エラーになる) */}
+        {previewMessage &&
+        ((channelTargets.messenger > 0 && previewMessage.length > CHANNEL_TEXT_LIMITS.Messenger) ||
+          (channelTargets.line > 0 && previewMessage.length > CHANNEL_TEXT_LIMITS.LINE)) ? (
+          <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-[12px] text-red-800">
+            本文が {previewMessage.length} 文字あります。
+            {channelTargets.messenger > 0 && previewMessage.length > CHANNEL_TEXT_LIMITS.Messenger
+              ? ` Messenger は ${CHANNEL_TEXT_LIMITS.Messenger} 文字までのため、Messenger の ${channelTargets.messenger} 社には送信できません。`
+              : ""}
+            {channelTargets.line > 0 && previewMessage.length > CHANNEL_TEXT_LIMITS.LINE
+              ? ` LINE は ${CHANNEL_TEXT_LIMITS.LINE} 文字までのため、LINE の ${channelTargets.line} 社には送信できません。`
+              : ""}
+            内容を短くしてください。
+          </div>
+        ) : null}
+
         {/* 送信文面プレビュー (全チャネル共通) */}
         {previewMessage ? (
           <div className="bg-[#FAF9F5] rounded-xl border border-gray-200 p-5 shadow-sm">
@@ -740,6 +930,13 @@ export default function BroadcastClient({
             <pre className="whitespace-pre-wrap text-[13px] text-[var(--color-text-dark)] font-sans">
               {previewMessage}
             </pre>
+            {whatsappWillSend && channelTargets.whatsapp > 0 && /\n/.test(kind === "notice" ? noticeBody.trim() : effectiveValues.join("")) ? (
+              <p className="mt-2 border-t border-gray-200 pt-2 text-[11px] text-gray-500">
+                WhatsApp では改行を含む項目が 1 行にまとまって届きます（例: {flattenForWhatsapp(
+                  (kind === "notice" ? noticeBody : effectiveValues[contentIndex] ?? "").slice(0, 60),
+                )}…）
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

@@ -127,7 +127,9 @@ export function expandTemplate(
 
   const replacements: Record<string, string> = {
     パートナー名: partner.name,
-    担当者名: partner.contactName ?? "",
+    // 担当者名が未登録でも「様」だけの行にならないようにする
+    // (WhatsApp はテンプレ変数が空だと送信自体を拒否するため、全チャネルで同じ値にする)
+    担当者名: partner.contactName?.trim() || "ご担当者",
     拠点国: partner.country ?? "",
     急ぎ案件一覧: formatDealList(filteredUrgent),
     募集中案件一覧: formatDealList(filteredOpen),
