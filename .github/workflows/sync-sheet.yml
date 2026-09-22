@@ -58,6 +58,13 @@ jobs:
             exit 1
           fi
 
+          # 案件・企業(企業データベース)の同期が失敗していたら失敗にする。
+          # 候補者同期が成功していても、こちらの失敗を見逃さないため。
+          if grep -q '"dealSyncError":"' response.json; then
+            echo "::error::企業データベース(案件管理/企業マスタ)への同期に失敗しました"
+            exit 1
+          fi
+
           # 実行サマリを Actions の画面に出す
           {
             echo "### スプシ同期の結果"

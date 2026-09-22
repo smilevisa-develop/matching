@@ -153,6 +153,9 @@ export async function GET(req: Request) {
     // 失敗しても候補者同期の結果は返す (この同期だけのために全体を落とさない)。
     let deals: unknown = null;
     let companies: unknown = null;
+    // 案件同期の失敗を握りつぶさない。GitHub Actions 側がこれを見て失敗にする
+    // (以前はここが無言で失敗し続け、3 週間スプシに反映されていなかった)
+    let dealSyncError: string | null = null;
     try {
       const masterId = resolveCompanyMasterSpreadsheetId();
       if (masterId) {
@@ -228,7 +231,8 @@ export async function GET(req: Request) {
       }
     } catch (e) {
       console.warn("案件・企業のスプシ同期に失敗:", e instanceof Error ? e.message : e);
-      deals = { error: e instanceof Error ? e.message : "error" };
+      dealSyncError = e instanceof Error ? e.message : "error";
+      deals = { error: dealSyncError };
     }
 
     return Response.json({
@@ -237,6 +241,7 @@ export async function GET(req: Request) {
       companyMaster,
       companies,
       deals,
+      dealSyncError,
       at: new Date().toISOString(),
     });
   } catch (error) {
