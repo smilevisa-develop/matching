@@ -17,10 +17,13 @@ type Answers = {
 export default function IntakeLinkButton({
   personId,
   personName,
+  linkLabel,
   answers,
 }: {
   personId: number;
   personName: string;
+  /** リンクの取り違え防止ラベル (例: "ID 0012_NGUYEN VAN A") */
+  linkLabel: string;
   answers: Answers;
 }) {
   const [open, setOpen] = useState(false);
@@ -45,6 +48,7 @@ export default function IntakeLinkButton({
         <IntakeFormBuilderModal
           personId={personId}
           personName={personName}
+          linkLabel={linkLabel}
           answers={answers}
           onClose={() => setOpen(false)}
         />

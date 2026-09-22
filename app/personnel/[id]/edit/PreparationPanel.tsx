@@ -43,10 +43,13 @@ export type PreparationState = {
 
 export default function PreparationPanel({
   personName,
+  linkLabel,
   state,
   checklistContent,
 }: {
   personName: string;
+  /** リンクの取り違え防止ラベル (例: "ID 0012_NGUYEN VAN A")。コピー時に URL の前に付ける */
+  linkLabel: string;
   state: PreparationState;
   /** Step4 (求人票確認) の操作 UI をパネル内に埋め込む */
   checklistContent?: React.ReactNode;
@@ -59,7 +62,7 @@ export default function PreparationPanel({
 
   const copyJapaneseCheckLink = async () => {
     if (!state.japaneseCheckToken) return;
-    const url = `${window.location.origin}/japanese-check/${state.japaneseCheckToken}`;
+    const url = `${linkLabel}\n${window.location.origin}/japanese-check/${state.japaneseCheckToken}`;
     try {
       await navigator.clipboard.writeText(url);
       setJcCopied(true);
@@ -71,7 +74,7 @@ export default function PreparationPanel({
 
   const copyChecklistLink = async () => {
     if (!state.checklistToken) return;
-    const url = `${window.location.origin}/checklist/${state.checklistToken}`;
+    const url = `${linkLabel}\n${window.location.origin}/checklist/${state.checklistToken}`;
     try {
       await navigator.clipboard.writeText(url);
       setChecklistCopied(true);
@@ -88,6 +91,7 @@ export default function PreparationPanel({
     if (!state.intakeToken) return;
     const url = `${window.location.origin}/intake/${state.intakeToken}`;
     const text =
+      `【${linkLabel}】\n` +
       `${personName} さん、こんにちは。SMILEVISA です。\n` +
       `面談の前に、こちらのフォームへのご回答をお願いします (5分くらいで終わります)。\n` +
       `Please answer this form before the interview (about 5 minutes).\n${url}`;

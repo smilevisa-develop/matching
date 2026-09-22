@@ -23,6 +23,8 @@ function toQuestionType(v: string): "text" | "textarea" | "file" {
 type Props = {
   personId: number;
   personName: string;
+  /** リンクの取り違え防止ラベル (例: "ID 0012_NGUYEN VAN A")。コピー時に URL の前に付ける */
+  linkLabel: string;
   /** 候補者の現在の回答状況 (どの質問が未入力か判定するため) */
   answers: {
     motivation: string;
@@ -38,6 +40,7 @@ type Props = {
 export default function IntakeFormBuilderModal({
   personId,
   personName,
+  linkLabel,
   answers,
   onClose,
 }: Props) {
@@ -139,7 +142,7 @@ export default function IntakeFormBuilderModal({
   const copyUrl = async () => {
     if (!issuedUrl) return;
     try {
-      await navigator.clipboard.writeText(issuedUrl);
+      await navigator.clipboard.writeText(`${linkLabel}\n${issuedUrl}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -172,7 +175,12 @@ export default function IntakeFormBuilderModal({
           <div className="border-b border-[#16A34A]/30 bg-[#F0FDF4] px-6 py-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold text-[#15803D]">✓ URL を発行済み</p>
+                <p className="text-[11px] font-semibold text-[#15803D]">
+                  ✓ URL を発行済み
+                  <span className="ml-2 rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-gray-800">
+                    {linkLabel}
+                  </span>
+                </p>
                 <p className="mt-0.5 break-all font-mono text-[11px] text-gray-700">{issuedUrl}</p>
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-1.5">

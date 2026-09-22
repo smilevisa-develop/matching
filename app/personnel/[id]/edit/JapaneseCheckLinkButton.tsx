@@ -19,14 +19,20 @@ type LinkState = {
   assessed: boolean;
   estimatedLevel: string | null;
   submittedAt: string | null;
+  /** 候補者が「テスト開始」を押した日時 / 送信し終えた日時 (受験は 1 回のみ) */
+  startedAt: string | null;
+  attemptSubmittedAt: string | null;
 };
 
 export default function JapaneseCheckLinkButton({
   personId,
   personName,
+  linkLabel,
 }: {
   personId: number;
   personName: string;
+  /** リンクの取り違え防止ラベル (例: "ID 0012_NGUYEN VAN A") */
+  linkLabel: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -50,6 +56,7 @@ export default function JapaneseCheckLinkButton({
         <JapaneseCheckLinkModal
           personId={personId}
           personName={personName}
+          linkLabel={linkLabel}
           onClose={() => setOpen(false)}
         />
       ) : null}
@@ -60,10 +67,12 @@ export default function JapaneseCheckLinkButton({
 function JapaneseCheckLinkModal({
   personId,
   personName,
+  linkLabel,
   onClose,
 }: {
   personId: number;
   personName: string;
+  linkLabel: string;
   onClose: () => void;
 }) {
   const [state, setState] = useState<LinkState | null>(null);
@@ -110,11 +119,14 @@ function JapaneseCheckLinkModal({
     }
   };
 
+  // どの候補者のリンクか一目で分かるよう、コピーには必ず ID_英語名 を付ける
+  const urlText = url ? `${linkLabel}\n${url}` : "";
   const messageText = url
-    ? `${personName} さん、こんにちは。SMILEVISA です。\n` +
+    ? `【${linkLabel}】\n` +
+      `${personName} さん、こんにちは。SMILEVISA です。\n` +
       `面談の前に、日本語のかんたんなチェックをお願いします。\n` +
-      `${JAPANESE_CHECK_QUESTIONS.length} つの質問に声で答えるだけです（5分くらい）。\n` +
-      `Please complete this short Japanese check before the interview (about 5 minutes).\n${url}`
+      `${JAPANESE_CHECK_QUESTIONS.length} つの質問に声で答えるだけです（3分くらい）。受験は1回だけです。\n` +
+      `Please complete this short Japanese check before the interview (about 3 minutes). You can take it only once.\n${url}`
     : "";
 
   return (
@@ -133,7 +145,12 @@ function JapaneseCheckLinkModal({
           <div className="border-b border-[#16A34A]/30 bg-[#F0FDF4] px-6 py-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold text-[#15803D]">✓ リンクを発行済み</p>
+                <p className="text-[11px] font-semibold text-[#15803D]">
+                  ✓ リンクを発行済み
+                  <span className="ml-2 rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-gray-800">
+                    {linkLabel}
+                  </span>
+                </p>
                 <p className="mt-0.5 break-all font-mono text-[11px] text-gray-700">{url}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -148,7 +165,9 @@ function JapaneseCheckLinkModal({
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm("リンクを再発行すると、旧リンクは使えなくなります。よろしいですか?")) {
+                    if (confirm(
+                        "リンクを再発行すると、旧リンクは使えなくなり、候補者はもう一度受験できるようになります。よろしいですか?",
+                      )) {
                       void issue(true);
                     }
                   }}
@@ -182,10 +201,17 @@ function JapaneseCheckLinkModal({
                 <p className="mt-1 text-sm font-semibold text-[var(--color-text-dark)]">
                   {state?.assessed
                     ? `判定済み ・ ${state.estimatedLevel ?? "—"}`
-                    : state?.recorded
+                    : state?.recorded && state.attemptSubmittedAt
                       ? `録音 ${state.recordingCount} 件を受信（判定待ち）`
-                      : "未実施（まだ録音が届いていません）"}
+                      : state?.startedAt && !state.attemptSubmittedAt
+                        ? "受験を開始したが未送信（途中で終了）"
+                        : "未実施（まだ録音が届いていません）"}
                 </p>
+                {state?.startedAt && !state.attemptSubmittedAt ? (
+                  <p className="mt-0.5 text-[11px] text-amber-700">
+                    受験は 1 回のみのため、このリンクでは受け直せません。受け直させる場合は「再発行」して新しいリンクを送ってください。
+                  </p>
+                ) : null}
                 {state?.submittedAt ? (
                   <p className="mt-0.5 text-[11px] text-gray-500">
                     最終受信 {new Date(state.submittedAt).toLocaleString("ja-JP")}
@@ -248,7 +274,7 @@ function JapaneseCheckLinkModal({
             <>
               <button
                 type="button"
-                onClick={() => void copy(url, "url")}
+                onClick={() => void copy(urlText, "url")}
                 className="rounded-lg border border-[var(--color-primary)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
               >
                 {copied === "url" ? "コピー完了" : "URL をコピー"}

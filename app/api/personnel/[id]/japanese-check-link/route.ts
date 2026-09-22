@@ -3,7 +3,8 @@
  *
  * GET  /api/personnel/[id]/japanese-check-link          現在の発行状態と実施状況
  * POST /api/personnel/[id]/japanese-check-link          未発行なら発行 (発行済みならそのまま返す)
- *      ?regenerate=1                                    トークンを作り直す (旧リンクは無効になる)
+ *      ?regenerate=1                                    トークンを作り直す (旧リンクは無効になる)。
+ *                                                       受験は 1 回のみなので、再受験させるときもこれを使う
  *
  * 入力フォーム (intakeToken) とは別のトークンなので、片方だけ再発行できる。
  */
@@ -25,6 +26,8 @@ async function loadState(personId: number) {
     where: { id: personId },
     select: {
       japaneseCheckToken: true,
+      japaneseCheckStartedAt: true,
+      japaneseCheckSubmittedAt: true,
       japaneseCheck: {
         select: { assessedAt: true, estimatedLevel: true, updatedAt: true, recordings: true },
       },
@@ -45,6 +48,9 @@ function buildResponse(state: NonNullable<Awaited<ReturnType<typeof loadState>>>
     assessed: Boolean(jc?.assessedAt),
     estimatedLevel: jc?.estimatedLevel ?? null,
     submittedAt: jc?.updatedAt ? jc.updatedAt.toISOString() : null,
+    // 受験は 1 回のみ。開始したが送信していない (途中でやめた等) なら再発行が必要
+    startedAt: state.japaneseCheckStartedAt?.toISOString() ?? null,
+    attemptSubmittedAt: state.japaneseCheckSubmittedAt?.toISOString() ?? null,
   };
 }
 
@@ -89,7 +95,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       token = generateToken();
       await prisma.person.update({
         where: { id: personId },
-        data: { japaneseCheckToken: token },
+        // 再発行 = もう一度受験させる。開始・送信の記録を消す
+        data: regenerate
+          ? { japaneseCheckToken: token, japaneseCheckStartedAt: null, japaneseCheckSubmittedAt: null }
+          : { japaneseCheckToken: token },
       });
     }
 

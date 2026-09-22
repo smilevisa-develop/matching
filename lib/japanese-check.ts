@@ -583,15 +583,21 @@ export function scoreFromObservations(
   const baseLevel = level;
 
   // ── 上限規則: 総合点が高くても、決定的な弱点があれば頭打ちにする ──
-  const workScenario = perQuestion.find((p) => p.key === "work_scenario");
-  if (workScenario?.usable && workScenario.taskAchieved === "none") {
+  // 「仕事の経験」の問 (旧設問では「仕事の場面」) に答えられていなければ実務の会話は難しい
+  const workTask = perQuestion.find(
+    (p) => p.key === "work_experience" || p.key === "work_scenario",
+  );
+  if (workTask?.usable && workTask.taskAchieved === "none") {
     const capped = capLevel(level, "N4 相当");
     if (capped !== level) {
-      appliedRules.push("仕事の場面の設問に答えられていないため N4 相当を上限とした");
+      appliedRules.push("仕事についての設問に答えられていないため N4 相当を上限とした");
       level = capped;
     }
   }
-  const explain = perQuestion.find((p) => p.key === "explain_past");
+  // 長めの説明の証拠 (現行: 仕事の経験 40 秒 / 旧設問: 一番大変だったこと)
+  const explain = perQuestion.find(
+    (p) => p.key === "work_experience" || p.key === "explain_past",
+  );
   if (!explain?.usable || (explain?.mora ?? 0) < 25) {
     const capped = capLevel(level, "N3 相当");
     if (capped !== level) {

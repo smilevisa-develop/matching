@@ -16,6 +16,7 @@ import DocumentCheckPanel from "./DocumentCheckPanel";
 import { PanelActionsProvider } from "./PanelActions";
 import { IconActionDivider } from "./IconAction";
 import PreparationPanel, { type PreparationState } from "./PreparationPanel";
+import { buildPersonLinkLabel } from "@/lib/person-link-label";
 import TestResetPanel from "./TestResetPanel";
 import RecommendedCompanySelect from "./RecommendedCompanySelect";
 import ChecklistPanel from "./ChecklistPanel";
@@ -122,6 +123,12 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
     completedAt: iso(d.completedAt),
   }));
   const defaultChecklistLang = nationalityToLanguage(person.nationality);
+  // 候補者に送るリンクのコピーに付ける取り違え防止ラベル (例: "ID 0012_NGUYEN VAN A")
+  const linkLabel = buildPersonLinkLabel({
+    id: person.id,
+    englishName: person.onboarding?.englishName,
+    name: person.name,
+  });
 
   const toDate = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
@@ -344,10 +351,15 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                   englishName={person.onboarding?.englishName ?? null}
                 />
                 <IconActionDivider />
-                <JapaneseCheckLinkButton personId={person.id} personName={person.name} />
+                <JapaneseCheckLinkButton
+                  personId={person.id}
+                  personName={person.name}
+                  linkLabel={linkLabel}
+                />
                 <IntakeLinkButton
                   personId={person.id}
                   personName={person.name}
+                  linkLabel={linkLabel}
                   answers={{
                     motivation: person.resumeProfile?.motivation ?? "",
                     selfIntroduction: person.resumeProfile?.selfIntroduction ?? "",
@@ -369,6 +381,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
 
           <PreparationPanel
             personName={person.name}
+            linkLabel={linkLabel}
             state={preparationState}
             checklistContent={
               <ChecklistPanel

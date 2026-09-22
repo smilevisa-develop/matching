@@ -34,6 +34,11 @@ model Person {
   /// 日本語チェック (録音) 専用の共有トークン。
   /// 入力フォーム (intakeToken) とは完全に別のリンクとして発行・再発行できる
   japaneseCheckToken String? @unique
+  /// 日本語チェックを「テスト開始」した日時。受験は 1 回のみのため、
+  /// 開始済みのリンクを開き直してもやり直せない (再発行で null に戻る)
+  japaneseCheckStartedAt   DateTime?
+  /// 日本語チェックを送信し終えた日時 (再発行で null に戻る)
+  japaneseCheckSubmittedAt DateTime?
   /// スプシ DB へ最後に反映した日時。
   /// この候補者 (本人 / onboarding / resumeProfile / 案件紐づけ) の updatedAt が
   /// これより新しいときだけスプシに書き込む。

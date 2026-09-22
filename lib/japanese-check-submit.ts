@@ -3,7 +3,7 @@
  *
  * 呼び出し元:
  *   - POST /api/japanese-check/[token]        (日本語チェック専用リンク: 現行)
- *   - POST /api/intake/[token]/japanese-check (旧: 入力フォーム同梱版。既存リンク救済用)
+ *   (旧: POST /api/intake/[token]/japanese-check は廃止。受験 1 回の制限を迂回できるため)
  *
  * ── 候補者を待たせない二段構え ──
  * AI 判定は 20〜60 秒かかるが、その結果が必要なのは採用担当であって候補者ではない。
