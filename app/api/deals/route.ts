@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
+import { after } from "next/server";
+import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 
 export async function GET() {
   try {
@@ -63,6 +65,8 @@ export async function POST(req: Request) {
       },
     });
 
+    // 企業データベース(スプシ)へ保存直後に反映する (応答は待たせない)
+    after(() => requestCompanyDatabaseSync());
     return Response.json({ ok: true, deal });
   } catch (error) {
     return Response.json(

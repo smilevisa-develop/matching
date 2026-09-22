@@ -164,6 +164,22 @@ function isSheetJobLabel(v: string): boolean {
   return (SHEET_JOB_LABELS as readonly string[]).includes(v.trim());
 }
 
+/**
+ * 系のステータス → スプシ「案件管理」H列のプルダウン表記。
+ * スプシの選択肢は「！至急募集！,募集中,面接中,推薦中,成約,一時中断,失注,ストップ」で、
+ * 系の「クローズ」「至急募集」はそのままだと入力規則エラー(赤い三角)になる。
+ * 元のスプシでは系で「クローズ」の案件はすべて「ストップ」で管理されていたので、それに合わせる。
+ */
+const STATUS_TO_SHEET: Record<string, string> = {
+  クローズ: "ストップ",
+  至急募集: "！至急募集！",
+};
+
+export function toSheetStatus(status: string | null | undefined): string {
+  const s = (status ?? "").trim();
+  return STATUS_TO_SHEET[s] ?? s;
+}
+
 /** 同期対象の案件 */
 export type DealForSheet = {
   id: number;
@@ -425,7 +441,7 @@ export function planDealSync(args: {
       case DEAL_COL.job:
         return normalizeJobLabel(d.field, d.companyIndustry) ?? "";
       case DEAL_COL.status:
-        return d.status ?? "";
+        return toSheetStatus(d.status);
       case DEAL_COL.owner:
         return d.ownerName ?? "";
       case DEAL_COL.required:

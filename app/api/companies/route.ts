@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireApiAccount, AuthError } from "@/lib/auth";
+import { after } from "next/server";
+import { nextCompanyExternalId, requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 
 export async function GET() {
   try {
@@ -26,7 +28,10 @@ export async function POST(req: Request) {
       return Response.json({ ok: false, error: "企業名を入力してください" }, { status: 400 });
     }
 
-    const externalId = String(body.externalId ?? "").trim() || null;
+    // 企業IDが空欄だとスプシの企業マスタに載せられず、案件も反映できない。
+    // 空欄なら次の空き番号 (例: 70sv) を自動で付ける。
+    const externalId =
+      String(body.externalId ?? "").trim().toLowerCase() || (await nextCompanyExternalId());
     if (externalId) {
       const duplicate = await prisma.company.findUnique({ where: { externalId } });
       if (duplicate) {
@@ -45,6 +50,8 @@ export async function POST(req: Request) {
       },
     });
 
+    // 企業データベース(スプシ)へ保存直後に反映する (応答は待たせない)
+    after(() => requestCompanyDatabaseSync());
     return Response.json({ ok: true, company });
   } catch (error) {
     return Response.json(

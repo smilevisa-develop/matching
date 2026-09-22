@@ -25,12 +25,7 @@ import {
   resolveCompanyMasterSpreadsheetId,
   upsertCompanyMaster,
 } from "@/lib/company-master-sync";
-import {
-  appendCompaniesToMaster,
-  syncDealsToSheet,
-  type CompanyForMaster,
-  type DealForSheet,
-} from "@/lib/deal-sheet-sync";
+import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -151,89 +146,12 @@ export async function GET(req: Request) {
     // 案件・企業を企業データベース(スプシ)へ反映する。
     // 候補者と同じく「系で追加・変更したものが自動で載る」状態にするため cron に含める。
     // 失敗しても候補者同期の結果は返す (この同期だけのために全体を落とさない)。
-    let deals: unknown = null;
-    let companies: unknown = null;
-    // 案件同期の失敗を握りつぶさない。GitHub Actions 側がこれを見て失敗にする
-    // (以前はここが無言で失敗し続け、3 週間スプシに反映されていなかった)
-    let dealSyncError: string | null = null;
-    try {
-      const masterId = resolveCompanyMasterSpreadsheetId();
-      if (masterId) {
-        // 先に企業マスタへ未登録企業を追記する (案件の追記が企業IDに依存するため)
-        const companyRows = await prisma.company.findMany({
-          orderBy: { externalId: "asc" },
-          select: { externalId: true, name: true, industry: true },
-        });
-        companies = await appendCompaniesToMaster({
-          spreadsheetId: masterId,
-          companies: companyRows as CompanyForMaster[],
-          apply: true,
-        });
-
-        const dealRows = await prisma.deal.findMany({
-          orderBy: { id: "asc" },
-          select: {
-            id: true,
-            sheetDealNo: true,
-            title: true,
-            field: true,
-            status: true,
-            unitPrice: true,
-            acceptedAt: true,
-            createdAt: true,
-            requiredCount: true,
-            recommendedCount: true,
-            interviewCount: true,
-            offerCount: true,
-            contractCount: true,
-            company: { select: { externalId: true, name: true, industry: true } },
-            owner: { select: { name: true } },
-            partner: { select: { name: true } },
-          },
-        });
-        const mapped: DealForSheet[] = dealRows.map((d) => ({
-          id: d.id,
-          sheetDealNo: d.sheetDealNo,
-          title: d.title,
-          field: d.field,
-          status: d.status,
-          unitPrice: d.unitPrice,
-          acceptedAt: d.acceptedAt,
-          createdAt: d.createdAt,
-          requiredCount: d.requiredCount,
-          recommendedCount: d.recommendedCount,
-          interviewCount: d.interviewCount,
-          offerCount: d.offerCount,
-          contractCount: d.contractCount,
-          companyExternalId: d.company.externalId,
-          companyName: d.company.name,
-          companyIndustry: d.company.industry,
-          ownerName: d.owner?.name ?? null,
-          partnerName: d.partner?.name ?? null,
-        }));
-        const dealResult = await syncDealsToSheet({
-          spreadsheetId: masterId,
-          deals: mapped,
-          apply: true,
-        });
-        // 割り当てた案件IDを記録して、次回以降ずれない / 二重追記しないようにする
-        for (const a of dealResult.assignments) {
-          await prisma.deal.update({
-            where: { id: a.dealId },
-            data: { sheetDealNo: a.sheetDealNo },
-          });
-        }
-        // 引き取った行のスプシ実績を系へ取り込む (系が未入力 0 だった人数)
-        for (const pb of dealResult.pullbacks) {
-          await prisma.deal.update({ where: { id: pb.dealId }, data: { [pb.field]: pb.value } });
-        }
-        deals = dealResult;
-      }
-    } catch (e) {
-      console.warn("案件・企業のスプシ同期に失敗:", e instanceof Error ? e.message : e);
-      dealSyncError = e instanceof Error ? e.message : "error";
-      deals = { error: dealSyncError };
-    }
+    // 案件・企業を企業データベース(スプシ)へ反映する (保存時にも走るが、取りこぼしの保険)。
+    // 失敗しても候補者同期の結果は返し、dealSyncError で GitHub Actions に失敗を伝える。
+    const db = await requestCompanyDatabaseSync();
+    const companies = db.companies;
+    const deals = db.error ? { error: db.error } : db.deals;
+    const dealSyncError = db.error;
 
     return Response.json({
       ok: true,
