@@ -24,7 +24,7 @@
  * 電話のような純粋な聴解力は測っていない。所見にもその前提を書く。
  */
 
-import { generateContentRotating } from "./gemini-keys";
+import { generateContentRotating, getGeminiModel } from "./gemini-keys";
 import { JAPANESE_CHECK_QUESTIONS, findJapaneseCheckQuestion } from "./japanese-check-questions";
 
 export { JAPANESE_CHECK_QUESTIONS };
@@ -327,7 +327,7 @@ function toInt(v: unknown, min: number, max: number, fallback: number): number {
 async function observeRecordings(
   recordings: JapaneseCheckRecording[],
 ): Promise<Map<string, ObservedFact>> {
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const model = getGeminiModel();
 
   const parts: { text?: string; inlineData?: { mimeType: string; data: string } }[] = [
     { text: SYSTEM_PROMPT },

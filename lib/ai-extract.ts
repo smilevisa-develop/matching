@@ -1,4 +1,4 @@
-import { generateContentRotating } from "./gemini-keys";
+import { generateContentRotating, getGeminiModel } from "./gemini-keys";
 
 export type ExtractedCandidate = {
   name?: string;
@@ -255,7 +255,7 @@ function mapGeminiError(raw: string): string {
     return "Gemini API の利用権限がありません (403)。Google Cloud コンソールで Generative Language API / Vertex AI API が有効化されているか、請求情報の紐付けを確認してください。";
   }
   if (/\b404\b|model.*not found|NOT_FOUND/i.test(raw)) {
-    return "指定された Gemini モデルが見つかりません (404)。GEMINI_MODEL の値 (例: gemini-2.5-flash) を確認してください。";
+    return "指定された Gemini モデルが見つかりません (404)。そのキーでは使えないモデルの可能性があります。/api/admin/gemini-status でキーごとの状態を確認してください。";
   }
   if (/\bUNAUTHENTICATED\b|\b401\b/i.test(raw)) {
     return "Gemini への認証に失敗しました (401)。GEMINI_API_KEY を再発行してください。";
@@ -314,7 +314,7 @@ export async function extractCandidateFromFiles(files: SourceFile[]): Promise<Ex
     throw new Error(unsupportedMimeHint(files.map((file) => file.mimeType)));
   }
 
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const model = getGeminiModel();
   const parts: {
     text?: string;
     inlineData?: { mimeType: string; data: string };
@@ -387,7 +387,7 @@ export async function classifyFilesByAi(files: SourceFile[]): Promise<AiFileClas
   const supportedFiles = files.filter((file) => isSupported(file.mimeType));
   if (supportedFiles.length === 0) return [];
 
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const model = getGeminiModel();
   const catalogText = KIND_CATALOG_FOR_PROMPT.map(
     (k) => `  - ${k.kind}: ${k.label}`,
   ).join("\n");
@@ -466,7 +466,7 @@ export async function extractCandidateFromText(text: string): Promise<ExtractedC
   const trimmed = text?.trim();
   if (!trimmed) throw new Error("テキストが空です");
 
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const model = getGeminiModel();
   const parts = [
     { text: SYSTEM_PROMPT },
     { text: "以下のテキスト (docx などから抽出した履歴書本文) から候補者情報を抽出して、指定のスキーマに沿う JSON を一つだけ返してください。説明や Markdown コードブロックは一切不要です。" },
@@ -690,7 +690,7 @@ export async function extractJobPostingFromText(text: string): Promise<Extracted
   const trimmed = text?.trim();
   if (!trimmed) throw new Error("テキストが空です");
 
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const model = getGeminiModel();
   const parts = [
     { text: JOB_POSTING_SYSTEM_PROMPT },
     { text: "以下のテキストから情報を抽出して、指定のスキーマに沿う JSON を一つだけ返してください。" },
@@ -723,7 +723,7 @@ export async function extractJobPostingFromFiles(files: SourceFile[]): Promise<E
     throw new Error(unsupportedMimeHint(files.map((file) => file.mimeType)));
   }
 
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const model = getGeminiModel();
   const parts: {
     text?: string;
     inlineData?: { mimeType: string; data: string };

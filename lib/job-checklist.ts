@@ -10,7 +10,7 @@
  * 必要書類は要点に含めない (運用方針)。
  */
 
-import { generateContentRotating } from "./gemini-keys";
+import { generateContentRotating, getGeminiModel } from "./gemini-keys";
 
 export type ChecklistLanguage = "vi" | "id" | "my" | "ne";
 
@@ -154,7 +154,7 @@ export async function translateChecklist(
   language: ChecklistLanguage,
 ): Promise<ChecklistItem[]> {
   if (items.length === 0) return [];
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const model = getGeminiModel();
   const langName = LANG_NAME[language];
 
   const prompt = `あなたは外国人労働者向けの求人情報を翻訳する専門家です。

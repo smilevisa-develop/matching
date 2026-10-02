@@ -12,7 +12,7 @@
  * - JSON parse 失敗時は null 返却 + raw を debug に渡す
  */
 
-import { generateContentRotating } from "./gemini-keys";
+import { generateContentRotating, getGeminiModel } from "./gemini-keys";
 
 export const SECTION_PROMPT_HEADER = `あなたは帳票抽出器です。
 出力は JSON のみ。コードブロックや説明文は禁止。
@@ -37,7 +37,7 @@ export type GeminiSectionDebug = {
   errorMessage?: string;
 };
 
-const MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+const MODEL = getGeminiModel();
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));

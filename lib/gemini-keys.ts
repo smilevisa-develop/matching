@@ -26,12 +26,31 @@ export function getGeminiKeys(): string[] {
   return [...new Set(out)];
 }
 
-/** 既定のモデル。GEMINI_MODEL 未設定時、および 404 時のフォールバック先 */
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+/**
+ * 既定のモデル。
+ *
+ * 2026/10: 新しく発行した API キー (AQ.Ab8… 形式) では gemini-2.5-flash が
+ *   「This model is no longer available to new users」= 404 になる。
+ *   キーを切り替えた瞬間に AI 取込が 404 で落ちていたのはこれが原因。
+ *   どのキーでも使えて、かつ無料枠がある gemini-3.8-flash を既定にする。
+ * 無料枠を外れないこと (課金ゼロ) が前提のため、ここは無料枠のあるモデルだけにする。
+ */
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+
+/**
+ * 404 (そのキーでは使えないモデル) のときに順に試すモデル。
+ * 古いキーしか無い環境でも動くよう、旧モデルを後ろに残している。
+ */
+export const GEMINI_MODEL_FALLBACKS = ["gemini-3.8-flash", "gemini-2.5-flash"];
 
 /** 使うモデル名 (GEMINI_MODEL 優先) */
 export function getGeminiModel(): string {
   return process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+}
+
+/** 指定モデルの次に試すモデル (無ければ null) */
+function nextModel(current: string, tried: Set<string>): string | null {
+  return GEMINI_MODEL_FALLBACKS.find((m) => m !== current && !tried.has(m)) ?? null;
 }
 
 /** モデルが見つからない (404 / NOT_FOUND) 系のエラーか */
@@ -75,18 +94,24 @@ export async function generateContentRotating(params: GenParams): Promise<GenRes
         console.warn(`[gemini] key #${i + 1} が枠超過。次のキーへ切り替えます。`);
         continue;
       }
-      // モデル名が存在しない (GEMINI_MODEL の設定ミス / モデルの提供終了) 場合は、
-      // 既定モデルで 1 度だけやり直す。設定ミスで機能ごと止めないため。
-      if (isModelNotFoundError(e) && params.model !== DEFAULT_GEMINI_MODEL) {
-        console.warn(
-          `[gemini] モデル "${params.model}" が見つかりません (404)。` +
-            `既定の ${DEFAULT_GEMINI_MODEL} で再試行します。GEMINI_MODEL の設定を見直してください。`,
-        );
-        try {
-          const client = new GoogleGenAI({ apiKey: keys[i] });
-          return await client.models.generateContent({ ...params, model: DEFAULT_GEMINI_MODEL });
-        } catch (fallbackError) {
-          throw fallbackError;
+      // そのキーでは使えないモデル (404)。設定ミスやモデルの提供終了で
+      // 機能ごと止まらないよう、別のモデルに切り替えて試す。
+      if (isModelNotFoundError(e)) {
+        const tried = new Set<string>([String(params.model)]);
+        let alt = nextModel(String(params.model), tried);
+        while (alt) {
+          console.warn(
+            `[gemini] key #${i + 1} ではモデル "${params.model}" が使えません (404)。${alt} で再試行します。`,
+          );
+          try {
+            const client = new GoogleGenAI({ apiKey: keys[i] });
+            return await client.models.generateContent({ ...params, model: alt });
+          } catch (fallbackError) {
+            lastErr = fallbackError;
+            if (!isModelNotFoundError(fallbackError)) break;
+            tried.add(alt);
+            alt = nextModel(String(params.model), tried);
+          }
         }
       }
       throw e;

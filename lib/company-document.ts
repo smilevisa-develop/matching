@@ -11,7 +11,7 @@
  * 「構造化された求人条件」ではなく「自由文の資料」である点が違う。
  */
 
-import { generateContentRotating } from "./gemini-keys";
+import { generateContentRotating, getGeminiModel } from "./gemini-keys";
 import {
   CHECKLIST_LANGUAGES,
   nationalityToLanguage,
@@ -115,7 +115,7 @@ export async function splitDocumentIntoSections(
   const text = sourceText.trim();
   if (!text) throw new Error("資料の本文が空です");
 
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const model = getGeminiModel();
   const response = await generateContentRotating({
     model,
     contents: [{ role: "user", parts: [{ text: `${SPLIT_PROMPT}\n\n# 資料\n${text}` }] }],
@@ -178,7 +178,7 @@ export async function translateDocumentSections(
   language: ChecklistLanguage,
 ): Promise<DocumentDeliveryItem[]> {
   if (sections.length === 0) return [];
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const model = getGeminiModel();
   const langName = LANG_NAME[language];
 
   const prompt = `あなたは、日本で働く外国人に会社の資料を説明する翻訳者です。
