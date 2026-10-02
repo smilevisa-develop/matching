@@ -732,7 +732,7 @@ export default function SettingsClient({
       {isAdmin && (
         <SectionCard
           title="推薦リストの出力項目"
-          description="推薦リスト (Drive 保存 / CSV ダウンロード) で出力するカラムを選びます。ID / 進捗 / 備考 は固定で必ず出ます。"
+          description="推薦リスト (Drive 保存 / CSV ダウンロード) で出力するカラムを選びます。ID / 進捗 / 面接時間 / 備考 は固定で必ず出ます。"
           open={recommendationColumnsOpen}
           onToggle={() => setRecommendationColumnsOpen((current) => !current)}
         >

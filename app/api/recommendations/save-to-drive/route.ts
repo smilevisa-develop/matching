@@ -68,11 +68,13 @@ export async function POST(req: Request) {
 
     const userColumns = sanitizeRecommendationColumns(settings?.recommendationColumns);
 
-    // 固定 + 設定列構成: ID + 進捗 + (設定列…) + 備考
+    // 固定 + 設定列構成: ID + 進捗 + (設定列…) + 面接時間 + 備考
+    // 面接時間 / 備考 は受信側の企業が記入する空欄列
     const header: string[] = [
       "ID",
       "進捗",
       ...userColumns.map((key) => getRecommendationColumnLabel(key)),
+      "面接時間",
       "備考",
     ];
     const dataRows: (string | number)[][] = candidates.map((candidate) => {
@@ -80,7 +82,8 @@ export async function POST(req: Request) {
       // 受信側企業が Sheets 上の dropdown で更新する。
       const cells: (string | number)[] = [candidate.person.id, candidate.stage ?? ""];
       for (const key of userColumns) cells.push(buildRecommendationCellValue(candidate, key));
-      cells.push("");
+      cells.push(""); // 面接時間 (企業が記入)
+      cells.push(""); // 備考
       return cells;
     });
     const csv = [
@@ -122,9 +125,10 @@ export async function POST(req: Request) {
     const drive = google.drive({ version: "v3", auth });
     const sheets = google.sheets({ version: "v4", auth });
 
-    const date = new Date().toISOString().slice(0, 10);
-    const safeTitle = deal.title.replace(/[\\/:*?"<>|]/g, "");
-    const fileName = `${date}_${safeTitle}_推薦リスト`;
+    // ファイル名は企業に共有したときにそのまま見えるため「企業名＋様」にする
+    // (例: 協和製工株式会社様)。Drive のファイル名に使えない文字だけ落とす。
+    const safeCompanyName = deal.company.name.replace(/[\\/:*?"<>|]/g, "").trim();
+    const fileName = `${safeCompanyName || deal.title}様`;
 
     // CSV を Sheets として変換アップロード (新規ファイルとして作成)
     const buffer = Buffer.from(csv, "utf-8");

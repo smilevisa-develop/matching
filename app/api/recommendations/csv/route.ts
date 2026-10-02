@@ -50,11 +50,13 @@ export async function GET(req: Request) {
 
     const userColumns = sanitizeRecommendationColumns(settings?.recommendationColumns);
 
-    // 固定列: ID + 進捗 (左) + 設定列 + 備考 (右)
+    // 固定列: ID + 進捗 (左) + 設定列 + 面接時間 + 備考 (右)
+    // 面接時間 / 備考 は受信側の企業が記入する空欄列 (Drive 保存版と同じ構成)
     const header = [
       "ID",
       "進捗",
       ...userColumns.map((key) => getRecommendationColumnLabel(key)),
+      "面接時間",
       "備考",
     ];
 
@@ -68,6 +70,7 @@ export async function GET(req: Request) {
       for (const key of userColumns) {
         cells.push(buildRecommendationCellValue(candidate, key));
       }
+      cells.push(""); // 面接時間 (企業が記入)
       cells.push(""); // 備考
       return cells.map(csvEscape).join(",");
     });
