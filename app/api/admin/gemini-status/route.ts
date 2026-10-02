@@ -59,6 +59,47 @@ export async function GET() {
       }
     }
 
+    // キーごとの確認 (ローテーション先のキーだけ 404 になるケースを切り分ける)
+    const { GoogleGenAI } = await import("@google/genai");
+    const perKey: Record<string, unknown>[] = [];
+    for (const key of keys) {
+      const row: Record<string, unknown> = { key: `${key.slice(0, 6)}…` };
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`,
+          { cache: "no-store" },
+        );
+        const data = (await res.json()) as {
+          models?: { name?: string; supportedGenerationMethods?: string[] }[];
+          error?: { message?: string };
+        };
+        if (!res.ok) {
+          row.listModels = `NG: ${data?.error?.message ?? res.status}`;
+        } else {
+          const usable = (data.models ?? [])
+            .filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
+            .map((m) => (m.name ?? "").replace(/^models\//, ""));
+          row.modelCount = usable.length;
+          row.hasModelInUse = usable.includes(model);
+        }
+      } catch (e) {
+        row.listModels = `NG: ${e instanceof Error ? e.message : "error"}`;
+      }
+      try {
+        const client = new GoogleGenAI({ apiKey: key });
+        const r = await client.models.generateContent({
+          model,
+          contents: [{ role: "user", parts: [{ text: "ping" }] }],
+          config: { temperature: 0 },
+        });
+        row.call = `OK: ${(r.text ?? "").slice(0, 20)}`;
+      } catch (e) {
+        row.call = `NG: ${(e instanceof Error ? e.message : String(e)).slice(0, 300)}`;
+      }
+      perKey.push(row);
+    }
+    out.perKey = perKey;
+
     // 実際に 1 回呼んでみる (無料枠の軽い呼び出し)
     try {
       const r = await generateContentRotating({
