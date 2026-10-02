@@ -113,12 +113,16 @@ function formatYearMonth(input?: string | null) {
   return s;
 }
 
-function mapLine(lines: ResumeLine[] | null | undefined, index: number) {
-  const line = lines?.[index];
+/**
+ * educations (3 件目以降の学歴) を {date,label,result} に正規化する。
+ * 候補者詳細では {schoolName,startDate,endDate} で保存している。
+ */
+function mapEducationLine(lines: ResumeLine[] | null | undefined, index: number) {
+  const line = lines?.[index] as (ResumeLine & Record<string, unknown>) | undefined;
   return {
-    date: valueOrBlank(line?.date),
-    label: valueOrBlank(line?.label),
-    result: valueOrBlank(line?.result),
+    date: valueOrBlank(String(line?.date ?? line?.startDate ?? "")),
+    label: valueOrBlank(String(line?.label ?? line?.schoolName ?? "")),
+    result: valueOrBlank(String(line?.result ?? line?.endDate ?? "")),
   };
 }
 
@@ -170,7 +174,7 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
     label: valueOrBlank(profile?.universityName),
     result: valueOrBlank(profile?.universityEndDate),
   };
-  const education3 = mapLine(educationLines, 0);
+  const education3 = mapEducationLine(educationLines, 0);
 
   // テンプレで使う最大件数
   const MAX_WORKS = 4;
@@ -277,6 +281,18 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
     入学3: formatYearMonth(education3.date),
     学校名3: education3.label,
     卒業3: formatYearMonth(education3.result),
+    // 4 件目以降の学歴 (テンプレートに該当の差し込み欄があるときだけ出る)
+    ...Object.fromEntries(
+      [1, 2, 3].flatMap((offset) => {
+        const line = mapEducationLine(educationLines, offset);
+        const n = offset + 3;
+        return [
+          [`入学${n}`, formatYearMonth(line.date)],
+          [`学校名${n}`, line.label],
+          [`卒業${n}`, formatYearMonth(line.result)],
+        ];
+      }),
+    ),
     // 職歴・資格は最大 N 件分のキーを生成
     ...buildIndexedPlaceholders(works, certs, profile),
     志望動機: valueOrBlank(profile?.motivation),

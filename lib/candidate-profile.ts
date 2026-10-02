@@ -202,3 +202,29 @@ export function normalizeWorkHistories(value: unknown): WorkHistoryEntry[] {
     };
   });
 }
+
+/**
+ * 学歴 1 行ぶん。
+ * 1 行目 (高校) と 2 行目 (大学・専門学校) は ResumeProfile の専用カラムに保存し、
+ * 3 行目以降だけを educations (Json) に入れる。
+ * 専用カラムは AI 取込・候補者ポータル・スプシ同期・履歴書出力が参照しているため、
+ * 「行を追加」できるようにしても そこは従来どおり動くようにしている。
+ */
+export type EducationEntry = {
+  schoolName: string;
+  startDate: string;
+  endDate: string;
+};
+
+/** educations (Json) を配列に正規化する。履歴書用の {label,date,result} 形式も受ける */
+export function normalizeEducations(value: unknown): EducationEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => {
+    const current = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
+    return {
+      schoolName: String(current.schoolName ?? current.label ?? ""),
+      startDate: String(current.startDate ?? current.date ?? ""),
+      endDate: String(current.endDate ?? current.result ?? ""),
+    };
+  });
+}

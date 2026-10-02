@@ -190,6 +190,19 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         universityName: body.universityName || null,
         universityStartDate: body.universityStartDate || null,
         universityEndDate: body.universityEndDate || null,
+        // 3 件目以降の学歴 (高校・大学は上の専用カラム)。履歴書出力もここを見る
+        educations: Array.isArray(body.educations)
+          ? body.educations
+              .map((e: { schoolName?: string; startDate?: string; endDate?: string }) => ({
+                schoolName: (e?.schoolName ?? "").trim(),
+                startDate: (e?.startDate ?? "").trim(),
+                endDate: (e?.endDate ?? "").trim(),
+              }))
+              .filter(
+                (e: { schoolName: string; startDate: string; endDate: string }) =>
+                  e.schoolName || e.startDate || e.endDate,
+              )
+          : undefined,
       },
       update: {
         gender: body.gender || null,
@@ -237,6 +250,19 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         universityName: body.universityName || null,
         universityStartDate: body.universityStartDate || null,
         universityEndDate: body.universityEndDate || null,
+        // 3 件目以降の学歴 (高校・大学は上の専用カラム)。履歴書出力もここを見る
+        educations: Array.isArray(body.educations)
+          ? body.educations
+              .map((e: { schoolName?: string; startDate?: string; endDate?: string }) => ({
+                schoolName: (e?.schoolName ?? "").trim(),
+                startDate: (e?.startDate ?? "").trim(),
+                endDate: (e?.endDate ?? "").trim(),
+              }))
+              .filter(
+                (e: { schoolName: string; startDate: string; endDate: string }) =>
+                  e.schoolName || e.startDate || e.endDate,
+              )
+          : undefined,
       },
     });
 

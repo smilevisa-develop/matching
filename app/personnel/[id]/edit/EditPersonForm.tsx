@@ -9,8 +9,10 @@ import {
   SPOUSE_OPTIONS,
   getDocumentDefinitions,
   NATIONALITIES,
+  normalizeEducations,
   normalizeWorkHistories,
   RESIDENCE_STATUSES,
+  type EducationEntry,
   type WorkHistoryEntry,
 } from "@/lib/candidate-profile";
 import { INTERVIEW_SECTIONS } from "@/lib/interview-questions";
@@ -59,6 +61,8 @@ type Person = {
     universityName: string | null;
     universityStartDate: string | null;
     universityEndDate: string | null;
+    /** 3 件目以降の学歴 (1 件目=高校, 2 件目=大学 は専用カラム) */
+    educations?: unknown;
     workExperiences: unknown;
     certifications?: unknown;
     interviewAnswers?: unknown;
@@ -183,6 +187,8 @@ export default function EditPersonForm({
     universityStartDate: person.resumeProfile?.universityStartDate ?? "",
     universityEndDate: person.resumeProfile?.universityEndDate ?? "",
     workExperiences: withInitialWorkRow(normalizeWorkHistories(person.resumeProfile?.workExperiences)),
+    // 学歴: 1 行目=高校 / 2 行目=大学・専門学校 (専用カラム) + 3 行目以降 (educations)
+    educations: normalizeEducations(person.resumeProfile?.educations),
     otherQualifications: withInitialOtherQualRow(
       normalizeOtherQualifications(
         (person.resumeProfile as unknown as { certifications?: unknown } | null)?.certifications,
@@ -344,6 +350,32 @@ export default function EditPersonForm({
     setDirty(true);
   };
 
+  const updateEducation = (index: number, key: keyof EducationEntry, value: string) => {
+    setForm((current) => ({
+      ...current,
+      educations: current.educations.map((entry, currentIndex) =>
+        currentIndex === index ? { ...entry, [key]: value } : entry,
+      ),
+    }));
+    setDirty(true);
+  };
+
+  const addEducation = () => {
+    setForm((current) => ({
+      ...current,
+      educations: [...current.educations, { schoolName: "", startDate: "", endDate: "" }],
+    }));
+    setDirty(true);
+  };
+
+  const removeEducation = (index: number) => {
+    setForm((current) => ({
+      ...current,
+      educations: current.educations.filter((_, currentIndex) => currentIndex !== index),
+    }));
+    setDirty(true);
+  };
+
   const updateOtherQualification = (index: number, key: keyof OtherQualificationEntry, value: string) => {
     setForm((current) => ({
       ...current,
@@ -391,6 +423,10 @@ export default function EditPersonForm({
           partnerId: form.partnerId ? Number(form.partnerId) : null,
           workExperiences: form.workExperiences.filter(
             (entry) => entry.companyName || entry.startDate || entry.endDate || entry.reason
+          ),
+          // 3 件目以降の学歴 (1・2 件目は highSchool* / university* カラムに入る)
+          educations: form.educations.filter(
+            (entry) => entry.schoolName || entry.startDate || entry.endDate
           ),
           otherQualifications: cleanedOtherQualifications,
           // 互換用: 最初の1件は単一フィールドにも保存
@@ -736,26 +772,97 @@ export default function EditPersonForm({
             <p className="text-base font-semibold text-[var(--color-text-dark)]">学歴・職歴</p>
             <p className="mt-1 text-sm text-gray-500">高校・大学および職歴をまとめて管理します。</p>
 
-            <div className="mt-4 grid gap-4 rounded-2xl border border-gray-200 bg-[var(--color-light)] p-5 md:grid-cols-3">
-              <Field label="高校名" className="md:col-span-3">
-                <input className={INPUT} value={form.highSchoolName} onChange={(event) => setValue("highSchoolName", event.target.value)} />
-              </Field>
-              <Field label="高校入学年月日">
-                <input className={INPUT} type="date" value={form.highSchoolStartDate} onChange={(event) => setValue("highSchoolStartDate", event.target.value)} />
-              </Field>
-              <Field label="高校卒業年月日">
-                <input className={INPUT} type="date" value={form.highSchoolEndDate} onChange={(event) => setValue("highSchoolEndDate", event.target.value)} />
-              </Field>
-              <div />
-              <Field label="大学名" className="md:col-span-3">
-                <input className={INPUT} value={form.universityName} onChange={(event) => setValue("universityName", event.target.value)} />
-              </Field>
-              <Field label="大学入学年月日">
-                <input className={INPUT} type="date" value={form.universityStartDate} onChange={(event) => setValue("universityStartDate", event.target.value)} />
-              </Field>
-              <Field label="大学卒業年月日">
-                <input className={INPUT} type="date" value={form.universityEndDate} onChange={(event) => setValue("universityEndDate", event.target.value)} />
-              </Field>
+            {/* 学歴: 1 行目=高校 / 2 行目=大学・専門学校 は専用カラム、3 行目以降は行を追加できる */}
+            <div className="mt-4 rounded-2xl border border-gray-200 bg-[var(--color-light)] p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--color-text-dark)]">学歴</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    学校が複数ある場合は行を追加して管理できます（中学校・日本語学校なども記録できます）。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addEducation}
+                  className="rounded-lg border border-[var(--color-secondary)] bg-white px-4 py-2 text-sm text-[var(--color-primary)]"
+                >
+                  + 行を追加
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                {/* 1 行目: 高校 */}
+                <div className="rounded-2xl border border-white bg-white p-4">
+                  <p className="text-xs font-semibold text-gray-400">高校</p>
+                  <div className="mt-2 grid gap-4 md:grid-cols-2">
+                    <Field label="学校名" className="md:col-span-2">
+                      <input className={INPUT} value={form.highSchoolName} onChange={(event) => setValue("highSchoolName", event.target.value)} placeholder="◯◯高等学校" />
+                    </Field>
+                    <Field label="入学年月日">
+                      <input className={INPUT} type="date" value={form.highSchoolStartDate} onChange={(event) => setValue("highSchoolStartDate", event.target.value)} />
+                    </Field>
+                    <Field label="卒業年月日">
+                      <input className={INPUT} type="date" value={form.highSchoolEndDate} onChange={(event) => setValue("highSchoolEndDate", event.target.value)} />
+                    </Field>
+                  </div>
+                </div>
+
+                {/* 2 行目: 大学・専門学校 */}
+                <div className="rounded-2xl border border-white bg-white p-4">
+                  <p className="text-xs font-semibold text-gray-400">大学・専門学校</p>
+                  <div className="mt-2 grid gap-4 md:grid-cols-2">
+                    <Field label="学校名" className="md:col-span-2">
+                      <input className={INPUT} value={form.universityName} onChange={(event) => setValue("universityName", event.target.value)} placeholder="◯◯大学" />
+                    </Field>
+                    <Field label="入学年月日">
+                      <input className={INPUT} type="date" value={form.universityStartDate} onChange={(event) => setValue("universityStartDate", event.target.value)} />
+                    </Field>
+                    <Field label="卒業年月日">
+                      <input className={INPUT} type="date" value={form.universityEndDate} onChange={(event) => setValue("universityEndDate", event.target.value)} />
+                    </Field>
+                  </div>
+                </div>
+
+                {/* 3 行目以降: 追加した学歴 */}
+                {form.educations.map((entry, index) => (
+                  <div key={index} className="rounded-2xl border border-white bg-white p-4">
+                    <p className="text-xs font-semibold text-gray-400">その他の学歴 {index + 1}</p>
+                    <div className="mt-2 grid gap-4 md:grid-cols-2">
+                      <Field label="学校名" className="md:col-span-2">
+                        <input
+                          className={INPUT}
+                          value={entry.schoolName}
+                          onChange={(event) => updateEducation(index, "schoolName", event.target.value)}
+                          placeholder="◯◯日本語学校"
+                        />
+                      </Field>
+                      <Field label="入学年月日">
+                        <input
+                          className={INPUT}
+                          type="date"
+                          value={entry.startDate}
+                          onChange={(event) => updateEducation(index, "startDate", event.target.value)}
+                        />
+                      </Field>
+                      <Field label="卒業年月日">
+                        <input
+                          className={INPUT}
+                          type="date"
+                          value={entry.endDate}
+                          onChange={(event) => updateEducation(index, "endDate", event.target.value)}
+                        />
+                      </Field>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeEducation(index)}
+                      className="mt-3 text-sm text-red-500 hover:underline"
+                    >
+                      この行を削除
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="mt-5 rounded-2xl border border-gray-200 bg-[var(--color-light)] p-5">
