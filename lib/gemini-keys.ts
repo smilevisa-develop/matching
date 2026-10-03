@@ -73,11 +73,24 @@ function isQuotaError(e: unknown): boolean {
   );
 }
 
+/** 503 / 混雑 系のエラーか (=一時的なので次のキーで再試行する対象) */
+function isUnavailableError(e: unknown): boolean {
+  const status = (e as { status?: number })?.status;
+  const msg = String((e as { message?: string })?.message ?? e).toUpperCase();
+  return (
+    status === 503 ||
+    /\b503\b/.test(msg) ||
+    msg.includes("UNAVAILABLE") ||
+    msg.includes("OVERLOADED") ||
+    msg.includes("HIGH DEMAND")
+  );
+}
+
 type GenParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
 type GenResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
 
 /**
- * generateContent を実行。429/枠超過が出たら次のキー (別プロジェクト) へ順に切り替える。
+ * generateContent を実行。429/枠超過 または 503/混雑 が出たら次のキー (別プロジェクト) へ順に切り替える。
  * 全キーが枯渇したら最後のエラーを投げる。
  */
 export async function generateContentRotating(params: GenParams): Promise<GenResult> {
@@ -92,6 +105,10 @@ export async function generateContentRotating(params: GenParams): Promise<GenRes
       lastErr = e;
       if (isQuotaError(e) && i < keys.length - 1) {
         console.warn(`[gemini] key #${i + 1} が枠超過。次のキーへ切り替えます。`);
+        continue;
+      }
+      if (isUnavailableError(e) && i < keys.length - 1) {
+        console.warn(`[gemini] key #${i + 1} で混雑 (503)。次のキーで再試行します。`);
         continue;
       }
       // そのキーでは使えないモデル (404)。設定ミスやモデルの提供終了で
