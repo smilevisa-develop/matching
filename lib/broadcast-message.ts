@@ -91,3 +91,35 @@ export const TEMPLATE_DRAFTS = {
 } as const;
 
 export type TemplateDraftName = keyof typeof TEMPLATE_DRAFTS;
+
+/**
+ * 求人情報テンプレの控え (現在運用中の partner_job_offer_v15 と同じ文面)。
+ *
+ * Meta のアクセストークン切れ等でテンプレ一覧を取得できないと、入力欄が出せず
+ * 一斉連絡そのものが使えなくなってしまう。そのときはこの控えで入力欄を出し、
+ * LINE / Messenger / メール へは今までどおり送れるようにする。
+ * (WhatsApp は承認テンプレが確認できないので送らない)
+ */
+export const JOB_TEMPLATE_FALLBACK = {
+  name: "partner_job_offer_v15 (控え)",
+  language: "ja",
+  category: null as string | null,
+  bodyVarCount: 11,
+  bodyText:
+    "【お知らせ】\n\n{{1}}\n{{2}}様\n\nお世話になっております。株式会社CROSLANの{{3}}です。\n案件情報をお知らせします。\n\n" +
+    "■職種\n{{4}}\n\n■勤務地\n{{5}}\n\n■人数\n{{6}}名\n\n■対象\n・{{7}}\n・{{8}}\n\n■条件\n・{{9}}\n\n" +
+    "■内容\n{{10}}\n\n■詳細\n{{11}}\n\nご不明な点がございましたら、お気軽にご連絡いただけますと幸いです。",
+  examples: [
+    "株式会社グローバルワーク",
+    "田中",
+    "土田",
+    "介護",
+    "東京都新宿区",
+    "3",
+    "特定技能1号",
+    "ベトナム・インドネシア・ミャンマー",
+    "介護技能評価試験および日本語試験の合格者",
+    "高齢者施設での食事・入浴・排泄などの身体介護および生活支援全般",
+    "https://docs.google.com/spreadsheets/d/example123",
+  ],
+};

@@ -16,6 +16,7 @@ import {
 } from "@/lib/broadcast-variables";
 import {
   CHANNEL_TEXT_LIMITS,
+  JOB_TEMPLATE_FALLBACK,
   JOB_TEMPLATE_PATTERN,
   NOTICE_FRAME,
   NOTICE_TEMPLATE_PATTERN,
@@ -168,9 +169,38 @@ export default function BroadcastClient({
   const [noticeTpl, setNoticeTpl] = useState<WaTemplateInfo | null>(null);
   /** 固定使用する承認済みテンプレート (取得失敗時は null + note にエラー) */
   const [waTpl, setWaTpl] = useState<WaTemplateInfo | null>(null);
+  /** テンプレを取得できず控えの文面を使っているか (WhatsApp へは送らない) */
+  const [tplFallback, setTplFallback] = useState(false);
   const [waTplNote, setWaTplNote] = useState<string | null>("テンプレートを読み込み中...");
   /** 手入力変数 ({{4}} 以降) の入力値。全対象パートナー共通 */
   const [waValues, setWaValues] = useState<string[]>([]);
+  /**
+   * テンプレを取得できないときに使う控え。
+   * 入力欄は出して LINE / Messenger / メール には送れるようにし、WhatsApp だけ止める。
+   */
+  const applyFallbackTemplate = (reason: string) => {
+    setWaTpl(JOB_TEMPLATE_FALLBACK as WaTemplateInfo);
+    setTplFallback(true);
+    setWaValues(Array(Math.max(0, JOB_TEMPLATE_FALLBACK.bodyVarCount - AUTO_COUNT)).fill(""));
+    setWaTplNote(reason);
+  };
+
+  /** Meta のエラー文をそのまま出さず、何をすればよいかが分かる文面にする */
+  const describeTemplateError = (raw?: string | null): string => {
+    const text = String(raw ?? "");
+    if (/token has expired|OAuthException|Session has expired/i.test(text)) {
+      return (
+        "WhatsApp (Meta) のアクセストークンが期限切れです。" +
+        "WhatsApp へは送信できませんが、LINE・Messenger・メール へは下の入力欄からそのまま送信できます。" +
+        "WhatsApp を再開するには Railway の WA_ACCESS_TOKEN を更新してください。"
+      );
+    }
+    return (
+      (text || "承認済みテンプレートを取得できませんでした。") +
+      " WhatsApp へは送信できませんが、LINE・Messenger・メール へは送信できます。"
+    );
+  };
+
   useEffect(() => {
     fetch("/api/whatsapp/templates")
       .then((r) => r.json())
@@ -194,16 +224,16 @@ export default function BroadcastClient({
         setNoticeTpl(notices.length > 0 ? latest(notices) : null);
         const picked = utilities.length > 0 ? latest(utilities) : latest(list);
         if (!picked) {
-          setWaTplNote(
-            d?.error ?? d?.note ?? "承認済みテンプレートが見つかりません。設定を確認してください。"
-          );
+          // テンプレを取得できなくても入力・送信はできるようにする (控えの文面を使う)
+          applyFallbackTemplate(describeTemplateError(d?.error ?? d?.note));
           return;
         }
         setWaTpl(picked);
+        setTplFallback(false);
         setWaTplNote(null);
         setWaValues(Array(Math.max(0, picked.bodyVarCount - AUTO_COUNT)).fill(""));
       })
-      .catch(() => setWaTplNote("テンプレートの取得に失敗しました (ネットワークエラー)"));
+      .catch(() => applyFallbackTemplate("テンプレートの取得に失敗しました (ネットワークエラー)"));
   }, []);
   /**
    * WhatsApp まで配信できるのは UTILITY テンプレのときだけ。
@@ -555,8 +585,9 @@ export default function BroadcastClient({
           message: messageTemplate,
           emailSubject: emailSubject.trim() || null,
           scheduledAt: scheduled ? scheduleDate : null,
-          whatsappTemplateName: sendTpl?.name ?? null,
-          whatsappTemplateLang: sendTpl?.language ?? null,
+          // 控えの文面のときは実在するテンプレ名ではないので送らない (WhatsApp はスキップされる)
+          whatsappTemplateName: tplFallback ? null : (sendTpl?.name ?? null),
+          whatsappTemplateLang: tplFallback ? null : (sendTpl?.language ?? null),
           whatsappParams,
           kind,
           fileIds: attachedImages.map((a) => a.id),
