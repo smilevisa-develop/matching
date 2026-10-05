@@ -720,6 +720,17 @@ export async function moveDriveFile({
   return { moved: true, from: parents };
 }
 
+/** Drive のファイル / フォルダ名を引く (取れなければ null)。推薦リストのリンク表示に使う */
+export async function getDriveItemName(fileId: string): Promise<string | null> {
+  try {
+    const { drive } = await getGoogleClients();
+    const res = await drive.files.get({ fileId, fields: "name", supportsAllDrives: true });
+    return res.data.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** フォルダ直下の件数を数える (最大 50 件まで見る。移動済み判定に使う) */
 export async function listFolderChildrenCount(folderId: string): Promise<number> {
   const { drive } = await getGoogleClients();

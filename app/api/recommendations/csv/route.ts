@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { sanitizeRecommendationColumns } from "@/lib/recommendation-columns";
+import { resolveDriveNames, toLinkCell } from "@/lib/recommendation-links";
 import {
   buildRecommendationCellValue,
   getRecommendationColumnLabel,
@@ -60,6 +61,17 @@ export async function GET(req: Request) {
       "備考",
     ];
 
+    // URL 列は HYPERLINK (表示文字 = ファイル名) にする。Excel でも同じ式が使える
+    const linkUrls: string[] = [];
+    for (const candidate of candidates) {
+      for (const key of userColumns) {
+        if (key !== "resumeUrl" && key !== "driveFolderUrl") continue;
+        const v = buildRecommendationCellValue(candidate, key);
+        if (typeof v === "string") linkUrls.push(v);
+      }
+    }
+    const driveNames = await resolveDriveNames(linkUrls);
+
     const rows = candidates.map((candidate) => {
       const cells: (string | number)[] = [
         candidate.person.id,
@@ -68,7 +80,10 @@ export async function GET(req: Request) {
         candidate.stage ?? "",
       ];
       for (const key of userColumns) {
-        cells.push(buildRecommendationCellValue(candidate, key));
+        const value = buildRecommendationCellValue(candidate, key);
+        cells.push(
+          key === "resumeUrl" || key === "driveFolderUrl" ? toLinkCell(value, driveNames) : value,
+        );
       }
       cells.push(""); // 面接時間 (企業が記入)
       cells.push(""); // 備考

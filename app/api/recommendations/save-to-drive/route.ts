@@ -10,6 +10,7 @@ import {
   getRecommendationColumnLabel,
 } from "@/lib/recommendation-row";
 import { google } from "googleapis";
+import { resolveDriveNames, toLinkCell } from "@/lib/recommendation-links";
 
 function csvEscape(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -77,11 +78,27 @@ export async function POST(req: Request) {
       "面接時間",
       "備考",
     ];
+    // URL 列は「ファイル名が見えるリンク」にするため、先に Drive 上の名前を引いておく
+    const linkUrls: string[] = [];
+    for (const candidate of candidates) {
+      for (const key of userColumns) {
+        if (key !== "resumeUrl" && key !== "driveFolderUrl") continue;
+        const v = buildRecommendationCellValue(candidate, key);
+        if (typeof v === "string") linkUrls.push(v);
+      }
+    }
+    const driveNames = await resolveDriveNames(linkUrls);
+
     const dataRows: (string | number)[][] = candidates.map((candidate) => {
       // 進捗の初期値は候補者の現ステージ (接続済み / 推薦済み 等)。
       // 受信側企業が Sheets 上の dropdown で更新する。
       const cells: (string | number)[] = [candidate.person.id, candidate.stage ?? ""];
-      for (const key of userColumns) cells.push(buildRecommendationCellValue(candidate, key));
+      for (const key of userColumns) {
+        const value = buildRecommendationCellValue(candidate, key);
+        cells.push(
+          key === "resumeUrl" || key === "driveFolderUrl" ? toLinkCell(value, driveNames) : value,
+        );
+      }
       cells.push(""); // 面接時間 (企業が記入)
       cells.push(""); // 備考
       return cells;
