@@ -648,6 +648,93 @@ export async function ensureSubFolder({
   return getOrCreateFolder({ drive, parentFolderUrl, folderName });
 }
 
+/**
+ * 日本語チェックの録音を置くフォルダ。
+ *
+ * 候補者フォルダのリンクは企業にも共有するため、録音は候補者フォルダの中に置かない。
+ * 候補者ルートの直下に「日本語チェック音声」フォルダを 1 つ作り、その中に
+ * 候補者ごとの「0012_NAME_日本語チェック音声」フォルダを作って入れる。
+ */
+export const JAPANESE_CHECK_AUDIO_ROOT_NAME = "日本語チェック音声";
+
+/** 候補者フォルダ名 (0012_NAME) から録音フォルダ名を作る */
+export function buildJapaneseCheckAudioFolderName(personFolderName: string) {
+  return `${personFolderName}_${JAPANESE_CHECK_AUDIO_ROOT_NAME}`;
+}
+
+/** 録音フォルダの親 (候補者ルート直下の「日本語チェック音声」) を確保する */
+export async function ensureJapaneseCheckAudioRootFolder(rootFolderUrl?: string | null) {
+  const parentFolderUrl =
+    rootFolderUrl?.trim() ||
+    process.env.GOOGLE_CANDIDATE_FILES_FOLDER_URL?.trim() ||
+    DEFAULT_PERSON_ROOT_FOLDER_URL;
+  if (!parentFolderUrl) throw new Error("候補者ルートフォルダの URL が解決できません");
+  return ensureSubFolder({ parentFolderUrl, folderName: JAPANESE_CHECK_AUDIO_ROOT_NAME });
+}
+
+/** 候補者ごとの録音フォルダ (0012_NAME_日本語チェック音声) を確保する */
+export async function ensureJapaneseCheckAudioFolder({
+  personFolderName,
+  rootFolderUrl,
+}: {
+  /** 候補者フォルダ名 (buildPersonFolderName の戻り値。例 0012_NGUYEN VAN A) */
+  personFolderName: string;
+  rootFolderUrl?: string | null;
+}) {
+  const root = await ensureJapaneseCheckAudioRootFolder(rootFolderUrl);
+  return ensureSubFolder({
+    parentFolderUrl: root.folderUrl,
+    folderName: buildJapaneseCheckAudioFolderName(personFolderName),
+  });
+}
+
+/** ファイル / フォルダを別フォルダへ移動する (ID は変わらないのでリンクはそのまま使える) */
+export async function moveDriveFile({
+  fileId,
+  toFolderId,
+  newName,
+}: {
+  fileId: string;
+  toFolderId: string;
+  /** 同時に改名する場合のみ指定 */
+  newName?: string;
+}): Promise<{ moved: boolean; from: string[] }> {
+  const { drive } = await getGoogleClients();
+  const meta = await drive.files.get({
+    fileId,
+    fields: "id,name,parents",
+    supportsAllDrives: true,
+  });
+  const parents = meta.data.parents ?? [];
+  if (parents.length === 1 && parents[0] === toFolderId && !newName) {
+    return { moved: false, from: parents };
+  }
+  await drive.files.update({
+    fileId,
+    addParents: parents.includes(toFolderId) ? undefined : toFolderId,
+    removeParents: parents.filter((p) => p !== toFolderId).join(",") || undefined,
+    requestBody: newName ? { name: newName } : undefined,
+    supportsAllDrives: true,
+    fields: "id",
+  });
+  return { moved: true, from: parents };
+}
+
+/** フォルダが空ならゴミ箱に入れる (移動後に残る空フォルダの掃除用) */
+export async function trashFolderIfEmpty(folderId: string): Promise<boolean> {
+  const { drive } = await getGoogleClients();
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and trashed = false`,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    fields: "files(id)",
+    pageSize: 1,
+  });
+  if ((res.data.files ?? []).length > 0) return false;
+  await drive.files.update({ fileId: folderId, requestBody: { trashed: true }, supportsAllDrives: true });
+  return true;
+}
+
 export async function ensurePersonDriveFolder({
   existingFolderUrl,
   personName,

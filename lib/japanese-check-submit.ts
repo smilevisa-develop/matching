@@ -21,8 +21,8 @@ import { Prisma } from "@/generated/prisma/client";
 import {
   buildPersonAssetName,
   buildPersonFolderName,
+  ensureJapaneseCheckAudioFolder,
   ensurePersonDriveFolder,
-  ensureSubFolder,
   uploadDataUrlToDrive,
 } from "./google-docs";
 import { extractDriveFileId } from "./drive-url";
@@ -125,10 +125,10 @@ export async function storeJapaneseCheckRecordings(
     });
   }
 
-  // 候補者フォルダ内に「日本語チェック音声」サブフォルダを確保し、録音はそこにまとめる
-  const audioFolder = await ensureSubFolder({
-    parentFolderUrl: folder.folderUrl!,
-    folderName: "日本語チェック音声",
+  // 録音は候補者フォルダの外 (候補者ルート直下の「日本語チェック音声」) に保存する。
+  // 候補者フォルダのリンクは企業にも共有するため、音声がそこに混ざらないようにしている。
+  const audioFolder = await ensureJapaneseCheckAudioFolder({
+    personFolderName: buildPersonFolderName(personForName),
   });
 
   // 各録音を Drive に保存。
