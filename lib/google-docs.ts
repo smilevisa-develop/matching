@@ -720,6 +720,19 @@ export async function moveDriveFile({
   return { moved: true, from: parents };
 }
 
+/** フォルダ直下の件数を数える (最大 50 件まで見る。移動済み判定に使う) */
+export async function listFolderChildrenCount(folderId: string): Promise<number> {
+  const { drive } = await getGoogleClients();
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and trashed = false`,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+    fields: "files(id)",
+    pageSize: 50,
+  });
+  return (res.data.files ?? []).length;
+}
+
 /** フォルダが空ならゴミ箱に入れる (移動後に残る空フォルダの掃除用) */
 export async function trashFolderIfEmpty(folderId: string): Promise<boolean> {
   const { drive } = await getGoogleClients();
