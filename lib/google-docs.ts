@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import type { docs_v1 } from "googleapis";
 import { Readable } from "node:stream";
 
 const DOC_URL_RE = /\/document\/d\/([a-zA-Z0-9_-]+)/;
@@ -339,7 +340,149 @@ async function removeUnmatchedPlaceholders({
  */
 // 各人の項目数 (職歴・資格) は大きくバラつくので、テンプレに最大 N 件分の枠を
 // 置いてもらい、データが空の枠は履歴書生成時に「行ごと消す」設計にしている。
-export const RESUME_MAX_WORKS = 4;
+/**
+ * 履歴書テンプレに用意する職歴・資格の最大件数。
+ * テンプレ側に {{入社N}} {{会社名N}} {{退社N}} {{退社Nラベル}} の行が無いと出力されないため、
+ * ここを増やしたらテンプレの行も増やすこと
+ * (POST /api/admin/resume-template-rows で自動追加できる)。
+ * 件数が足りない行は pruneEmptyRowGroups が自動で消すので、多めでも空行は残らない。
+ */
+export const RESUME_MAX_WORKS = 8;
+
+/**
+ * 履歴書テンプレに職歴の行を追加する (テンプレ本体を編集する)。
+ *
+ * テンプレは「{{_職歴N_区切り}} / {{入社N}}・{{会社名N}} / {{退社N}}・{{退社Nラベル}}」の
+ * 3 行 1 組で職歴を表している。組が 4 までしか無いと 5 社目以降が出力されないため、
+ * 不足分を同じ形で足す。既にある組は触らない (何度実行しても同じ結果になる)。
+ *
+ * @returns 追加した組の番号
+ */
+export async function ensureResumeWorkRows({
+  templateUrl,
+  upTo = RESUME_MAX_WORKS,
+}: {
+  templateUrl: string;
+  upTo?: number;
+}): Promise<{ added: number[]; existing: number[] }> {
+  const documentId = parseGoogleDocId(templateUrl);
+  const { docs } = await getGoogleClients();
+
+  const added: number[] = [];
+  const existing: number[] = [];
+
+  for (let n = 1; n <= upTo; n++) {
+    const doc = (await docs.documents.get({ documentId })).data;
+    if (JSON.stringify(doc).includes(`{{会社名${n}}}`)) {
+      existing.push(n);
+      continue;
+    }
+    // 直前の組 (n-1) の最後の行を探して、その下に 3 行足す
+    const anchorMarker = `退社${n - 1}ラベル`;
+    const found = findTableRowByMarker(doc, anchorMarker);
+    if (!found) break; // 土台になる行が無ければ何もしない
+
+    // 3 行ぶん: 区切り / 入社 / 退社 (下に 1 行ずつ足す)
+    const rows: [string, string][] = [
+      [`{{_職歴${n}_区切り}}`, ""],
+      [`{{入社${n}}}`, `{{会社名${n}}}`],
+      [`{{退社${n}}}`, `{{退社${n}ラベル}}`],
+    ];
+    let insertAfterMarker = anchorMarker;
+    for (const [left, right] of rows) {
+      await insertRowBelowMarker({ docs, documentId, marker: insertAfterMarker, left, right });
+      // 次の行は今入れた行の下に足す (左セルの文字列を目印にする)
+      insertAfterMarker = left.replace(/[{}]/g, "");
+    }
+    added.push(n);
+  }
+  return { added, existing };
+}
+
+/** {{marker}} を含むテーブル行を探す */
+function findTableRowByMarker(
+  doc: docs_v1.Schema$Document,
+  marker: string,
+): { tableStartLocation: number; rowIndex: number } | null {
+  const content = doc.body?.content ?? [];
+  for (const element of content) {
+    const table = element.table;
+    if (!table?.tableRows) continue;
+    for (let rowIndex = 0; rowIndex < table.tableRows.length; rowIndex++) {
+      const row = table.tableRows[rowIndex];
+      const text = JSON.stringify(row);
+      if (text.includes(`{{${marker}}}`)) {
+        return { tableStartLocation: element.startIndex ?? 0, rowIndex };
+      }
+    }
+  }
+  return null;
+}
+
+/** 目印の行の下に 1 行足し、左右のセルに文字を入れる */
+async function insertRowBelowMarker({
+  docs,
+  documentId,
+  marker,
+  left,
+  right,
+}: {
+  docs: DocsClient;
+  documentId: string;
+  marker: string;
+  left: string;
+  right: string;
+}) {
+  const before = (await docs.documents.get({ documentId })).data;
+  const hit = findTableRowByMarker(before, marker);
+  if (!hit) throw new Error(`目印の行が見つかりません: ${marker}`);
+
+  await docs.documents.batchUpdate({
+    documentId,
+    requestBody: {
+      requests: [
+        {
+          insertTableRow: {
+            tableCellLocation: {
+              tableStartLocation: { index: hit.tableStartLocation },
+              rowIndex: hit.rowIndex,
+              columnIndex: 0,
+            },
+            insertBelow: true,
+          },
+        },
+      ],
+    },
+  });
+
+  // 追加された空行にテキストを入れる。右のセルから入れる (左に入れると右の位置がずれるため)
+  const after = (await docs.documents.get({ documentId })).data;
+  const content = after.body?.content ?? [];
+  for (const element of content) {
+    const table = element.table;
+    if (!table?.tableRows) continue;
+    if ((element.startIndex ?? 0) !== hit.tableStartLocation) continue;
+    const newRow = table.tableRows[hit.rowIndex + 1];
+    if (!newRow?.tableCells) return;
+    const cells = newRow.tableCells;
+    const requests: docs_v1.Schema$Request[] = [];
+    const cellStart = (index: number) =>
+      cells[index]?.content?.[0]?.startIndex ?? cells[index]?.startIndex ?? null;
+    const rightStart = cellStart(1);
+    if (right && rightStart !== null) {
+      requests.push({ insertText: { location: { index: rightStart }, text: right } });
+    }
+    const leftStart = cellStart(0);
+    if (left && leftStart !== null) {
+      requests.push({ insertText: { location: { index: leftStart }, text: left } });
+    }
+    if (requests.length > 0) {
+      await docs.documents.batchUpdate({ documentId, requestBody: { requests } });
+    }
+    return;
+  }
+}
+
 export const RESUME_MAX_CERTS = 4;
 
 function buildResumeEmptyRowGroups(): { guard: string; rowMarkers: string[] }[] {

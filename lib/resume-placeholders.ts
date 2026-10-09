@@ -178,7 +178,8 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
   const education3 = mapEducationLine(educationLines, 0);
 
   // テンプレで使う最大件数
-  const MAX_WORKS = 4;
+  // lib/google-docs.ts の RESUME_MAX_WORKS と合わせること
+  const MAX_WORKS = 8;
   const MAX_CERTS = 4;
 
   // 職歴: 最大 N 件 — 退社ラベルは reason 内容ではなく常に「退社」を出す。
