@@ -56,7 +56,7 @@ export default async function PartnerDetailPage({
       },
       ratingHistory: {
         orderBy: { createdAt: "desc" },
-        take: 30,
+        take: 200,
         select: { id: true, rating: true, reason: true, recordedBy: true, createdAt: true },
       },
       lineGroups: {

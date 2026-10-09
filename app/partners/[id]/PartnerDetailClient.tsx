@@ -14,7 +14,7 @@ import {
   parseCsv,
   toCsv,
 } from "@/lib/partner-profile";
-import RatingStars from "../RatingStars";
+import PartnerReviews from "./PartnerReviews";
 import UnsavedChangesBar from "@/app/components/UnsavedChangesBar";
 
 export type PartnerDetailData = {
@@ -245,7 +245,9 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          rating: form.rating || null,
+          // 評価はレビュー欄 (PartnerReviews) 側で更新するので、ここでは送らない
+          rating: undefined,
+          ratingReason: undefined,
           // preferredChannels は配列 → CSV に serialize
           preferredChannels: toCsv(form.preferredChannels),
           // レガシー channel は preferredChannels の先頭を採用
@@ -525,23 +527,6 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
           ) : null}
         </Group>
 
-        {/* 評価 */}
-        <Group title="評価">
-          <Field label="評価 (1〜5)">
-            <RatingStars value={form.rating} onChange={(v) => set("rating", v)} />
-          </Field>
-          <Field label="評価理由" className="md:col-span-2">
-            <textarea
-              className={`${INPUT} min-h-20`}
-              value={form.ratingReason}
-              onChange={(e) => set("ratingReason", e.target.value)}
-              placeholder="例: スピード対応 / 候補者の質が高い など"
-            />
-            <p className="mt-1 text-[11px] text-gray-400">
-              評価か理由を変えて保存すると、下の「評価の推移」に履歴として残ります
-            </p>
-          </Field>
-        </Group>
       </section>
 
       {/* 担当者一覧セクションは削除: 担当者情報は「連絡」セクションに統合済み (1 人だけ想定) */}
@@ -636,56 +621,8 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
         </Group>
       </section>
 
-      {/* 評価の推移 */}
-      {initial.ratingHistory.length > 0 ? (
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-base font-semibold text-[var(--color-text-dark)]">評価の推移</h2>
-            <p className="text-[11px] text-gray-400">直近 {initial.ratingHistory.length} 件</p>
-          </div>
-          <ol className="mt-3 space-y-2">
-            {initial.ratingHistory.map((h, idx) => (
-              <li
-                key={h.id}
-                className={`relative rounded-xl border px-4 py-3 ${
-                  idx === 0
-                    ? "border-[var(--color-primary)]/40 bg-[var(--color-light)]/60"
-                    : "border-gray-100 bg-white"
-                }`}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <RatingStars value={h.rating} readOnly size={14} />
-                    <span className="text-[11px] text-gray-500">
-                      {h.rating ?? "—"} / 5
-                    </span>
-                    {idx === 0 ? (
-                      <span className="rounded-full bg-[var(--color-primary)] px-2 py-0.5 text-[10px] font-semibold text-white">
-                        最新
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-[11px] text-gray-500">
-                    {new Date(h.createdAt).toLocaleString("ja-JP", {
-                      year: "numeric",
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                    {h.recordedBy ? ` ・ ${h.recordedBy}` : ""}
-                  </p>
-                </div>
-                {h.reason ? (
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{h.reason}</p>
-                ) : (
-                  <p className="mt-2 text-xs text-gray-400">理由なし</p>
-                )}
-              </li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
+      {/* 評価・レビュー (1 件ずつ積み上がる) */}
+      <PartnerReviews partnerId={initial.id} initialReviews={initial.ratingHistory} />
 
       {/* 実績サマリー */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">

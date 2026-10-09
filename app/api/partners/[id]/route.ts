@@ -67,8 +67,10 @@ function buildPartnerData(body: Record<string, unknown>) {
     contactName: cleanString(body.contactName),
     contactPhone: cleanString(body.contactPhone),
     notes: cleanString(body.notes),
-    rating: clampRating(body.rating),
-    ratingReason: cleanString(body.ratingReason),
+    // 評価はレビュー (POST /api/partners/[id]/reviews) 側で更新する。
+    // body に入っていないときは既存値を保持する (プロフィール保存で消さない)
+    rating: body.rating === undefined ? undefined : clampRating(body.rating),
+    ratingReason: body.ratingReason === undefined ? undefined : cleanString(body.ratingReason),
     role: cleanString(body.role),
     hasPerformance,
     relationshipStatus,
@@ -150,14 +152,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     const partner = await prisma.partner.update({ where: { id: partnerId }, data });
 
-    const ratingChanged = (before?.rating ?? null) !== data.rating;
-    const reasonChanged = (before?.ratingReason ?? null) !== data.ratingReason;
+    // 旧 UI (評価欄が本体フォームにあった頃) からの保存だけ履歴を残す。
+    // 現在の画面はレビュー欄から投稿するので、ここは通らない。
+    const ratingChanged = data.rating !== undefined && (before?.rating ?? null) !== data.rating;
+    const reasonChanged =
+      data.ratingReason !== undefined && (before?.ratingReason ?? null) !== data.ratingReason;
     if (ratingChanged || reasonChanged) {
       await prisma.partnerRatingHistory.create({
         data: {
           partnerId,
-          rating: data.rating,
-          reason: data.ratingReason,
+          rating: data.rating ?? null,
+          reason: data.ratingReason ?? null,
           recordedBy: account.name ?? account.loginId ?? null,
         },
       });
