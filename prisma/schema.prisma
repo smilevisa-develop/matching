@@ -548,7 +548,11 @@ model ResumeProfile {
   licenseExpiryDate            String?
   otherQualificationName       String?
   otherQualificationExpiryDate String?
+  /// 実習経験 (AI 取込・本人入力で埋まる。推薦リストでは 有/無 に丸めて出力)
   traineeExperience            String?
+  /// 在留資格別のメモ (特定技能なら技能検定/評価試験、技能実習なら職種・年数など)。
+  /// 以前は traineeExperience を使い回しており、実習経験の内容と混ざっていた
+  skillExamNote                String?
   highSchoolName               String?
   highSchoolStartDate          String?
   highSchoolEndDate            String?

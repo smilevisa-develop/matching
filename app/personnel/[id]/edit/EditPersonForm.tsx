@@ -55,6 +55,8 @@ type Person = {
     otherQualificationName: string | null;
     otherQualificationExpiryDate: string | null;
     traineeExperience: string | null;
+    /** 在留資格別メモ (技能検定 / 評価試験 など) */
+    skillExamNote?: string | null;
     highSchoolName: string | null;
     highSchoolStartDate: string | null;
     highSchoolEndDate: string | null;
@@ -196,7 +198,9 @@ export default function EditPersonForm({
         person.resumeProfile?.otherQualificationExpiryDate ?? null,
       ),
     ),
-    visaSpecificNote: person.resumeProfile?.traineeExperience ?? "",
+    // 在留資格別メモ (技能検定など)。旧データは traineeExperience に入っていたが、
+    // 実習経験と混ざるため分離した (移行はせず、実習経験として残す)
+    visaSpecificNote: person.resumeProfile?.skillExamNote ?? "",
     email: person.email ?? "",
     documents: buildInitialDocuments(person.documents, person.residenceStatus),
     interviewAnswers: normalizeInterviewAnswers(
@@ -432,8 +436,9 @@ export default function EditPersonForm({
           // 互換用: 最初の1件は単一フィールドにも保存
           otherQualificationName: firstOther?.name || null,
           otherQualificationExpiryDate: firstOther?.expiryDate || null,
-          // 在留資格固有メモは traineeExperience に保存 (互換維持)
-          traineeExperience: form.visaSpecificNote || null,
+          // 実習経験と 在留資格別メモ (技能検定など) は別々の項目として保存する
+          traineeExperience: form.traineeExperience || null,
+          skillExamNote: form.visaSpecificNote || null,
           documents: visibleDocuments,
           interviewAnswers: form.interviewAnswers,
         }),
@@ -714,6 +719,17 @@ export default function EditPersonForm({
               </Field>
               <Field label="免許の有効期限">
                 <input className={INPUT} type="date" value={form.licenseExpiryDate} onChange={(event) => setValue("licenseExpiryDate", event.target.value)} />
+              </Field>
+              <Field label="実習経験" className="md:col-span-2">
+                <input
+                  className={INPUT}
+                  value={form.traineeExperience}
+                  onChange={(event) => setValue("traineeExperience", event.target.value)}
+                  placeholder="例: 有 / 無 / 技能実習2号 (溶接) 3年"
+                />
+                <p className="mt-1 text-[11px] text-gray-400">
+                  推薦リストには「有 / 無」だけが出ます（ここに書いた内容そのものは企業に渡りません）。未記入なら空欄のままです。
+                </p>
               </Field>
             </div>
 

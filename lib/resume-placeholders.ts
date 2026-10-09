@@ -27,6 +27,7 @@ type ResumeProfileInput = {
   otherQualificationName?: string | null;
   otherQualificationExpiryDate?: string | null;
   traineeExperience?: string | null;
+  skillExamNote?: string | null;
   highSchoolName?: string | null;
   highSchoolStartDate?: string | null;
   highSchoolEndDate?: string | null;
@@ -265,6 +266,8 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
     子供数: valueOrBlank(profile?.childrenCount),
     子供: valueOrBlank(profile?.childrenCount),
     備考欄: valueOrBlank(profile?.traineeExperience),
+    実習経験: valueOrBlank(profile?.traineeExperience),
+    技能検定: valueOrBlank(profile?.skillExamNote),
     // 学歴 (年月形式に変換)
     入学: formatYearMonth(education1.date),
     卒業: formatYearMonth(education1.result),

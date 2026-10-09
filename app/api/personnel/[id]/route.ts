@@ -175,6 +175,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
               .filter((q: { name: string; expiryDate: string }) => q.name || q.expiryDate)
           : undefined,
         traineeExperience: body.traineeExperience || null,
+        // 在留資格別メモ (技能検定 / 評価試験 など)。実習経験とは別項目
+        skillExamNote: body.skillExamNote === undefined ? undefined : body.skillExamNote || null,
         // string 値のみ受け入れて Json として保存
         interviewAnswers:
           body.interviewAnswers && typeof body.interviewAnswers === "object"
@@ -235,6 +237,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
               .filter((q: { name: string; expiryDate: string }) => q.name || q.expiryDate)
           : undefined,
         traineeExperience: body.traineeExperience || null,
+        // 在留資格別メモ (技能検定 / 評価試験 など)。実習経験とは別項目
+        skillExamNote: body.skillExamNote === undefined ? undefined : body.skillExamNote || null,
         // string 値のみ受け入れて Json として保存
         interviewAnswers:
           body.interviewAnswers && typeof body.interviewAnswers === "object"
