@@ -59,6 +59,22 @@ function calcYearsSince(startDate: string | null | undefined): string {
   return years.toFixed(1);
 }
 
+/**
+ * 実習経験の記録を「有 / 無」だけに丸める (推薦リストは企業に渡すため、中身は出さない)。
+ *
+ * この項目には AI 取込や本人入力で色々な書き方が入っている:
+ *   「はい」「いいえ」「有」「技能実習1号ロ」「◯◯株式会社で3年」など。
+ * 否定を表す言い回しなら「無」、それ以外の記入があれば「有」、
+ * 未記入は空欄のままにする (記録が無いだけなのに「無」と断定しないため)。
+ */
+function toTraineeYesNo(raw: string | null | undefined): string {
+  const value = (raw ?? "").trim();
+  if (!value) return "";
+  const negative = /^(いいえ|無|なし|無し|ない|未経験|経験なし|経験無し|no|none|n\/a|-|ー|×)$/i;
+  if (negative.test(value)) return "無";
+  return "有";
+}
+
 export function getRecommendationColumnLabel(key: RecommendationColumnKey): string {
   return RECOMMENDATION_COLUMN_OPTIONS.find((c) => c.key === key)?.label ?? key;
 }
@@ -100,7 +116,7 @@ export function buildRecommendationCellValue(
         ? calcYearsSince(resume?.visaType ? resume?.visaExpiryDate : null) || ""
         : "";
     case "traineeExperience":
-      return resume?.traineeExperience ?? "";
+      return toTraineeYesNo(resume?.traineeExperience);
     case "japaneseLevel":
       return resume?.japaneseLevel ?? "";
     case "japaneseLevelDate":
