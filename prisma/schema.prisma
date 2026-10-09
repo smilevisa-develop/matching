@@ -846,8 +846,53 @@ model PersonPlacement {
   sixMonthStatus       String?
   consultation         String?
   currentAction        String?
+  /// 次アクションの期限 (内定後管理ボードで遅延を赤く出すために使う)
+  nextActionDueAt      DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+
+  tasks  PlacementTask[]
+  issues PlacementIssue[]
+}
+
+/// 内定後にやることのチェックリスト 1 件。
+/// 標準タスク (lib/onboarding-tasks.ts) を内定承諾時に一括作成して使う。
+/// 「誰が・いつまでに」が無いまま進んで申請やり直し / 期限切れが起きていたため、
+/// 期限と担当をタスク単位で持たせている。
+model PlacementTask {
+  id          Int            @id @default(autoincrement())
+  placementId Int
+  placement   PersonPlacement @relation(fields: [placementId], references: [id], onDelete: Cascade)
+  /// 区分 (条件確認 / 書類 / 申請 / 渡航・住居 / 入社後)
+  category    String
+  title       String
+  /// 期限。標準タスクは内定承諾日からの日数で自動計算する
+  dueAt       DateTime?
+  doneAt      DateTime?
+  doneBy      String?
+  note        String?
+  sortOrder   Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([placementId, sortOrder])
+}
+
+/// 内定後に起きた問題の記録 (再発防止のため案件・候補者に紐づけて残す)
+model PlacementIssue {
+  id          Int            @id @default(autoincrement())
+  placementId Int
+  placement   PersonPlacement @relation(fields: [placementId], references: [id], onDelete: Cascade)
+  title       String
+  detail      String?
+  /// open = 未解決 / closed = 解決済み
+  status      String         @default("open")
+  recordedBy  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([placementId, status])
 }
 
 model Invoice {
