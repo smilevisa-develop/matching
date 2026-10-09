@@ -142,10 +142,11 @@ export async function POST(req: Request) {
     const drive = google.drive({ version: "v3", auth });
     const sheets = google.sheets({ version: "v4", auth });
 
-    // ファイル名は企業に共有したときにそのまま見えるため「企業名＋様」にする
-    // (例: 協和製工株式会社様)。Drive のファイル名に使えない文字だけ落とす。
+    // ファイル名は企業に共有したときにそのまま見えるため「企業名_推薦リスト」にする
+    // (例: 協和製工株式会社_推薦リスト)。日付は付けない。
+    // Drive のファイル名に使えない文字だけ落とす。
     const safeCompanyName = deal.company.name.replace(/[\\/:*?"<>|]/g, "").trim();
-    const fileName = `${safeCompanyName || deal.title}様`;
+    const fileName = `${safeCompanyName || deal.title}_推薦リスト`;
 
     // CSV を Sheets として変換アップロード (新規ファイルとして作成)
     const buffer = Buffer.from(csv, "utf-8");
