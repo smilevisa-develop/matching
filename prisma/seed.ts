@@ -50,14 +50,14 @@ async function main() {
         passcodeHash: hashPasscode("111111"),
       },
       {
-        loginId: "minh",
-        name: "ミン",
+        loginId: "nguyet",
+        name: "グェット",
         role: "member",
         passcodeHash: hashPasscode("123456"),
       },
       {
         loginId: "thuy",
-        name: "トウイ",
+        name: "トゥイ",
         role: "member",
         passcodeHash: hashPasscode("123456"),
       },

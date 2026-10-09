@@ -48,7 +48,7 @@ export default function LoginForm() {
           className={INPUT}
           value={loginId}
           onChange={(event) => setLoginId(event.target.value)}
-          placeholder="minh / cindy / thuy"
+          placeholder="nguyet / cindy / thuy"
         />
       </div>
       <div>
