@@ -87,11 +87,49 @@ function isOver(date: string | null) {
   return Boolean(date && new Date(date).getTime() < Date.now());
 }
 
-const URGENCY_STYLE: Record<Urgency, { card: string; dot: string; label: string }> = {
-  red: { card: "border-red-400 bg-red-50/40", dot: "bg-red-500", label: "至急" },
-  amber: { card: "border-amber-300 bg-amber-50/30", dot: "bg-amber-400", label: "注意" },
-  normal: { card: "border-gray-200 bg-white", dot: "bg-gray-300", label: "通常" },
+const URGENCY_STYLE: Record<Urgency, { accent: string; badge: string; label: string; dot: string }> = {
+  red: {
+    accent: "border-l-red-500 border-gray-200",
+    badge: "bg-red-100 text-red-700",
+    label: "至急",
+    dot: "bg-red-500",
+  },
+  amber: {
+    accent: "border-l-amber-400 border-gray-200",
+    badge: "bg-amber-100 text-amber-800",
+    label: "注意",
+    dot: "bg-amber-400",
+  },
+  normal: {
+    accent: "border-l-gray-200 border-gray-200",
+    badge: "bg-gray-100 text-gray-500",
+    label: "",
+    dot: "bg-gray-300",
+  },
 };
+
+/**
+ * そのカードで「次にやること」を 1 つだけ決める。
+ * 手入力の次アクションがあればそれ、無ければ未完了タスクのうち期限が一番近いもの。
+ */
+function nextThing(card: OnboardingCard): { label: string; due: string | null; overdue: boolean } {
+  if (card.stage === HOLD_STAGE && card.holdReason) {
+    return { label: `保留: ${card.holdReason}`, due: card.nextActionDueAt, overdue: isOver(card.nextActionDueAt) };
+  }
+  if (card.currentAction) {
+    return { label: card.currentAction, due: card.nextActionDueAt, overdue: isOver(card.nextActionDueAt) };
+  }
+  const pending = card.tasks
+    .filter((t) => !t.doneAt)
+    .sort((a, b) => (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999"));
+  if (pending.length > 0) {
+    return { label: pending[0].title, due: pending[0].dueAt, overdue: isOver(pending[0].dueAt) };
+  }
+  if (card.tasks.length === 0) {
+    return { label: "チェックリストを作成する", due: null, overdue: false };
+  }
+  return { label: "次の工程へ進める", due: null, overdue: false };
+}
 
 export default function OnboardingBoard({
   initialCards,
@@ -179,10 +217,11 @@ export default function OnboardingBoard({
         </div>
       </div>
 
-      <div className="flex gap-3 overflow-x-auto pb-4">
-        {ONBOARDING_STAGES.map((stage) => {
+      {/* 工程の列。列ごとに高さを固定して、中だけスクロールする */}
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {ONBOARDING_STAGES.filter((s) => s.id !== HOLD_STAGE).map((stage) => {
           const list = visible.filter((c) => c.stage === stage.id);
-          const isHold = stage.id === HOLD_STAGE;
+          const alerts = list.filter((c) => c.urgency === "red").length;
           return (
             <div
               key={stage.id}
@@ -196,22 +235,28 @@ export default function OnboardingBoard({
                 setDraggingId(null);
                 setOverStage(null);
               }}
-              className={`flex w-[280px] shrink-0 flex-col rounded-2xl border p-3 ${
+              className={`flex h-[58vh] w-[240px] shrink-0 flex-col rounded-2xl border ${
                 overStage === stage.id
                   ? "border-[var(--color-primary)] bg-[var(--color-light)]"
-                  : isHold
-                    ? "border-red-200 bg-red-50/50"
-                    : "border-gray-200 bg-gray-50"
+                  : "border-gray-200 bg-gray-50"
               }`}
             >
-              <div className="mb-1 flex items-center justify-between">
-                <p className={`text-sm font-semibold ${isHold ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>
+              <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2">
+                <p className="truncate text-[12px] font-semibold text-[var(--color-text-dark)]" title={stage.hint}>
                   {stage.label}
                 </p>
-                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-500">{list.length}</span>
+                <span className="flex shrink-0 items-center gap-1">
+                  {alerts > 0 ? (
+                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
+                      {alerts}
+                    </span>
+                  ) : null}
+                  <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] text-gray-500">
+                    {list.length}
+                  </span>
+                </span>
               </div>
-              <p className="mb-2 text-[10px] leading-tight text-gray-400">{stage.hint}</p>
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 space-y-2 overflow-y-auto p-2">
                 {list.map((card) => (
                   <BoardCard
                     key={card.personId}
@@ -222,14 +267,56 @@ export default function OnboardingBoard({
                   />
                 ))}
                 {list.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-gray-200 py-5 text-center text-[11px] text-gray-400">
-                    なし
-                  </p>
+                  <p className="py-4 text-center text-[11px] text-gray-300">なし</p>
                 ) : null}
               </div>
             </div>
           );
         })}
+      </div>
+
+      {/* 保留は下に横並びで置く (工程から外れている人を一目で拾えるように) */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOverStage(HOLD_STAGE);
+        }}
+        onDragLeave={() => setOverStage((s) => (s === HOLD_STAGE ? null : s))}
+        onDrop={() => {
+          if (draggingId !== null) void move(draggingId, HOLD_STAGE);
+          setDraggingId(null);
+          setOverStage(null);
+        }}
+        className={`rounded-2xl border p-3 ${
+          overStage === HOLD_STAGE ? "border-[var(--color-primary)] bg-[var(--color-light)]" : "border-red-200 bg-red-50/50"
+        }`}
+      >
+        <div className="mb-2 flex items-center gap-2">
+          <p className="text-[12px] font-semibold text-red-700">⚠ 保留・問題対応中</p>
+          <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] text-gray-500">
+            {visible.filter((c) => c.stage === HOLD_STAGE).length}
+          </span>
+          <span className="text-[10px] text-gray-500">
+            ここにドラッグすると理由を聞きます。戻すと元の工程に復帰します。
+          </span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto">
+          {visible
+            .filter((c) => c.stage === HOLD_STAGE)
+            .map((card) => (
+              <BoardCard
+                key={card.personId}
+                card={card}
+                horizontal
+                onDragStart={() => setDraggingId(card.personId)}
+                onDragEnd={() => setDraggingId(null)}
+                onClick={() => setOpenId(card.personId)}
+              />
+            ))}
+          {visible.filter((c) => c.stage === HOLD_STAGE).length === 0 ? (
+            <p className="w-full py-3 text-center text-[11px] text-gray-400">保留中の人はいません</p>
+          ) : null}
+        </div>
       </div>
 
       {openCard ? (
@@ -259,21 +346,27 @@ function Stat({ label, value, tone = "plain" }: { label: string; value: string; 
   );
 }
 
+/**
+ * カード 1 枚。載せるのは 4 つだけ:
+ *   「誰か」「次に何をするか + 期限」「担当」「どれだけ止まっているか」
+ * 理由や未完了の一覧は詳細パネルで見る (カードに詰め込むと重要な情報が埋もれる)。
+ */
 function BoardCard({
   card,
   onDragStart,
   onDragEnd,
   onClick,
+  horizontal = false,
 }: {
   card: OnboardingCard;
   onDragStart: () => void;
   onDragEnd: () => void;
   onClick: () => void;
+  horizontal?: boolean;
 }) {
+  const next = nextThing(card);
   const style = URGENCY_STYLE[card.urgency];
   const done = card.tasks.filter((t) => t.doneAt).length;
-  const pending = card.tasks.filter((t) => !t.doneAt);
-  const missing = pending.slice(0, 2);
   const stageDays = daysSince(card.stageChangedAt);
 
   return (
@@ -283,111 +376,56 @@ function BoardCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`w-full cursor-grab rounded-xl border p-3 text-left shadow-sm transition hover:shadow-md ${style.card}`}
+      className={`${horizontal ? "w-[250px] shrink-0" : "w-full"} cursor-grab rounded-xl border-l-4 border-y border-r bg-white p-2.5 text-left shadow-sm transition hover:shadow-md ${style.accent}`}
     >
-      {/* 緊急度 + 名前 */}
-      <div className="flex items-center gap-2">
-        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.dot}`} title={style.label} />
-        {card.photoUrl ? (
-          <Image src={card.photoUrl} alt="" width={26} height={26} className="h-6 w-6 rounded-full object-cover" />
-        ) : null}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-[var(--color-text-dark)]">{card.personName}</p>
-          <p className="truncate text-[10px] text-gray-500">{card.companyName ?? "企業未紐付け"}</p>
-        </div>
-        {card.applicationType ? (
-          <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
-            {card.applicationType}
-          </span>
-        ) : null}
-      </div>
-
-      {/* 緊急の理由 */}
-      {card.urgencyReasons.length > 0 ? (
-        <p
-          className={`mt-1.5 line-clamp-2 text-[10px] font-semibold ${
-            card.urgency === "red" ? "text-red-600" : "text-amber-700"
-          }`}
-        >
-          {card.urgencyReasons.join(" ・ ")}
+      {/* 名前 + 緊急バッジ */}
+      <div className="flex items-center gap-1.5">
+        <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--color-text-dark)]">
+          {card.personName}
         </p>
-      ) : null}
-
-      {/* 保留理由 */}
-      {card.stage === HOLD_STAGE && card.holdReason ? (
-        <p className="mt-1.5 rounded bg-white/80 px-2 py-1 text-[10px] text-red-700">⚠ {card.holdReason}</p>
-      ) : null}
-
-      {/* 何が足りないか */}
-      <div className="mt-2 rounded-lg bg-white/80 px-2 py-1.5">
-        <p className="text-[10px] font-semibold text-gray-400">未完了</p>
-        {missing.length > 0 ? (
-          <ul className="mt-0.5 space-y-0.5">
-            {missing.map((t) => (
-              <li
-                key={t.id}
-                className={`truncate text-[11px] ${isOver(t.dueAt) ? "font-medium text-red-600" : "text-gray-700"}`}
-              >
-                ・{t.title}
-                {t.dueAt ? `（${fmt(t.dueAt)}）` : ""}
-              </li>
-            ))}
-            {pending.length > missing.length ? (
-              <li className="text-[10px] text-gray-400">ほか {pending.length - missing.length} 件</li>
-            ) : null}
-          </ul>
-        ) : (
-          <p className="mt-0.5 text-[11px] text-gray-400">
-            {card.tasks.length === 0 ? "チェックリスト未作成" : "すべて完了"}
-          </p>
-        )}
-      </div>
-
-      {/* 次にやること */}
-      <p
-        className={`mt-1.5 truncate text-[11px] ${
-          card.currentAction ? "text-gray-700" : "font-medium text-amber-700"
-        }`}
-      >
-        {card.currentAction ? `→ ${card.currentAction}` : "→ 次アクション未記入"}
-        {card.nextActionDueAt ? (
-          <span className={isOver(card.nextActionDueAt) ? "text-red-600" : "text-gray-400"}>
-            {" "}
-            ({fmt(card.nextActionDueAt)})
+        {card.urgency !== "normal" ? (
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${style.badge}`}>
+            {style.label}
           </span>
         ) : null}
+      </div>
+      <p className="truncate text-[10px] text-gray-400">
+        {card.companyName ?? "企業未紐付け"}
+        {card.applicationType ? ` ・ ${card.applicationType}` : ""}
       </p>
 
-      {/* 担当・進捗・滞留 */}
-      <div className="mt-2 flex flex-wrap items-center gap-1">
+      {/* 次にやること (1 行) */}
+      <div className={`mt-1.5 rounded-lg px-2 py-1.5 ${next.overdue ? "bg-red-50" : "bg-gray-50"}`}>
+        <p className="line-clamp-2 text-[12px] leading-snug text-gray-800">{next.label}</p>
+        {next.due ? (
+          <p className={`mt-0.5 text-[10px] ${next.overdue ? "font-semibold text-red-600" : "text-gray-500"}`}>
+            {fmt(next.due)}
+            {next.overdue ? ` ・${Math.abs(daysSince(next.due) ?? 0)}日超過` : "まで"}
+          </p>
+        ) : null}
+      </div>
+
+      {/* 担当 / 進捗 / 滞留 */}
+      <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
         <span
-          className={`rounded-full px-2 py-0.5 text-[10px] ${
+          className={`truncate rounded px-1.5 py-0.5 ${
             card.followUpOwnerName
               ? "bg-[var(--color-light)] text-[var(--color-primary)]"
               : "bg-amber-100 text-amber-800"
           }`}
         >
-          {card.followUpOwnerName ? `内定 ${card.followUpOwnerName}` : "担当未設定"}
+          {card.followUpOwnerName ?? "担当未設定"}
         </span>
-        {card.recruitOwnerName ? (
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
-            採用 {card.recruitOwnerName}
+        {card.tasks.length > 0 ? (
+          <span className="text-gray-400">
+            {done}/{card.tasks.length}
           </span>
         ) : null}
-        <span className="ml-auto text-[10px] text-gray-400">
-          {done}/{card.tasks.length}
-          {stageDays !== null ? ` ・この工程 ${stageDays}日` : ""}
-        </span>
-      </div>
-
-      {/* 予定日 */}
-      <div className="mt-1 flex gap-3 text-[10px]">
-        <span className={!card.applicationAt && isOver(card.applicationPlannedAt) ? "text-red-600" : "text-gray-400"}>
-          申請予定 {fmt(card.applicationPlannedAt)}
-        </span>
-        <span className={!card.joinAt && isOver(card.joinPlannedAt) ? "text-red-600" : "text-gray-400"}>
-          入社予定 {fmt(card.joinPlannedAt)}
-        </span>
+        {stageDays !== null && stageDays > 0 ? (
+          <span className={`ml-auto ${stageDays > 14 ? "font-semibold text-amber-700" : "text-gray-400"}`}>
+            {stageDays}日
+          </span>
+        ) : null}
       </div>
     </button>
   );
