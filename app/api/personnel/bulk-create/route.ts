@@ -1,3 +1,4 @@
+import { cleanCompanyName } from "@/lib/candidate-profile";
 /**
  * 編集済みの候補者配列を一括で Person + Onboarding + ResumeProfile として作成。
  * + uploadedFileId 付きなら Drive フォルダに元ファイルを保存し photoUrl / driveFolderUrl を自動設定。
@@ -224,7 +225,14 @@ export async function POST(req: Request) {
                 currentJob: s(c.currentJob),
                 retirementReason: s(c.retirementReason),
                 preferenceNote: s(c.preferenceNote),
-                workExperiences: Array.isArray(c.workExperiences) && c.workExperiences.length > 0 ? c.workExperiences : undefined,
+                workExperiences:
+                  Array.isArray(c.workExperiences) && c.workExperiences.length > 0
+                    ? c.workExperiences.map((w) =>
+                        w && typeof w.companyName === "string"
+                          ? { ...w, companyName: cleanCompanyName(w.companyName) }
+                          : w,
+                      )
+                    : undefined,
               },
             },
           },

@@ -189,13 +189,26 @@ export type WorkHistoryEntry = {
   reason: string;
 };
 
+/**
+ * 会社名の末尾に付いた「入社 / 退社 / 入職 / 退職」を落とす。
+ *
+ * 履歴書は「{会社名} 入社」「{会社名} 退社」の形で出力するため、会社名側にも
+ * 「入社」が入っていると「◯◯株式会社 入社 入社」と二重になる。
+ * 取り込み時・保存時にここで揃える。
+ */
+export function cleanCompanyName(value: string): string {
+  return value
+    .replace(/[\s　]*(入社|退社|入職|退職)[\s　]*$/u, "")
+    .trim();
+}
+
 export function normalizeWorkHistories(value: unknown): WorkHistoryEntry[] {
   if (!Array.isArray(value)) return [];
 
   return value.map((entry) => {
     const current = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
     return {
-      companyName: String(current.companyName ?? current.label ?? ""),
+      companyName: cleanCompanyName(String(current.companyName ?? current.label ?? "")),
       startDate: String(current.startDate ?? current.date ?? ""),
       endDate: String(current.endDate ?? ""),
       reason: String(current.reason ?? current.result ?? ""),

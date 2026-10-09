@@ -140,7 +140,13 @@ function asWorkLines(value: unknown): WorkLine[] {
     return {
       date: valueOrBlank(String(current.startDate ?? current.date ?? "")),
       endDate: valueOrBlank(String(current.endDate ?? "")),
-      label: valueOrBlank(String(current.companyName ?? current.label ?? "")),
+      // 「◯◯会社 入社」と入力されていても二重にならないよう、ここでも落とす
+      label: valueOrBlank(
+        String(current.companyName ?? current.label ?? "").replace(
+          /[\s　]*(入社|退社|入職|退職)[\s　]*$/u,
+          "",
+        ),
+      ),
       result: valueOrBlank(String(current.reason ?? current.result ?? "")),
     };
   });

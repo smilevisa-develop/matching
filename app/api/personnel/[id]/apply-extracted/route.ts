@@ -1,3 +1,4 @@
+import { cleanCompanyName } from "@/lib/candidate-profile";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import type { ExtractedCandidate } from "@/lib/ai-extract";
@@ -60,7 +61,12 @@ export async function POST(req: Request, { params }: { params: Params }) {
     if (nonEmpty(extracted.retirementReason)) resumeUpdate.retirementReason = extracted.retirementReason!;
     if (nonEmpty(extracted.preferenceNote)) resumeUpdate.preferenceNote = extracted.preferenceNote!;
     if (Array.isArray(extracted.workExperiences) && extracted.workExperiences.length > 0) {
-      resumeUpdate.workExperiences = extracted.workExperiences;
+      // AI が「◯◯会社 入社」と拾うことがあるので、会社名を整えてから保存する
+      resumeUpdate.workExperiences = extracted.workExperiences.map((w) =>
+        w && typeof w === "object" && typeof w.companyName === "string"
+          ? { ...w, companyName: cleanCompanyName(w.companyName) }
+          : w,
+      );
     }
 
     let personCount = 0;

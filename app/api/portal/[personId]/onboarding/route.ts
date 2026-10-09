@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getDocumentDefinitions } from "@/lib/candidate-profile";
+import { getDocumentDefinitions, cleanCompanyName } from "@/lib/candidate-profile";
 import {
   buildPersonAssetName,
   buildPersonFolderName,
@@ -45,6 +45,17 @@ function evaluateDocument(kind: string, fileName: string, fileUrl: string) {
     status: "accepted",
     note: "自動判定で受理しました",
   };
+}
+
+/** 保存前に職歴の会社名から「入社 / 退社」を落とす (履歴書で二重にならないように) */
+function cleanWorkExperiences(value: unknown) {
+  if (!Array.isArray(value)) return value;
+  return value.map((entry) => {
+    if (!entry || typeof entry !== "object") return entry;
+    const o = entry as Record<string, unknown>;
+    if (typeof o.companyName !== "string") return entry;
+    return { ...o, companyName: cleanCompanyName(o.companyName) };
+  });
 }
 
 export async function GET(
@@ -216,7 +227,7 @@ export async function POST(
         childrenCount: body.childrenCount || null,
         visaType: body.residenceStatus || null,
         visaExpiryDate: body.visaExpiryDate || null,
-        workExperiences: body.workExperiences ?? [],
+        workExperiences: cleanWorkExperiences(body.workExperiences) ?? [],
         motivation: body.motivation || null,
         selfIntroduction: body.selfIntroduction || null,
         japanPurpose: body.japanPurpose || null,
@@ -244,7 +255,7 @@ export async function POST(
         childrenCount: body.childrenCount || null,
         visaType: body.residenceStatus || null,
         visaExpiryDate: body.visaExpiryDate || null,
-        workExperiences: body.workExperiences ?? [],
+        workExperiences: cleanWorkExperiences(body.workExperiences) ?? [],
         motivation: body.motivation || null,
         selfIntroduction: body.selfIntroduction || null,
         japanPurpose: body.japanPurpose || null,
