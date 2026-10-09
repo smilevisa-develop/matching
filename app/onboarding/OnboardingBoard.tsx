@@ -3,19 +3,23 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { PLACEMENT_STAGES, type PlacementStageId } from "@/lib/placement-stage";
-import { ONBOARDING_TASK_CATEGORIES } from "@/lib/onboarding-tasks";
+import {
+  APPLICATION_TYPES,
+  HOLD_STAGE,
+  ONBOARDING_STAGES,
+  type OnboardingStageId,
+  type Urgency,
+} from "@/lib/onboarding-flow";
 
 /**
- * 内定後管理ボード (Trello 風)。
+ * 内定者管理ボード (Trello 風)。
  *
- * - 列 = ステージ (内定 → 内定承諾 → 申請中 → 結果受領 → 入国済み → 入社済み)
- * - カード = 内定者 1 人。次アクション・期限・チェックリストの進み具合・未解決の問題を表示
- * - カードを掴んで別の列に落とすとステージが変わる
- * - カードを押すと右から詳細が開き、チェックリストの消し込みと問題の記録ができる
+ * カードだけで次の 4 つが分かるようにしている:
+ *   緊急か (赤/黄/通常 + 理由) / 担当は誰か (採用・内定フォロー) /
+ *   どの工程で何日止まっているか / 何が足りないか (未完了タスクの先頭)
  *
- * 期限が過ぎているものは赤、3 日以内は黄色で出す。
- * 「誰が・いつまでに・次に何をするか」が一目で分かることを最優先にしている。
+ * 「保留・問題対応中」列は、問題が解決するまで一時的に置く場所。
+ * 元の工程を覚えているので、解除すると元の列に戻る。
  */
 
 export type OnboardingTask = {
@@ -42,30 +46,32 @@ export type OnboardingCard = {
   englishName: string | null;
   photoUrl: string | null;
   nationality: string;
+  residenceStatus: string;
+  visaExpiryDate: string | null;
   companyName: string | null;
-  dealTitle: string | null;
-  ownerName: string | null;
-  stage: PlacementStageId;
+  recruitOwnerName: string | null;
+  followUpOwnerId: number | null;
+  followUpOwnerName: string | null;
+  applicationType: string | null;
+  stage: OnboardingStageId;
+  stageChangedAt: string | null;
+  holdReason: string | null;
   currentAction: string | null;
   nextActionDueAt: string | null;
   offerAcceptedAt: string | null;
+  applicationPlannedAt: string | null;
   applicationAt: string | null;
+  applicationResultAt: string | null;
   entryPlannedAt: string | null;
   joinPlannedAt: string | null;
+  joinAt: string | null;
+  urgency: Urgency;
+  urgencyReasons: string[];
   tasks: OnboardingTask[];
   issues: OnboardingIssue[];
 };
 
 const DAY = 86_400_000;
-
-/** 期限の状態 (なし / 期限切れ / まもなく / 余裕あり) */
-function dueState(dueAt: string | null): "none" | "over" | "soon" | "ok" {
-  if (!dueAt) return "none";
-  const diff = new Date(dueAt).getTime() - Date.now();
-  if (diff < 0) return "over";
-  if (diff < 3 * DAY) return "soon";
-  return "ok";
-}
 
 function fmt(date: string | null) {
   if (!date) return "—";
@@ -77,19 +83,29 @@ function daysSince(date: string | null) {
   return Math.floor((Date.now() - new Date(date).getTime()) / DAY);
 }
 
+function isOver(date: string | null) {
+  return Boolean(date && new Date(date).getTime() < Date.now());
+}
+
+const URGENCY_STYLE: Record<Urgency, { card: string; dot: string; label: string }> = {
+  red: { card: "border-red-400 bg-red-50/40", dot: "bg-red-500", label: "至急" },
+  amber: { card: "border-amber-300 bg-amber-50/30", dot: "bg-amber-400", label: "注意" },
+  normal: { card: "border-gray-200 bg-white", dot: "bg-gray-300", label: "通常" },
+};
+
 export default function OnboardingBoard({
   initialCards,
-  owners,
+  staff,
 }: {
   initialCards: OnboardingCard[];
-  owners: string[];
+  staff: { id: number; name: string }[];
 }) {
   const [cards, setCards] = useState(initialCards);
   const [draggingId, setDraggingId] = useState<number | null>(null);
-  const [overStage, setOverStage] = useState<PlacementStageId | null>(null);
+  const [overStage, setOverStage] = useState<OnboardingStageId | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
   const [ownerFilter, setOwnerFilter] = useState("すべて");
-  const [onlyAlert, setOnlyAlert] = useState(false);
+  const [urgencyOnly, setUrgencyOnly] = useState(false);
 
   const patchCard = (personId: number, patch: Partial<OnboardingCard>) =>
     setCards((prev) => prev.map((c) => (c.personId === personId ? { ...c, ...patch } : c)));
@@ -97,78 +113,76 @@ export default function OnboardingBoard({
   const visible = useMemo(
     () =>
       cards.filter((c) => {
-        if (ownerFilter !== "すべて" && (c.ownerName ?? "未設定") !== ownerFilter) return false;
-        if (onlyAlert) {
-          const overdueTask = c.tasks.some((t) => !t.doneAt && dueState(t.dueAt) === "over");
-          const overdueAction = dueState(c.nextActionDueAt) === "over";
-          const openIssue = c.issues.some((i) => i.status === "open");
-          const noAction = !c.currentAction;
-          if (!overdueTask && !overdueAction && !openIssue && !noAction) return false;
+        if (ownerFilter !== "すべて") {
+          const names = [c.followUpOwnerName, c.recruitOwnerName].filter(Boolean);
+          if (ownerFilter === "未設定" ? names.length > 0 : !names.includes(ownerFilter)) return false;
         }
+        if (urgencyOnly && c.urgency === "normal") return false;
         return true;
       }),
-    [cards, ownerFilter, onlyAlert],
+    [cards, ownerFilter, urgencyOnly],
   );
 
-  /** 上部サマリー: 要対応の件数 */
-  const alerts = useMemo(() => {
-    let overdue = 0;
-    let noAction = 0;
-    let openIssues = 0;
-    for (const c of cards) {
-      if (c.tasks.some((t) => !t.doneAt && dueState(t.dueAt) === "over")) overdue++;
-      if (!c.currentAction) noAction++;
-      openIssues += c.issues.filter((i) => i.status === "open").length;
-    }
-    return { overdue, noAction, openIssues, total: cards.length };
+  const summary = useMemo(() => {
+    const red = cards.filter((c) => c.urgency === "red").length;
+    const amber = cards.filter((c) => c.urgency === "amber").length;
+    const hold = cards.filter((c) => c.stage === HOLD_STAGE).length;
+    const noOwner = cards.filter((c) => !c.followUpOwnerName).length;
+    return { total: cards.length, red, amber, hold, noOwner };
   }, [cards]);
 
-  const move = async (personId: number, stage: PlacementStageId) => {
+  const move = async (personId: number, stage: OnboardingStageId) => {
     const before = cards;
-    patchCard(personId, { stage });
+    let holdReason: string | null = null;
+    if (stage === HOLD_STAGE) {
+      holdReason = window.prompt("保留にする理由を入力してください（例: アパート未確定で待ち）") ?? "";
+      if (!holdReason.trim()) return;
+    }
+    patchCard(personId, { stage, stageChangedAt: new Date().toISOString(), holdReason });
     const res = await fetch(`/api/onboarding/${personId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stage }),
+      body: JSON.stringify({ stage, holdReason }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
       setCards(before);
-      alert(`ステージの更新に失敗しました: ${data.error ?? res.statusText}`);
+      alert(`更新に失敗しました: ${data.error ?? res.statusText}`);
     }
   };
 
   const openCard = cards.find((c) => c.personId === openId) ?? null;
+  const ownerOptions = Array.from(new Set(staff.map((s) => s.name)));
 
   return (
     <div className="space-y-4">
-      {/* サマリー + 絞り込み */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Stat label="内定者" value={`${alerts.total} 名`} />
-        <Stat label="期限超過あり" value={`${alerts.overdue} 名`} tone={alerts.overdue > 0 ? "red" : "plain"} />
-        <Stat label="次アクション未記入" value={`${alerts.noAction} 名`} tone={alerts.noAction > 0 ? "amber" : "plain"} />
-        <Stat label="未解決の問題" value={`${alerts.openIssues} 件`} tone={alerts.openIssues > 0 ? "red" : "plain"} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Stat label="内定者" value={`${summary.total} 名`} />
+        <Stat label="至急" value={`${summary.red} 名`} tone={summary.red ? "red" : "plain"} />
+        <Stat label="注意" value={`${summary.amber} 名`} tone={summary.amber ? "amber" : "plain"} />
+        <Stat label="保留中" value={`${summary.hold} 名`} tone={summary.hold ? "red" : "plain"} />
+        <Stat label="フォロー担当未設定" value={`${summary.noOwner} 名`} tone={summary.noOwner ? "amber" : "plain"} />
         <div className="ml-auto flex items-center gap-2">
           <select
             value={ownerFilter}
             onChange={(e) => setOwnerFilter(e.target.value)}
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
           >
-            {["すべて", ...owners, "未設定"].map((o) => (
+            {["すべて", ...ownerOptions, "未設定"].map((o) => (
               <option key={o}>{o}</option>
             ))}
           </select>
           <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
-            <input type="checkbox" checked={onlyAlert} onChange={(e) => setOnlyAlert(e.target.checked)} />
+            <input type="checkbox" checked={urgencyOnly} onChange={(e) => setUrgencyOnly(e.target.checked)} />
             要対応だけ
           </label>
         </div>
       </div>
 
-      {/* ボード */}
       <div className="flex gap-3 overflow-x-auto pb-4">
-        {PLACEMENT_STAGES.map((stage) => {
+        {ONBOARDING_STAGES.map((stage) => {
           const list = visible.filter((c) => c.stage === stage.id);
+          const isHold = stage.id === HOLD_STAGE;
           return (
             <div
               key={stage.id}
@@ -182,18 +196,21 @@ export default function OnboardingBoard({
                 setDraggingId(null);
                 setOverStage(null);
               }}
-              className={`flex w-[270px] shrink-0 flex-col rounded-2xl border p-3 ${
+              className={`flex w-[280px] shrink-0 flex-col rounded-2xl border p-3 ${
                 overStage === stage.id
                   ? "border-[var(--color-primary)] bg-[var(--color-light)]"
-                  : "border-gray-200 bg-gray-50"
+                  : isHold
+                    ? "border-red-200 bg-red-50/50"
+                    : "border-gray-200 bg-gray-50"
               }`}
             >
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--color-text-dark)]">{stage.label}</p>
-                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-500">
-                  {list.length}
-                </span>
+              <div className="mb-1 flex items-center justify-between">
+                <p className={`text-sm font-semibold ${isHold ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>
+                  {stage.label}
+                </p>
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-gray-500">{list.length}</span>
               </div>
+              <p className="mb-2 text-[10px] leading-tight text-gray-400">{stage.hint}</p>
               <div className="flex-1 space-y-2">
                 {list.map((card) => (
                   <BoardCard
@@ -205,7 +222,7 @@ export default function OnboardingBoard({
                   />
                 ))}
                 {list.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-gray-200 py-6 text-center text-[11px] text-gray-400">
+                  <p className="rounded-xl border border-dashed border-gray-200 py-5 text-center text-[11px] text-gray-400">
                     なし
                   </p>
                 ) : null}
@@ -218,6 +235,7 @@ export default function OnboardingBoard({
       {openCard ? (
         <CardDetail
           card={openCard}
+          staff={staff}
           onClose={() => setOpenId(null)}
           onPatch={(patch) => patchCard(openCard.personId, patch)}
         />
@@ -252,11 +270,11 @@ function BoardCard({
   onDragEnd: () => void;
   onClick: () => void;
 }) {
+  const style = URGENCY_STYLE[card.urgency];
   const done = card.tasks.filter((t) => t.doneAt).length;
-  const overdueTasks = card.tasks.filter((t) => !t.doneAt && dueState(t.dueAt) === "over").length;
-  const openIssues = card.issues.filter((i) => i.status === "open").length;
-  const actionDue = dueState(card.nextActionDueAt);
-  const stalled = daysSince(card.offerAcceptedAt);
+  const pending = card.tasks.filter((t) => !t.doneAt);
+  const missing = pending.slice(0, 2);
+  const stageDays = daysSince(card.stageChangedAt);
 
   return (
     <button
@@ -265,137 +283,188 @@ function BoardCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`w-full cursor-grab rounded-xl border bg-white p-3 text-left shadow-sm transition hover:shadow-md ${
-        overdueTasks > 0 || openIssues > 0 ? "border-red-300" : "border-gray-200"
-      }`}
+      className={`w-full cursor-grab rounded-xl border p-3 text-left shadow-sm transition hover:shadow-md ${style.card}`}
     >
+      {/* 緊急度 + 名前 */}
       <div className="flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.dot}`} title={style.label} />
         {card.photoUrl ? (
-          <Image src={card.photoUrl} alt="" width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
-        ) : (
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--color-primary)] text-[11px] font-bold text-white">
-            {card.personName.slice(0, 1)}
-          </span>
-        )}
+          <Image src={card.photoUrl} alt="" width={26} height={26} className="h-6 w-6 rounded-full object-cover" />
+        ) : null}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-[var(--color-text-dark)]">
-            {card.personName}
-          </p>
-          <p className="truncate text-[11px] text-gray-500">{card.companyName ?? "企業未紐付け"}</p>
+          <p className="truncate text-[13px] font-semibold text-[var(--color-text-dark)]">{card.personName}</p>
+          <p className="truncate text-[10px] text-gray-500">{card.companyName ?? "企業未紐付け"}</p>
         </div>
+        {card.applicationType ? (
+          <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+            {card.applicationType}
+          </span>
+        ) : null}
       </div>
 
-      {/* 次アクション */}
-      <div className="mt-2 rounded-lg bg-gray-50 px-2 py-1.5">
-        {card.currentAction ? (
-          <p className="line-clamp-2 text-[11px] text-gray-700">{card.currentAction}</p>
+      {/* 緊急の理由 */}
+      {card.urgencyReasons.length > 0 ? (
+        <p
+          className={`mt-1.5 line-clamp-2 text-[10px] font-semibold ${
+            card.urgency === "red" ? "text-red-600" : "text-amber-700"
+          }`}
+        >
+          {card.urgencyReasons.join(" ・ ")}
+        </p>
+      ) : null}
+
+      {/* 保留理由 */}
+      {card.stage === HOLD_STAGE && card.holdReason ? (
+        <p className="mt-1.5 rounded bg-white/80 px-2 py-1 text-[10px] text-red-700">⚠ {card.holdReason}</p>
+      ) : null}
+
+      {/* 何が足りないか */}
+      <div className="mt-2 rounded-lg bg-white/80 px-2 py-1.5">
+        <p className="text-[10px] font-semibold text-gray-400">未完了</p>
+        {missing.length > 0 ? (
+          <ul className="mt-0.5 space-y-0.5">
+            {missing.map((t) => (
+              <li
+                key={t.id}
+                className={`truncate text-[11px] ${isOver(t.dueAt) ? "font-medium text-red-600" : "text-gray-700"}`}
+              >
+                ・{t.title}
+                {t.dueAt ? `（${fmt(t.dueAt)}）` : ""}
+              </li>
+            ))}
+            {pending.length > missing.length ? (
+              <li className="text-[10px] text-gray-400">ほか {pending.length - missing.length} 件</li>
+            ) : null}
+          </ul>
         ) : (
-          <p className="text-[11px] font-medium text-amber-700">次アクション未記入</p>
-        )}
-        {card.nextActionDueAt ? (
-          <p
-            className={`mt-0.5 text-[10px] font-semibold ${
-              actionDue === "over" ? "text-red-600" : actionDue === "soon" ? "text-amber-700" : "text-gray-500"
-            }`}
-          >
-            期限 {fmt(card.nextActionDueAt)}
-            {actionDue === "over" ? "（超過）" : ""}
+          <p className="mt-0.5 text-[11px] text-gray-400">
+            {card.tasks.length === 0 ? "チェックリスト未作成" : "すべて完了"}
           </p>
-        ) : null}
+        )}
       </div>
 
-      {/* チェックリストの進み具合 */}
-      <div className="mt-2">
-        <div className="flex items-center justify-between text-[10px] text-gray-500">
-          <span>やること {done} / {card.tasks.length}</span>
-          {overdueTasks > 0 ? <span className="font-semibold text-red-600">期限超過 {overdueTasks}</span> : null}
-        </div>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-200">
-          <div
-            className="h-full rounded-full bg-[var(--color-primary)]"
-            style={{ width: card.tasks.length ? `${(done / card.tasks.length) * 100}%` : "0%" }}
-          />
-        </div>
+      {/* 次にやること */}
+      <p
+        className={`mt-1.5 truncate text-[11px] ${
+          card.currentAction ? "text-gray-700" : "font-medium text-amber-700"
+        }`}
+      >
+        {card.currentAction ? `→ ${card.currentAction}` : "→ 次アクション未記入"}
+        {card.nextActionDueAt ? (
+          <span className={isOver(card.nextActionDueAt) ? "text-red-600" : "text-gray-400"}>
+            {" "}
+            ({fmt(card.nextActionDueAt)})
+          </span>
+        ) : null}
+      </p>
+
+      {/* 担当・進捗・滞留 */}
+      <div className="mt-2 flex flex-wrap items-center gap-1">
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] ${
+            card.followUpOwnerName
+              ? "bg-[var(--color-light)] text-[var(--color-primary)]"
+              : "bg-amber-100 text-amber-800"
+          }`}
+        >
+          {card.followUpOwnerName ? `内定 ${card.followUpOwnerName}` : "担当未設定"}
+        </span>
+        {card.recruitOwnerName ? (
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+            採用 {card.recruitOwnerName}
+          </span>
+        ) : null}
+        <span className="ml-auto text-[10px] text-gray-400">
+          {done}/{card.tasks.length}
+          {stageDays !== null ? ` ・この工程 ${stageDays}日` : ""}
+        </span>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {card.ownerName ? (
-          <span className="rounded-full bg-[var(--color-light)] px-2 py-0.5 text-[10px] text-[var(--color-primary)]">
-            {card.ownerName}
-          </span>
-        ) : null}
-        {openIssues > 0 ? (
-          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
-            問題 {openIssues}
-          </span>
-        ) : null}
-        {stalled !== null ? (
-          <span className="ml-auto text-[10px] text-gray-400">内定承諾から {stalled} 日</span>
-        ) : null}
+      {/* 予定日 */}
+      <div className="mt-1 flex gap-3 text-[10px]">
+        <span className={!card.applicationAt && isOver(card.applicationPlannedAt) ? "text-red-600" : "text-gray-400"}>
+          申請予定 {fmt(card.applicationPlannedAt)}
+        </span>
+        <span className={!card.joinAt && isOver(card.joinPlannedAt) ? "text-red-600" : "text-gray-400"}>
+          入社予定 {fmt(card.joinPlannedAt)}
+        </span>
       </div>
     </button>
   );
 }
 
-/** 右から開く詳細パネル */
 function CardDetail({
   card,
+  staff,
   onClose,
   onPatch,
 }: {
   card: OnboardingCard;
+  staff: { id: number; name: string }[];
   onClose: () => void;
   onPatch: (patch: Partial<OnboardingCard>) => void;
 }) {
   const [action, setAction] = useState(card.currentAction ?? "");
   const [actionDue, setActionDue] = useState(card.nextActionDueAt?.slice(0, 10) ?? "");
+  const [appType, setAppType] = useState(card.applicationType ?? "");
+  const [ownerId, setOwnerId] = useState(card.followUpOwnerId ?? 0);
   const [issueTitle, setIssueTitle] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const call = async (body: Record<string, unknown>, method: "PATCH" | "POST" = "PATCH") => {
+    const res = await fetch(`/api/onboarding/${card.personId}`, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      alert(`保存に失敗しました: ${data.error ?? res.statusText}`);
+      return null;
+    }
+    return data;
+  };
 
   const saveAction = async () => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/onboarding/${card.personId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentAction: action, nextActionDueAt: actionDue || null }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        alert(`保存に失敗しました: ${data.error ?? res.statusText}`);
-        return;
+      const ok = await call({ currentAction: action, nextActionDueAt: actionDue || null });
+      if (ok) {
+        onPatch({
+          currentAction: action.trim() || null,
+          nextActionDueAt: actionDue ? new Date(actionDue).toISOString() : null,
+        });
       }
-      onPatch({
-        currentAction: action.trim() || null,
-        nextActionDueAt: actionDue ? new Date(actionDue).toISOString() : null,
-      });
     } finally {
       setBusy(false);
     }
   };
 
-  const createTasks = async () => {
+  const saveOwner = async (id: number) => {
+    setOwnerId(id);
+    const ok = await call({ followUpOwnerId: id || null });
+    if (ok) {
+      onPatch({
+        followUpOwnerId: id || null,
+        followUpOwnerName: staff.find((s) => s.id === id)?.name ?? null,
+      });
+    }
+  };
+
+  const createTasks = async (replace = false) => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/onboarding/${card.personId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "createTasks" }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        alert(`作成に失敗しました: ${data.error ?? res.statusText}`);
-        return;
-      }
-      if (data.tasks) {
+      const data = await call({ action: "createTasks", applicationType: appType || null, replace }, "POST");
+      if (data?.tasks) {
         onPatch({
-          tasks: (data.tasks as { id: number; category: string; title: string; dueAt: string | null }[]).map((t) => ({
+          applicationType: appType || null,
+          tasks: (data.tasks as OnboardingTask[]).map((t) => ({
             id: t.id,
             category: t.category,
             title: t.title,
             dueAt: t.dueAt,
-            doneAt: null,
-            doneBy: null,
+            doneAt: t.doneAt ?? null,
+            doneBy: t.doneBy ?? null,
           })),
         });
       }
@@ -406,9 +475,7 @@ function CardDetail({
 
   const toggleTask = async (task: OnboardingTask) => {
     const next = task.doneAt ? null : new Date().toISOString();
-    onPatch({
-      tasks: card.tasks.map((t) => (t.id === task.id ? { ...t, doneAt: next } : t)),
-    });
+    onPatch({ tasks: card.tasks.map((t) => (t.id === task.id ? { ...t, doneAt: next } : t)) });
     const res = await fetch(`/api/onboarding/tasks/${task.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -424,18 +491,11 @@ function CardDetail({
     if (!issueTitle.trim()) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/onboarding/${card.personId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "addIssue", title: issueTitle }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        alert(`記録に失敗しました: ${data.error ?? res.statusText}`);
-        return;
+      const data = await call({ action: "addIssue", title: issueTitle }, "POST");
+      if (data?.issue) {
+        onPatch({ issues: [data.issue as OnboardingIssue, ...card.issues] });
+        setIssueTitle("");
       }
-      onPatch({ issues: [data.issue as OnboardingIssue, ...card.issues] });
-      setIssueTitle("");
     } finally {
       setBusy(false);
     }
@@ -443,9 +503,7 @@ function CardDetail({
 
   const closeIssue = async (issue: OnboardingIssue) => {
     const next = issue.status === "open" ? "closed" : "open";
-    onPatch({
-      issues: card.issues.map((i) => (i.id === issue.id ? { ...i, status: next } : i)),
-    });
+    onPatch({ issues: card.issues.map((i) => (i.id === issue.id ? { ...i, status: next } : i)) });
     await fetch(`/api/onboarding/issues/${issue.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -453,44 +511,95 @@ function CardDetail({
     });
   };
 
-  const grouped = ONBOARDING_TASK_CATEGORIES.map((category) => ({
-    category,
-    items: card.tasks.filter((t) => t.category === category),
-  })).filter((g) => g.items.length > 0);
-  const others = card.tasks.filter(
-    (t) => !ONBOARDING_TASK_CATEGORIES.includes(t.category as (typeof ONBOARDING_TASK_CATEGORIES)[number]),
-  );
+  const categories = Array.from(new Set(card.tasks.map((t) => t.category)));
+  const style = URGENCY_STYLE[card.urgency];
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-lg flex-col overflow-y-auto bg-white shadow-2xl"
+        className="flex h-full w-full max-w-xl flex-col overflow-y-auto bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
-          <div>
-            <p className="text-lg font-bold text-[var(--color-text-dark)]">{card.personName}</p>
-            <p className="mt-0.5 text-xs text-gray-500">
-              {card.companyName ?? "企業未紐付け"}
-              {card.ownerName ? ` ・ 担当 ${card.ownerName}` : ""}
-            </p>
-            <Link
-              href={`/personnel/${card.personId}/edit`}
-              className="mt-1 inline-block text-[11px] text-[var(--color-primary)] hover:underline"
-            >
-              候補者詳細を開く →
-            </Link>
+        <div className="border-b border-gray-200 px-6 py-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className={`h-2.5 w-2.5 rounded-full ${style.dot}`} />
+                <p className="text-lg font-bold text-[var(--color-text-dark)]">{card.personName}</p>
+              </div>
+              <p className="mt-0.5 text-xs text-gray-500">
+                {card.companyName ?? "企業未紐付け"} ・ {card.nationality} ・ {card.residenceStatus}
+                {card.visaExpiryDate ? ` ・ 在留期限 ${card.visaExpiryDate}` : ""}
+              </p>
+              <Link
+                href={`/personnel/${card.personId}/edit`}
+                className="mt-1 inline-block text-[11px] text-[var(--color-primary)] hover:underline"
+              >
+                候補者詳細を開く →
+              </Link>
+            </div>
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              ✕
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            ✕
-          </button>
+          {card.urgencyReasons.length > 0 ? (
+            <p
+              className={`mt-2 rounded-lg px-3 py-2 text-[12px] ${
+                card.urgency === "red" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"
+              }`}
+            >
+              {card.urgencyReasons.join(" / ")}
+            </p>
+          ) : null}
         </div>
 
-        {/* 次アクション */}
+        {/* 担当・申請種別・予定日 */}
+        <div className="grid grid-cols-2 gap-3 border-b border-gray-100 px-6 py-4">
+          <label className="text-[11px] text-gray-500">
+            内定フォロー担当
+            <select
+              value={ownerId}
+              onChange={(e) => void saveOwner(Number(e.target.value))}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-800"
+            >
+              <option value={0}>未設定</option>
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-[11px] text-gray-500">
+            申請種別
+            <select
+              value={appType}
+              onChange={(e) => setAppType(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-800"
+            >
+              <option value="">未設定</option>
+              {APPLICATION_TYPES.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </select>
+          </label>
+          <div className="col-span-2 flex flex-wrap gap-3 text-[11px] text-gray-500">
+            <span>内定承諾 {fmt(card.offerAcceptedAt)}</span>
+            <span className={!card.applicationAt && isOver(card.applicationPlannedAt) ? "text-red-600" : ""}>
+              申請予定 {fmt(card.applicationPlannedAt)}（内定+10日）
+            </span>
+            <span>申請 {fmt(card.applicationAt)}</span>
+            <span className={!card.joinAt && isOver(card.joinPlannedAt) ? "text-red-600" : ""}>
+              入社予定 {fmt(card.joinPlannedAt)}（内定+2か月）
+            </span>
+          </div>
+        </div>
+
+        {/* 次にやること */}
         <div className="border-b border-gray-100 px-6 py-4">
           <p className="text-sm font-semibold text-[var(--color-text-dark)]">次にやること</p>
           <textarea
-            className="mt-2 min-h-16 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="mt-2 min-h-14 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
             value={action}
             onChange={(e) => setAction(e.target.value)}
             placeholder="例: 受付票を企業へ共有"
@@ -520,31 +629,30 @@ function CardDetail({
             <p className="text-sm font-semibold text-[var(--color-text-dark)]">
               やること（{card.tasks.filter((t) => t.doneAt).length} / {card.tasks.length}）
             </p>
-            {card.tasks.length === 0 ? (
-              <button
-                type="button"
-                onClick={() => void createTasks()}
-                disabled={busy}
-                className="rounded-lg border border-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] disabled:opacity-50"
-              >
-                標準チェックリストを作成
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={() => void createTasks(card.tasks.length > 0)}
+              disabled={busy}
+              className="rounded-lg border border-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] disabled:opacity-50"
+            >
+              {card.tasks.length === 0 ? "チェックリストを作成" : "申請種別で作り直す"}
+            </button>
           </div>
           {card.tasks.length === 0 ? (
             <p className="mt-2 text-[12px] text-gray-500">
-              内定承諾日を起点に、条件確認・書類・申請・渡航住居・入社後の 20 項目を自動で作ります。
+              申請種別（認定 / 変更 / 更新 / 特定活動）を選んで作成すると、その種別に必要な書類と手順が並びます。
+              期限は内定承諾日から自動計算されます。
             </p>
           ) : null}
           <div className="mt-3 space-y-4">
-            {[...grouped, ...(others.length ? [{ category: "その他", items: others }] : [])].map((g) => (
-              <div key={g.category}>
-                <p className="text-[11px] font-semibold text-gray-400">{g.category}</p>
+            {categories.map((category) => (
+              <div key={category}>
+                <p className="text-[11px] font-semibold text-gray-400">{category}</p>
                 <ul className="mt-1 space-y-1">
-                  {g.items.map((t) => {
-                    const state = t.doneAt ? "done" : dueState(t.dueAt);
-                    return (
-                      <li key={t.id} className="flex items-start gap-2 rounded-lg px-1 py-1 hover:bg-gray-50">
+                  {card.tasks
+                    .filter((t) => t.category === category)
+                    .map((t) => (
+                      <li key={t.id} className="flex items-start gap-2 rounded-lg px-1 py-0.5 hover:bg-gray-50">
                         <input
                           type="checkbox"
                           checked={Boolean(t.doneAt)}
@@ -553,40 +661,33 @@ function CardDetail({
                         />
                         <span className="min-w-0 flex-1">
                           <span
-                            className={`block text-[13px] ${
-                              t.doneAt ? "text-gray-400 line-through" : "text-gray-800"
-                            }`}
+                            className={`block text-[13px] ${t.doneAt ? "text-gray-400 line-through" : "text-gray-800"}`}
                           >
                             {t.title}
                           </span>
                           <span
                             className={`text-[10px] ${
-                              state === "over"
-                                ? "font-semibold text-red-600"
-                                : state === "soon"
-                                  ? "text-amber-700"
-                                  : "text-gray-400"
+                              !t.doneAt && isOver(t.dueAt) ? "font-semibold text-red-600" : "text-gray-400"
                             }`}
                           >
                             {t.dueAt ? `期限 ${fmt(t.dueAt)}` : "期限なし"}
-                            {state === "over" ? " ・超過" : ""}
+                            {!t.doneAt && isOver(t.dueAt) ? " ・超過" : ""}
                             {t.doneAt ? ` ・完了 ${fmt(t.doneAt)}${t.doneBy ? ` (${t.doneBy})` : ""}` : ""}
                           </span>
                         </span>
                       </li>
-                    );
-                  })}
+                    ))}
                 </ul>
               </div>
             ))}
           </div>
         </div>
 
-        {/* 起きた問題 */}
+        {/* 問題 */}
         <div className="px-6 py-4">
           <p className="text-sm font-semibold text-[var(--color-text-dark)]">起きた問題・クレーム</p>
           <p className="mt-0.5 text-[11px] text-gray-500">
-            記録しておくと、同じことが次の案件で起きないよう振り返れます。
+            未解決があるとカードが赤になります。保留列へ移すときの理由にもなります。
           </p>
           <div className="mt-2 flex gap-2">
             <input

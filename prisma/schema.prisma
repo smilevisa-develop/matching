@@ -318,6 +318,7 @@ model StaffAccount {
   onboardingFormTemplates OnboardingFormTemplate[]
   messageTemplates        MessageTemplate[]
   resumeTemplates         ResumeTemplate[]
+  followUpPlacements      PersonPlacement[] @relation("PlacementFollowUpOwner")
   createdResumes          ResumeDocument[]
   ownedDeals              Deal[]
 }
@@ -846,8 +847,17 @@ model PersonPlacement {
   sixMonthStatus       String?
   consultation         String?
   currentAction        String?
-  /// 次アクションの期限 (内定後管理ボードで遅延を赤く出すために使う)
+  /// 次アクションの期限 (内定者管理ボードで遅延を赤く出すために使う)
   nextActionDueAt      DateTime?
+  /// 今の工程に入った日時 (滞留日数の算出に使う)
+  stageChangedAt       DateTime?
+  /// 保留にした理由 (保留列に置いた問題の中身)
+  holdReason           String?
+  /// 保留にする前の工程 (解除時に戻す先)
+  heldFromStage        String?
+  /// 内定フォロー担当 (採用担当とは別。ワークフロー STEP3 以降の担当)
+  followUpOwnerId      Int?
+  followUpOwner        StaffAccount? @relation("PlacementFollowUpOwner", fields: [followUpOwnerId], references: [id], onDelete: SetNull)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 

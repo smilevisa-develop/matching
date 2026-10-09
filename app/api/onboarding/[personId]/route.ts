@@ -10,7 +10,14 @@
 
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
-import { buildOnboardingTasks } from "@/lib/onboarding-tasks";
+import {
+  buildFlowTasks,
+  HOLD_STAGE,
+  OFFER_TO_APPLICATION_DAYS,
+  OFFER_TO_JOIN_DAYS,
+  ONBOARDING_STAGES,
+  resolveStage,
+} from "@/lib/onboarding-flow";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,7 +60,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
     const placement = await ensurePlacement(personId);
 
     const data: Record<string, unknown> = {};
-    if (typeof body.stage === "string") data.stage = body.stage;
+    if (typeof body.stage === "string" && ONBOARDING_STAGES.some((s) => s.id === body.stage)) {
+      const current = resolveStage(placement);
+      data.stage = body.stage;
+      data.stageChangedAt = new Date();
+      if (body.stage === HOLD_STAGE) {
+        // 保留にするときは、戻す先として今の工程を覚えておく
+        if (current !== HOLD_STAGE) data.heldFromStage = current;
+        if (typeof body.holdReason === "string") data.holdReason = body.holdReason.trim() || null;
+      } else {
+        data.heldFromStage = null;
+        data.holdReason = null;
+      }
+    }
+    if (body.holdReason !== undefined && data.holdReason === undefined) {
+      data.holdReason = typeof body.holdReason === "string" && body.holdReason.trim()
+        ? body.holdReason.trim()
+        : null;
+    }
+    if (body.applicationType !== undefined) {
+      data.applicationType = typeof body.applicationType === "string" && body.applicationType.trim()
+        ? body.applicationType.trim()
+        : null;
+    }
+    if (body.followUpOwnerId !== undefined) {
+      const id = Number(body.followUpOwnerId);
+      data.followUpOwnerId = Number.isFinite(id) && id > 0 ? id : null;
+    }
     if (body.currentAction !== undefined) {
       data.currentAction = typeof body.currentAction === "string" && body.currentAction.trim()
         ? body.currentAction.trim()
@@ -86,10 +119,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ personI
 
     if (body.action === "createTasks") {
       const already = await prisma.placementTask.count({ where: { placementId: placement.id } });
-      if (already > 0) {
+      if (already > 0 && !body.replace) {
         return Response.json({ ok: true, created: 0, note: "既にチェックリストがあります" });
       }
-      const tasks = buildOnboardingTasks(placement.offerAcceptedAt ?? placement.offerAt ?? null);
+      if (body.replace) {
+        // 申請種別を選び直したとき: 未完了のタスクだけ入れ替える (完了済みは残す)
+        await prisma.placementTask.deleteMany({ where: { placementId: placement.id, doneAt: null } });
+      }
+      const base = placement.offerAcceptedAt ?? placement.offerAt ?? placement.createdAt;
+      // 川村さんの指示: 申請予定日 = 内定受領 +10日 / 就業開始予定日 = 内定受領 +2か月
+      await prisma.personPlacement.update({
+        where: { id: placement.id },
+        data: {
+          applicationPlannedAt:
+            placement.applicationPlannedAt ??
+            new Date(base.getTime() + OFFER_TO_APPLICATION_DAYS * 86_400_000),
+          joinPlannedAt:
+            placement.joinPlannedAt ?? new Date(base.getTime() + OFFER_TO_JOIN_DAYS * 86_400_000),
+        },
+      });
+      const tasks = buildFlowTasks(
+        typeof body.applicationType === "string" ? body.applicationType : placement.applicationType,
+        base,
+      );
       await prisma.placementTask.createMany({
         data: tasks.map((t) => ({ ...t, placementId: placement.id })),
       });
