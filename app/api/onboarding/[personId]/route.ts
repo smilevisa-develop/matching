@@ -97,7 +97,39 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
       if (parsed !== undefined) data[field] = parsed;
     }
     const updated = await prisma.personPlacement.update({ where: { id: placement.id }, data });
-    return Response.json({ ok: true, placement: updated });
+
+    // 申請種別が変わったら、未完了タスクをその種別の内容で作り直す
+    // (完了済みは残す。種別が決まるまでは共通タスクだけが入っている状態)
+    let rebuiltTasks = false;
+    if (data.applicationType !== undefined && data.applicationType !== placement.applicationType) {
+      await prisma.placementTask.deleteMany({ where: { placementId: placement.id, doneAt: null } });
+      const base = updated.offerAcceptedAt ?? updated.offerAt ?? null;
+      const doneTitles = new Set(
+        (
+          await prisma.placementTask.findMany({
+            where: { placementId: placement.id },
+            select: { title: true },
+          })
+        ).map((t) => t.title),
+      );
+      const tasks = buildFlowTasks(updated.applicationType, base).filter(
+        (t) => !doneTitles.has(t.title),
+      );
+      if (tasks.length > 0) {
+        await prisma.placementTask.createMany({
+          data: tasks.map((t) => ({ ...t, placementId: placement.id })),
+        });
+      }
+      rebuiltTasks = true;
+    }
+
+    const tasks = rebuiltTasks
+      ? await prisma.placementTask.findMany({
+          where: { placementId: placement.id },
+          orderBy: { sortOrder: "asc" },
+        })
+      : undefined;
+    return Response.json({ ok: true, placement: updated, rebuiltTasks, tasks });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "error" },
