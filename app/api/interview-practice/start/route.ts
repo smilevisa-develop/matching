@@ -3,22 +3,28 @@
  *
  * POST /api/interview-practice/start
  *   body: { name, nationality, gender, email, level, industry, feedbackLanguage, consent }
- *   → { ok, token, say, questionNumber, maxQuestions, turnCount }
+ *   → { ok, token, say, speech, questionNumber, maxQuestions, turnCount }
  *
  * 候補者が自分で登録する。同じメールアドレスは同じ利用者として扱い、
  * 選考データ (Person) には書き込まない。1 問目は質問集から出すので AI は呼ばない。
  */
 
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { GENDERS } from "@/lib/candidate-profile";
 import { countQuestions, startPractice } from "@/lib/interview-practice";
 import {
+  ACKNOWLEDGEMENTS,
+  CLOSING_LINE,
+  RETRY_LINE,
+  buildQuestionPlan,
   findFeedbackLanguage,
   findPracticeIndustry,
   isPracticeLevel,
   maxQuestionCount,
 } from "@/lib/interview-practice-questions";
 import { checkPracticeLimit, newPracticeToken } from "@/lib/interview-practice-session";
+import { prepareSpeech, purgeOldSpeech, warmSpeech } from "@/lib/interview-practice-speech";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,7 +85,7 @@ export async function POST(req: Request) {
       select: { id: true },
     });
 
-    const progress = startPractice(level, industry.key);
+    const { progress, segments } = startPractice(level, industry.key);
     const session = await prisma.interviewPracticeSession.create({
       data: {
         token: newPracticeToken(),
@@ -94,10 +100,26 @@ export async function POST(req: Request) {
       select: { token: true },
     });
 
+    // 応答のあとで行い、候補者を待たせない:
+    //   ・その場で作った音声の古いものを片付ける
+    //   ・この回で使う残りの文 (2 問目以降・相づち・聞き返し・終わりのあいさつ) の音声を先に作っておく
+    after(async () => {
+      await purgeOldSpeech();
+      await warmSpeech([
+        ...ACKNOWLEDGEMENTS,
+        ...buildQuestionPlan(level, industry.key)
+          .slice(1)
+          .map((q) => q.text),
+        RETRY_LINE[level],
+        CLOSING_LINE[level],
+      ]);
+    });
+
     return Response.json({
       ok: true,
       token: session.token,
       say: progress.turns[0].text,
+      speech: await prepareSpeech(segments),
       questionNumber: countQuestions(progress.turns),
       maxQuestions: maxQuestionCount(level, industry.key),
       turnCount: progress.turns.length,

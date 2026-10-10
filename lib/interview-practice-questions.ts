@@ -479,8 +479,37 @@ export const RETRY_LINE: LeveledText = {
   N2: "申し訳ありません、少し聞き取りにくかったので、もう一度お願いできますか。",
 };
 
-/** 読み上げの速さ (ブラウザの音声合成の rate) */
-export const SPEECH_RATE: Record<PracticeLevel, number> = { N4: 0.8, N3: 0.95, N2: 1.05 };
+/**
+ * 回答を聞いたあとの相づち。AI にはこの中から選ばせる。
+ * 自由に書かせると「頼もしいですね」のような評価が混じるのと、
+ * 決まった文にしておけば音声を作り置きできるため。先頭が既定。
+ */
+export const ACKNOWLEDGEMENTS = ["ありがとうございます。", "わかりました。", "そうですか。", "そうなんですね。"];
+
+/** 質問集にある決まった文の一覧 (音声を作り置きしてよい文かどうかの判定に使う) */
+export function allFixedLines(): string[] {
+  const lines = new Set<string>(ACKNOWLEDGEMENTS);
+  for (const level of PRACTICE_LEVELS) {
+    lines.add(OPENING_LINE[level]);
+    lines.add(CLOSING_LINE[level]);
+    lines.add(RETRY_LINE[level]);
+    for (const industry of PRACTICE_INDUSTRIES) {
+      for (const q of buildQuestionPlan(level, industry.key)) lines.add(q.text);
+    }
+  }
+  return [...lines];
+}
+
+/**
+ * 読み上げの速さ。
+ *   device … AI の音声が使えないときの、端末の音声合成の rate
+ *   ai     … AI の音声の再生速度 (もとが自然な速さなので、やさしいレベルだけ少し落とす)
+ */
+export const SPEECH_RATE: Record<PracticeLevel, { device: number; ai: number }> = {
+  N4: { device: 0.8, ai: 0.85 },
+  N3: { device: 0.95, ai: 1 },
+  N2: { device: 1.05, ai: 1 },
+};
 
 /** 1 回の回答で録音できる長さの上限 (秒) */
 export const ANSWER_MAX_SECONDS = 90;

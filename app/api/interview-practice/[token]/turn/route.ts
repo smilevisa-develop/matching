@@ -3,7 +3,7 @@
  *
  * POST /api/interview-practice/[token]/turn
  *   body: { dataUrl, seconds, turnCount }   dataUrl は "data:audio/...;base64,..."
- *   → { ok, say, done, questionNumber, turnCount }
+ *   → { ok, say, speech, done, questionNumber, turnCount }
  *
  * 候補者の回答 (音声) を AI が聞き、次に面接官が言うことを返す。
  * 音声は AI に渡すだけで保存しない。残すのは文字起こしだけ。
@@ -24,6 +24,7 @@ import {
   isBusyError,
   loadPracticeSession,
 } from "@/lib/interview-practice-session";
+import { prepareSpeech } from "@/lib/interview-practice-speech";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -125,6 +126,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     return Response.json({
       ok: true,
       say: next.say.text,
+      speech: await prepareSpeech(next.segments),
       done: next.done,
       questionNumber: countQuestions(next.progress.turns),
       turnCount: next.progress.turns.length,

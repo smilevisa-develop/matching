@@ -20,6 +20,7 @@
 import { ThinkingLevel } from "@google/genai";
 import { generateContentRotating, getGeminiModel } from "./gemini-keys";
 import {
+  ACKNOWLEDGEMENTS,
   CLOSING_LINE,
   MAX_FOLLOWUPS,
   OPENING_LINE,
@@ -133,29 +134,33 @@ export function canFollowUp(progress: PracticeProgress, plan: PlannedQuestion[])
   return !turnsSinceCurrentMain(progress.turns).some((t) => t.role === "interviewer" && t.kind === "followup");
 }
 
+/** 面接官の発言を 1 つ組み立てる。segments は読み上げの単位 (文ごとに音声を作り置きするため) */
+function interviewerSays(
+  segments: string[],
+  kind: InterviewerTurn["kind"],
+  questionKey: string | null,
+): { say: InterviewerTurn; segments: string[] } {
+  return { say: { role: "interviewer", text: segments.join(" "), kind, questionKey }, segments };
+}
+
 /** 面接を始める (あいさつ + 1 問目) */
-export function startPractice(level: PracticeLevel, industryKey: string): PracticeProgress {
+export function startPractice(
+  level: PracticeLevel,
+  industryKey: string,
+): { progress: PracticeProgress; segments: string[] } {
   const plan = buildQuestionPlan(level, industryKey);
   if (plan.length === 0) throw new Error("質問を用意できない分野です");
+  const first = interviewerSays([OPENING_LINE[level], plan[0].text], "main", plan[0].key);
   return {
-    turns: [
-      {
-        role: "interviewer",
-        text: `${OPENING_LINE[level]} ${plan[0].text}`,
-        kind: "main",
-        questionKey: plan[0].key,
-      },
-    ],
-    mainIndex: 0,
-    followupsUsed: 0,
+    progress: { turns: [first.say], mainIndex: 0, followupsUsed: 0 },
+    segments: first.segments,
   };
 }
 
+/** AI が選んだ相づちを確かめる (一覧に無いものが返ってきたら既定に戻す) */
 function cleanAcknowledgement(raw: string): string {
-  const s = raw.replace(/\s+/g, " ").trim();
-  // 相づちのはずが質問や長い感想になっていたら、定型に戻す
-  if (!s || s.length > 30 || /[?？]/.test(s)) return "ありがとうございます。";
-  return /[。！!]$/.test(s) ? s : `${s}。`;
+  const s = raw.replace(/\s+/g, "").trim();
+  return ACKNOWLEDGEMENTS.find((a) => a === s || a === `${s}。`) ?? ACKNOWLEDGEMENTS[0];
 }
 
 function cleanFollowup(raw: string): string {
@@ -172,7 +177,7 @@ export function advancePractice(
   industryKey: string,
   observation: TurnObservation,
   seconds: number | null,
-): { progress: PracticeProgress; say: InterviewerTurn; done: boolean } {
+): { progress: PracticeProgress; say: InterviewerTurn; segments: string[]; done: boolean } {
   const plan = buildQuestionPlan(level, industryKey);
   const heard = observation.audioIssue === "none" && observation.transcript.trim().length > 0;
   const followUpAllowed = canFollowUp(progress, plan);
@@ -193,57 +198,37 @@ export function advancePractice(
 
   // 聞き取れなかった: 同じ質問で 1 回だけ聞き返す
   if (!heard && !alreadyRetried) {
-    const say: InterviewerTurn = {
-      role: "interviewer",
-      text: RETRY_LINE[level],
-      kind: "retry",
-      questionKey: current?.key ?? null,
-    };
-    return { progress: { ...progress, turns: [...turns, say] }, say, done: false };
+    const next = interviewerSays([RETRY_LINE[level]], "retry", current?.key ?? null);
+    return { progress: { ...progress, turns: [...turns, next.say] }, ...next, done: false };
   }
 
-  const ack = heard ? cleanAcknowledgement(observation.acknowledgement) : "";
+  const ack = heard ? [cleanAcknowledgement(observation.acknowledgement)] : [];
   const followup = cleanFollowup(observation.followupQuestion);
 
   if (heard && observation.action === "followup" && followUpAllowed && followup) {
-    const say: InterviewerTurn = {
-      role: "interviewer",
-      text: `${ack} ${followup}`,
-      kind: "followup",
-      questionKey: current?.key ?? null,
-    };
+    const next = interviewerSays([...ack, followup], "followup", current?.key ?? null);
     return {
-      progress: { ...progress, turns: [...turns, say], followupsUsed: progress.followupsUsed + 1 },
-      say,
+      progress: { ...progress, turns: [...turns, next.say], followupsUsed: progress.followupsUsed + 1 },
+      ...next,
       done: false,
     };
   }
 
   const nextIndex = progress.mainIndex + 1;
-  const next = plan[nextIndex];
-  if (!next) {
-    const say: InterviewerTurn = {
-      role: "interviewer",
-      text: CLOSING_LINE[level],
-      kind: "closing",
-      questionKey: null,
-    };
-    return { progress: { ...progress, turns: [...turns, say] }, say, done: true };
+  const nextQuestion = plan[nextIndex];
+  if (!nextQuestion) {
+    const next = interviewerSays([CLOSING_LINE[level]], "closing", null);
+    return { progress: { ...progress, turns: [...turns, next.say] }, ...next, done: true };
   }
 
-  const say: InterviewerTurn = {
-    role: "interviewer",
-    text: ack ? `${ack} ${next.text}` : next.text,
-    kind: "main",
-    questionKey: next.key,
-  };
-  return { progress: { ...progress, turns: [...turns, say], mainIndex: nextIndex }, say, done: false };
+  const next = interviewerSays([...ack, nextQuestion.text], "main", nextQuestion.key);
+  return { progress: { ...progress, turns: [...turns, next.say], mainIndex: nextIndex }, ...next, done: false };
 }
 
 // ── AI ──────────────────────────────────────────────────────────────
 
 /** 練習専用のキー (未設定なら undefined = 既存機能と同じキーを使う) */
-function practiceKeys(): string[] | undefined {
+export function practiceKeys(): string[] | undefined {
   const raw = process.env.INTERVIEW_PRACTICE_GEMINI_API_KEYS?.trim();
   if (!raw) return undefined;
   const keys = raw.split(",").map((k) => k.trim()).filter(Boolean);
@@ -335,7 +320,8 @@ export async function observeAnswer(input: {
    十分に答えられていれば "next"。${followUpAllowed ? "" : '\n   この質問ではもう深掘りしない。必ず "next" にする。'}
 4. followupQuestion: action が "followup" のときの深掘りの質問を 1 つだけ。1 文で、候補者のレベルに合わせた日本語。
    候補者が実際に言った言葉を拾って聞く。"next" のときは空文字。
-5. acknowledgement: 回答への短い相づち (例: 「ありがとうございます。」「そうですか。」)。15 文字以内。
+5. acknowledgement: 回答への相づち。次の中から、会話としていちばん自然なものを 1 つ選び、そのまま書く。
+   ${ACKNOWLEDGEMENTS.map((a) => `「${a}」`).join(" ")}
 
 # 深掘りの観点 (この質問)
 ${current && current.followupHints.length > 0 ? current.followupHints.map((h) => `- ${h}`).join("\n") : "- (なし)"}
