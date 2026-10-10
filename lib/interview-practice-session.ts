@@ -10,10 +10,19 @@ import { prisma } from "./prisma";
 import { parseTurns, type PracticeProgress } from "./interview-practice";
 import { isPracticeLevel, type PracticeLevel } from "./interview-practice-questions";
 
-/** 同じ利用者が 24 時間に始められる回数 */
-export const PRACTICE_LIMIT_PER_USER_PER_DAY = 3;
-/** 全体で 24 時間に始められる回数 (月 50 人の想定に対して十分な余裕) */
-export const PRACTICE_LIMIT_GLOBAL_PER_DAY = 40;
+/**
+ * 同じ利用者が 24 時間に始められる回数。
+ * 2026/10: 社内で試している間は、すぐ上限に当たらないよう 3 → 30 に引き上げている。
+ *          候補者に案内する前に 3 程度へ戻すこと。
+ */
+export const PRACTICE_LIMIT_PER_USER_PER_DAY = 30;
+/**
+ * 全体で 24 時間に始められる回数。
+ * 2026/10: 同じ理由で 40 → 100 に引き上げている (月 50 人の想定なら 40 で十分)。
+ * ここを上げても Gemini の無料枠そのものは増えない。枠を使い切ると、
+ * 練習の途中で「いま利用が集中しています」と出る。
+ */
+export const PRACTICE_LIMIT_GLOBAL_PER_DAY = 100;
 /** 始めてからこの時間を過ぎた練習は続きを受け付けない */
 const SESSION_LIFETIME_MS = 2 * 60 * 60 * 1000;
 /** 1 回の回答として受け付ける音声の大きさ (data URL の文字数) */
