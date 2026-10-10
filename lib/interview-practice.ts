@@ -17,6 +17,7 @@
  *     別の無料枠で動く。未設定なら同じキーを共有する。
  */
 
+import { ThinkingLevel } from "@google/genai";
 import { generateContentRotating, getGeminiModel } from "./gemini-keys";
 import {
   CLOSING_LINE,
@@ -255,6 +256,13 @@ const LEVEL_GUIDE: Record<PracticeLevel, string> = {
   N2: "N2 相当。実際の面接に近い自然な日本語で話す。敬語を使い、理由や具体例を求めてよい。",
 };
 
+/** リクエストの形が受け付けられなかった (400 / INVALID_ARGUMENT) エラーか */
+function isInvalidArgumentError(e: unknown): boolean {
+  const status = (e as { status?: number })?.status;
+  const msg = String((e as { message?: string })?.message ?? e).toUpperCase();
+  return status === 400 || msg.includes("INVALID_ARGUMENT");
+}
+
 function parseJson(text: string): Record<string, unknown> {
   try {
     return JSON.parse(text);
@@ -344,27 +352,40 @@ ${formatTranscript(progress.turns)}
 # 直前の質問
 ${question?.text ?? ""}`;
 
-  const response = await generateContentRotating(
-    {
-      model: getGeminiModel(),
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: prompt },
-            { inlineData: { mimeType: audio.mimeType, data: audio.base64 } },
-            { text: "指定スキーマの JSON を 1 つだけ返してください。" },
-          ],
+  // 会話の途中なので、返事の速さを優先して AI の「考える量」を少なくする。
+  // 既定 (中) のままだと、本番で 1 往復に 50 秒前後かかることがあった (2026/10)。
+  const ask = (quick: boolean) =>
+    generateContentRotating(
+      {
+        model: getGeminiModel(),
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: audio.mimeType, data: audio.base64 } },
+              { text: "指定スキーマの JSON を 1 つだけ返してください。" },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: TURN_SCHEMA as unknown as Record<string, unknown>,
+          temperature: 0.3,
+          ...(quick ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {}),
         },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: TURN_SCHEMA as unknown as Record<string, unknown>,
-        temperature: 0.3,
       },
-    },
-    { keys: practiceKeys() },
-  );
+      { keys: practiceKeys() },
+    );
+
+  let response: Awaited<ReturnType<typeof ask>>;
+  try {
+    response = await ask(true);
+  } catch (e) {
+    // この設定を受け付けないモデル (GEMINI_MODEL で古いモデルを指定した場合など) では、設定なしでやり直す
+    if (!isInvalidArgumentError(e)) throw e;
+    response = await ask(false);
+  }
 
   const raw = parseJson(response.text?.trim() ?? "");
   const issue = str(raw.audioIssue);
