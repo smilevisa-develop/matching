@@ -143,8 +143,9 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    label: "請求",
-    href: "/invoices",
+    // 内定後にやること (内定者管理 + 請求) をまとめたグループ
+    label: "内定後",
+    href: "/onboarding",
     icon: InvoiceIcon,
     children: [
       { label: "内定者管理", href: "/onboarding" },
