@@ -110,6 +110,7 @@ export default async function OnboardingPage() {
         dueAt: iso(t.dueAt),
         doneAt: iso(t.doneAt),
         doneBy: t.doneBy,
+        note: t.note,
       })),
       issues: p.issues.map((i) => ({
         id: i.id,

@@ -11,24 +11,74 @@
  *   申請予定日 = 内定受領から 10 日後 / 就業開始予定日 = 内定受領から 2 か月後
  */
 
+import { MASTER_TASKS, TASK_PHASES, type MasterTask } from "./onboarding-task-master";
+
 export const OFFER_TO_APPLICATION_DAYS = 10;
 export const OFFER_TO_JOIN_DAYS = 60;
 
-/** ボードの列。hold (保留) は問題が起きた人を一時的に置く場所 */
+/**
+ * ボードの列 (ステージ)。
+ * phases は「この工程に属するタスク」を表し、スプレッドシート
+ * 「内定後タスク管理表」の工程名と一対一で対応している。
+ * hold (保留) は問題が起きた人を一時的に置く場所。
+ */
 export const ONBOARDING_STAGES = [
   {
-    id: "pledge",
-    label: "誓約書・情報共有",
-    hint: "誓約書の署名案内、内定フォロー担当への引き継ぎ",
-    targetDays: 3,
+    id: "offer",
+    label: "内定直後",
+    hint: "条件・費用負担の確定、企業への共有開始",
+    targetDays: 7,
+    phases: ["1. 内定直後（条件確定）", "2. 企業への共有・報告"],
   },
-  { id: "documents", label: "書類収集", hint: "必要書類の案内と回収", targetDays: 10 },
-  { id: "prepare", label: "申請準備・署名", hint: "契約書類の署名、SmileVisa登録、社内報告", targetDays: 15 },
-  { id: "applying", label: "申請中", hint: "入管へ提出済み。申請番号を記録", targetDays: 45 },
-  { id: "result", label: "結果受領・在留カード", hint: "結果通知、在留カード受取 (14日以内)", targetDays: 14 },
-  { id: "joining", label: "入社準備", hint: "入国日/航空券・住所変更・寮・入社日確定", targetDays: 20 },
-  { id: "joined", label: "入社済み・請求", hint: "入社報告とフォロー、請求対応", targetDays: 30 },
-  { id: "hold", label: "⚠ 保留・問題対応中", hint: "問題が解決するまで一時的にここへ置く", targetDays: 7 },
+  {
+    id: "documents",
+    label: "書類収集",
+    hint: "必要書類の案内と回収 (共通 + 申請種別別)",
+    targetDays: 10,
+    phases: ["3. 書類収集（共通）", "4. 書類収集（種別別）"],
+  },
+  {
+    id: "prepare",
+    label: "申請準備・署名",
+    hint: "SmileVisa登録、契約書類の署名、社内報告",
+    targetDays: 7,
+    phases: ["5. 申請準備・署名"],
+  },
+  {
+    id: "applying",
+    label: "申請中",
+    hint: "入管へ提出。申請番号を記録して共有",
+    targetDays: 45,
+    phases: ["6. 申請"],
+  },
+  {
+    id: "result",
+    label: "結果受領・在留カード",
+    hint: "結果通知、在留カード受取 (14日以内)",
+    targetDays: 14,
+    phases: ["7. 結果受領・在留カード"],
+  },
+  {
+    id: "arrival",
+    label: "渡航・住居",
+    hint: "入国日/航空券の確認、送迎、住居・生活の立ち上げ",
+    targetDays: 20,
+    phases: ["8. 渡航・入国", "9. 住居・生活"],
+  },
+  {
+    id: "joined",
+    label: "入社前後・請求",
+    hint: "入社前確認、当日連絡、1週間後フォロー、請求",
+    targetDays: 30,
+    phases: ["10. 入社前後"],
+  },
+  {
+    id: "hold",
+    label: "⚠ 保留・問題対応中",
+    hint: "問題が解決するまで一時的にここへ置く",
+    targetDays: 7,
+    phases: [],
+  },
 ] as const;
 
 export type OnboardingStageId = (typeof ONBOARDING_STAGES)[number]["id"];
@@ -37,12 +87,15 @@ export const HOLD_STAGE: OnboardingStageId = "hold";
 
 /** 旧ステージ (入社進捗ページ) からの読み替え */
 const LEGACY_STAGE_MAP: Record<string, OnboardingStageId> = {
-  offered: "pledge",
+  offered: "offer",
   accepted: "documents",
   applying: "applying",
   approved: "result",
-  entered: "joining",
+  entered: "arrival",
   joined: "joined",
+  // v1 のステージ名
+  pledge: "offer",
+  joining: "arrival",
 };
 
 /** 保存値 / 日付から現在のステージを決める */
@@ -58,130 +111,70 @@ export function resolveStage(input: {
   if (ONBOARDING_STAGES.some((s) => s.id === saved)) return saved as OnboardingStageId;
   if (LEGACY_STAGE_MAP[saved]) return LEGACY_STAGE_MAP[saved];
   if (input.joinAt) return "joined";
-  if (input.entryAt) return "joining";
+  if (input.entryAt) return "arrival";
   if (input.applicationResultAt) return "result";
   if (input.applicationAt) return "applying";
   if (input.offerAcceptedAt) return "documents";
-  return "pledge";
+  return "offer";
 }
 
 /** 申請種別。必要書類が変わる (書類準備手続き.docx) */
 export const APPLICATION_TYPES = ["認定", "変更", "更新", "特定活動"] as const;
 export type ApplicationType = (typeof APPLICATION_TYPES)[number];
 
-export type FlowTask = {
-  category: string;
-  title: string;
-  /** 内定受領からの日数 */
-  dueOffsetDays: number;
-  /** この申請種別のときだけ出すタスク (未指定なら全員) */
-  onlyFor?: ApplicationType[];
-};
+/** 工程名 → ステージ */
+export function stageOfPhase(phase: string): OnboardingStageId {
+  const hit = ONBOARDING_STAGES.find((s) => (s.phases as readonly string[]).includes(phase));
+  return hit?.id ?? "offer";
+}
 
-/** 全員共通のタスク (ワークフロー STEP1〜12) */
-const COMMON_TASKS: FlowTask[] = [
-  // STEP1-2
-  { category: "1. 誓約書・情報共有", title: "誓約書への署名を案内する", dueOffsetDays: 2 },
-  { category: "1. 誓約書・情報共有", title: "グループを作成し、応募者情報と書類を内定フォロー担当へ共有", dueOffsetDays: 2 },
-  { category: "1. 誓約書・情報共有", title: "給与・手当の最終条件を企業と文書で確定", dueOffsetDays: 3 },
-  { category: "1. 誓約書・情報共有", title: "費用負担を確定（渡航費・航空券・住居初期費用・支援費）", dueOffsetDays: 3 },
+/** そのステージに属するタスクだけ取り出す */
+export function tasksInStage<T extends { category: string }>(tasks: T[], stage: OnboardingStageId) {
+  return tasks.filter((t) => stageOfPhase(t.category) === stage);
+}
 
-  // STEP3 共通書類
-  { category: "2. 書類収集（共通）", title: "QR LINE・電話番号・メールの確認", dueOffsetDays: 5 },
-  { category: "2. 書類収集（共通）", title: "顔写真（3か月以内・白背景・未提出のもの）", dueOffsetDays: 7 },
-  { category: "2. 書類収集（共通）", title: "技能・専門資格の証明書（専門級/随時3級/評価証明書/特定技能1号）", dueOffsetDays: 7 },
-  { category: "2. 書類収集（共通）", title: "日本語合格証明書（最上位のもの）", dueOffsetDays: 7 },
-  { category: "2. 書類収集（共通）", title: "健康診断書", dueOffsetDays: 10 },
-  { category: "2. 書類収集（共通）", title: "受診者の申告書", dueOffsetDays: 10 },
-  { category: "2. 書類収集（共通）", title: "パスポート（査証・出入国スタンプの全ページ）", dueOffsetDays: 7 },
-
-  // STEP4
-  { category: "3. 追加情報の確認", title: "入社予定日・退職日・寮退去日・帰国予定日を確認", dueOffsetDays: 7 },
-  { category: "3. 追加情報の確認", title: "在日家族の有無を確認（いれば在留カードと勤務先/学校名）", dueOffsetDays: 7 },
-  { category: "3. 追加情報の確認", title: "過去の出入国歴・認定申請歴・退去強制歴を確認", dueOffsetDays: 7 },
-
-  // STEP5-6
-  { category: "4. 登録・報告", title: "全書類を Smile Visa へアップロード", dueOffsetDays: 9 },
-  { category: "4. 登録・報告", title: "内定管理シートを更新し、川村さん／企業へ報告", dueOffsetDays: 9 },
-
-  // STEP7
-  { category: "5. 署名", title: "雇用契約書・労働条件通知書・支援計画を受領", dueOffsetDays: 9 },
-  { category: "5. 署名", title: "応募者へ送付して署名を依頼", dueOffsetDays: 10 },
-  { category: "5. 署名", title: "署名済み書類を Smile Visa へアップロードし、川村さん／企業へメール報告", dueOffsetDays: 10 },
-
-  // STEP8
-  { category: "6. 申請", title: "申請書類一式を2人でダブルチェック", dueOffsetDays: OFFER_TO_APPLICATION_DAYS - 1 },
-  { category: "6. 申請", title: "入管へ申請を提出", dueOffsetDays: OFFER_TO_APPLICATION_DAYS },
-  { category: "6. 申請", title: "申請提出日・申請番号を記録し、本人と川村さん／企業へ通知", dueOffsetDays: OFFER_TO_APPLICATION_DAYS + 2 },
-
-  // STEP10-12
-  { category: "9. 入社・請求", title: "入社日を確定し、川村さん／企業へメール報告", dueOffsetDays: OFFER_TO_JOIN_DAYS - 7 },
-  { category: "9. 入社・請求", title: "入社日を人材チームへ報告", dueOffsetDays: OFFER_TO_JOIN_DAYS },
-  { category: "9. 入社・請求", title: "入社1週間後のフォロー連絡（本人・企業の両方）", dueOffsetDays: OFFER_TO_JOIN_DAYS + 7 },
-  { category: "9. 入社・請求", title: "請求対応（人材チーム採用）", dueOffsetDays: OFFER_TO_JOIN_DAYS + 7 },
-];
-
-/** 申請種別ごとの追加書類 (書類準備手続き.docx) */
-const TYPE_TASKS: FlowTask[] = [
-  // 認定 (海外から)
-  { category: "2. 書類収集（認定）", title: "本国の居住地（アルファベット70字以内）を確認", dueOffsetDays: 7, onlyFor: ["認定"] },
-  { category: "2. 書類収集（認定）", title: "推薦状の手配（ベトナム・カンボジア等。送り出し機関が担当・費用発生）", dueOffsetDays: 10, onlyFor: ["認定"] },
-  { category: "7. 結果後（海外）", title: "COE送付・ビザ申請サポート", dueOffsetDays: 50, onlyFor: ["認定"] },
-  { category: "7. 結果後（海外）", title: "入国日・航空券を確定（Eチケットを企業へ送付。不確かな情報は送らない）", dueOffsetDays: 52, onlyFor: ["認定"] },
-  { category: "7. 結果後（海外）", title: "印鑑・SIMカードの準備を案内", dueOffsetDays: 54, onlyFor: ["認定"] },
-  { category: "7. 結果後（海外）", title: "身体情報（身長・服・ズボン・靴のサイズ）を確認して企業へ提供", dueOffsetDays: 54, onlyFor: ["認定"] },
-
-  // 変更 (国内転職)
-  { category: "2. 書類収集（変更）", title: "在留カード両面", dueOffsetDays: 7, onlyFor: ["変更"] },
-  { category: "2. 書類収集（変更）", title: "源泉徴収票（勤務した全社分）", dueOffsetDays: 10, onlyFor: ["変更", "更新"] },
-  { category: "2. 書類収集（変更）", title: "課税証明書（1/1時点の市役所で取得）", dueOffsetDays: 10, onlyFor: ["変更", "更新"] },
-  { category: "2. 書類収集（変更）", title: "納税証明書（1/1時点の市役所で取得）", dueOffsetDays: 10, onlyFor: ["変更", "更新"] },
-  { category: "2. 書類収集（変更）", title: "住民票（個人番号あり）", dueOffsetDays: 10, onlyFor: ["変更"] },
-  { category: "2. 書類収集（変更）", title: "退職届・退職証明書", dueOffsetDays: 10, onlyFor: ["変更"] },
-  { category: "2. 書類収集（変更）", title: "年金・保険関連書類（主に元留学生）", dueOffsetDays: 10, onlyFor: ["変更"] },
-  { category: "2. 書類収集（変更）", title: "実習生からの移行は、在日ベトナム領事館での推薦状申請（管理元が担当）", dueOffsetDays: 12, onlyFor: ["変更"] },
-
-  // 更新
-  { category: "2. 書類収集（更新）", title: "在留カード両面・パスポート", dueOffsetDays: 7, onlyFor: ["更新"] },
-  { category: "2. 書類収集（更新）", title: "在日家族の情報を再確認（勤務先・在留カード・婚姻状況）", dueOffsetDays: 7, onlyFor: ["更新"] },
-
-  // 特定活動
-  { category: "2. 書類収集（特定活動）", title: "在留カード・パスポート・申請書", dueOffsetDays: 7, onlyFor: ["特定活動"] },
-  { category: "2. 書類収集（特定活動）", title: "契約書・条件書・賃金支払・説明書（会社準備）", dueOffsetDays: 9, onlyFor: ["特定活動"] },
-  { category: "2. 書類収集（特定活動）", title: "会社が登録中の手続きのスクショ/メール（説明書に記載のもの）", dueOffsetDays: 9, onlyFor: ["特定活動"] },
-  { category: "2. 書類収集（特定活動）", title: "理由書（受取場所・帰国日・早期入社の希望がある場合）", dueOffsetDays: 9, onlyFor: ["特定活動"] },
-
-  // 在留カード受取 (国内＝変更/更新/特定活動)
-  { category: "8. 在留カード受取", title: "受取方法を決める（オンライン＝郵送 / 直接＝入管窓口）※佐々木さんに早めに相談", dueOffsetDays: 40, onlyFor: ["変更", "更新", "特定活動"] },
-  { category: "8. 在留カード受取", title: "手数料納付書を準備し、本人へPDF送付（申請番号・種別・氏名の記入を案内）", dueOffsetDays: 42, onlyFor: ["変更", "更新", "特定活動"] },
-  { category: "8. 在留カード受取", title: "収入印紙の購入を案内（オンライン=5,000円+500円 / 直接=6,000円）", dueOffsetDays: 42, onlyFor: ["変更", "更新", "特定活動"] },
-  { category: "8. 在留カード受取", title: "レターパック（青・430円）でCROSLAN大阪事務所へ送付を案内し、内容を確認", dueOffsetDays: 44, onlyFor: ["変更", "更新", "特定活動"] },
-  { category: "8. 在留カード受取", title: "受領したらSlack「在留資格の処理連絡」で佐々木さんへ報告（依頼内容・対象者・住所・期日・郵送方法）", dueOffsetDays: 45, onlyFor: ["変更", "更新", "特定活動"] },
-  { category: "8. 在留カード受取", title: "新カード受領後、あて名をWord/PDFで作成し本人または企業へ返送（手書き禁止）", dueOffsetDays: 55, onlyFor: ["変更", "更新", "特定活動"] },
-  { category: "8. 在留カード受取", title: "返送管理シートに記入（対象者・依頼日・対応者）", dueOffsetDays: 55, onlyFor: ["変更", "更新", "特定活動"] },
-  { category: "8. 在留カード受取", title: "結果通知から14日以内（郵送）/ ハガキ記載期限内（直接）に受取を完了", dueOffsetDays: 56, onlyFor: ["変更", "更新", "特定活動"] },
-
-  // 国内転職の生活まわり
-  { category: "7. 結果後（国内）", title: "寮退去日の確認と住所変更手続き（窓口または郵送）", dueOffsetDays: 50, onlyFor: ["変更", "更新", "特定活動"] },
-  { category: "7. 結果後（国内）", title: "住居の確保（会社寮 or 本人手配）と引越しサポートの要否確認", dueOffsetDays: 50, onlyFor: ["変更", "更新", "特定活動"] },
-  { category: "7. 結果後（国内）", title: "一時帰国する場合は必ず取次申請にする（出国前に確認）", dueOffsetDays: 50, onlyFor: ["変更", "更新", "特定活動"] },
-];
-
-/** 申請種別に応じたタスク一覧を、内定受領日を起点に期限付きで組み立てる */
+/**
+ * 申請種別に応じたタスク一覧を、内定受領日を起点に期限付きで組み立てる。
+ * 中身はスプレッドシート「内定後タスク管理表」と同じ (原本: lib/onboarding-task-master.ts)。
+ * category に工程名を入れておくことで、ステージごとのチェックリストとして表示できる。
+ */
 export function buildFlowTasks(applicationType: string | null, baseDate: Date | null) {
   const type = (APPLICATION_TYPES as readonly string[]).includes(applicationType ?? "")
     ? (applicationType as ApplicationType)
     : null;
-  const all = [...COMMON_TASKS, ...TYPE_TASKS].filter(
-    (t) => !t.onlyFor || (type ? t.onlyFor.includes(type) : false),
-  );
-  return all
-    .sort((a, b) => a.category.localeCompare(b.category, "ja") || a.dueOffsetDays - b.dueOffsetDays)
+
+  const matches = (target: MasterTask["target"]): boolean => {
+    if (target === "全員") return true;
+    if (!type) return false;
+    if (target === "認定（海外）") return type === "認定";
+    if (target === "変更（国内転職）") return type === "変更";
+    if (target === "更新") return type === "更新";
+    if (target === "特定活動") return type === "特定活動";
+    if (target === "国内（変更・更新・特定活動）") {
+      return type === "変更" || type === "更新" || type === "特定活動";
+    }
+    return false;
+  };
+
+  return MASTER_TASKS.filter((t) => matches(t.target))
+    .sort((a, b) => {
+      const pa = TASK_PHASES.indexOf(a.phase);
+      const pb = TASK_PHASES.indexOf(b.phase);
+      return pa - pb || a.dueDays - b.dueDays;
+    })
     .map((t, index) => ({
-      category: t.category,
+      category: t.phase,
       title: t.title,
       sortOrder: index,
-      dueAt: baseDate ? new Date(baseDate.getTime() + t.dueOffsetDays * 86_400_000) : null,
+      dueAt: baseDate ? new Date(baseDate.getTime() + t.dueDays * 86_400_000) : null,
+      // 手順・エビデンス・過去の問題はメモとして残す (詳細パネルで見る)
+      note: [
+        t.howto ? `手順: ${t.howto}` : "",
+        t.evidence ? `エビデンス: ${t.evidence}` : "",
+        t.problem ? `※過去の問題: ${t.problem}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
     }));
 }
 

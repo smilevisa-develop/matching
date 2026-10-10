@@ -6,6 +6,7 @@ import {
   APPLICATION_TYPES,
   HOLD_STAGE,
   ONBOARDING_STAGES,
+  stageOfPhase,
   type OnboardingStageId,
   type Urgency,
 } from "@/lib/onboarding-flow";
@@ -23,11 +24,14 @@ import {
 
 export type OnboardingTask = {
   id: number;
+  /** 工程名 (スプレッドシートの「工程」と同じ)。ステージの振り分けに使う */
   category: string;
   title: string;
   dueAt: string | null;
   doneAt: string | null;
   doneBy: string | null;
+  /** 手順・エビデンス・過去の問題 */
+  note: string | null;
 };
 
 export type OnboardingIssue = {
@@ -118,9 +122,15 @@ function nextThing(card: OnboardingCard): { label: string; due: string | null; o
   if (card.currentAction) {
     return { label: card.currentAction, due: card.nextActionDueAt, overdue: isOver(card.nextActionDueAt) };
   }
-  const pending = card.tasks
-    .filter((t) => !t.doneAt)
-    .sort((a, b) => (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999"));
+  // 今のステージに残っているタスクを優先し、無ければ全体から拾う
+  const sortByDue = (a: OnboardingTask, b: OnboardingTask) =>
+    (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999");
+  const pendingHere = card.tasks
+    .filter((t) => !t.doneAt && stageOfPhase(t.category) === card.stage)
+    .sort(sortByDue);
+  const pending = pendingHere.length > 0
+    ? pendingHere
+    : card.tasks.filter((t) => !t.doneAt).sort(sortByDue);
   if (pending.length > 0) {
     return { label: pending[0].title, due: pending[0].dueAt, overdue: isOver(pending[0].dueAt) };
   }
@@ -365,7 +375,9 @@ function BoardCard({
 }) {
   const next = nextThing(card);
   const style = URGENCY_STYLE[card.urgency];
-  const done = card.tasks.filter((t) => t.doneAt).length;
+  // この工程のチェックリストの進み具合 (ボードの主役はここ)
+  const stageTasks = card.tasks.filter((t) => stageOfPhase(t.category) === card.stage);
+  const stageDone = stageTasks.filter((t) => t.doneAt).length;
   const stageDays = daysSince(card.stageChangedAt);
 
   return (
@@ -415,9 +427,17 @@ function BoardCard({
         >
           {card.followUpOwnerName ?? "担当未設定"}
         </span>
-        {card.tasks.length > 0 ? (
-          <span className="text-gray-400">
-            {done}/{card.tasks.length}
+        {stageTasks.length > 0 ? (
+          <span
+            className={`rounded px-1.5 py-0.5 ${
+              stageDone === stageTasks.length
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-gray-100 text-gray-500"
+            }`}
+            title="この工程のチェックリスト"
+          >
+            {stageDone}/{stageTasks.length}
+            {stageDone === stageTasks.length ? " 完了" : ""}
           </span>
         ) : null}
         {stageDays !== null && stageDays > 0 ? (
@@ -502,6 +522,7 @@ function CardDetail({
             dueAt: t.dueAt,
             doneAt: t.doneAt ?? null,
             doneBy: t.doneBy ?? null,
+            note: t.note ?? null,
           })),
         });
       }
@@ -548,7 +569,6 @@ function CardDetail({
     });
   };
 
-  const categories = Array.from(new Set(card.tasks.map((t) => t.category)));
   const style = URGENCY_STYLE[card.urgency];
 
   return (
@@ -660,11 +680,11 @@ function CardDetail({
           </div>
         </div>
 
-        {/* チェックリスト */}
+        {/* チェックリスト: ステージごとに分けて表示する */}
         <div className="border-b border-gray-100 px-6 py-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-[var(--color-text-dark)]">
-              やること（{card.tasks.filter((t) => t.doneAt).length} / {card.tasks.length}）
+              やること（全体 {card.tasks.filter((t) => t.doneAt).length} / {card.tasks.length}）
             </p>
             <button
               type="button"
@@ -677,19 +697,54 @@ function CardDetail({
           </div>
           {card.tasks.length === 0 ? (
             <p className="mt-2 text-[12px] text-gray-500">
-              申請種別（認定 / 変更 / 更新 / 特定活動）を選んで作成すると、その種別に必要な書類と手順が並びます。
-              期限は内定承諾日から自動計算されます。
+              申請種別（認定 / 変更 / 更新 / 特定活動）を選んで作成すると、
+              「内定後タスク管理表」と同じ項目が工程ごとに並びます。期限は内定承諾日から自動計算されます。
             </p>
           ) : null}
-          <div className="mt-3 space-y-4">
-            {categories.map((category) => (
-              <div key={category}>
-                <p className="text-[11px] font-semibold text-gray-400">{category}</p>
-                <ul className="mt-1 space-y-1">
-                  {card.tasks
-                    .filter((t) => t.category === category)
-                    .map((t) => (
-                      <li key={t.id} className="flex items-start gap-2 rounded-lg px-1 py-0.5 hover:bg-gray-50">
+
+          <div className="mt-3 space-y-3">
+            {ONBOARDING_STAGES.filter((s) => s.id !== HOLD_STAGE).map((stage) => {
+              const items = card.tasks.filter((t) => stageOfPhase(t.category) === stage.id);
+              if (items.length === 0) return null;
+              const done = items.filter((t) => t.doneAt).length;
+              const isCurrent = card.stage === stage.id;
+              const overdue = items.filter((t) => !t.doneAt && isOver(t.dueAt)).length;
+              return (
+                <div
+                  key={stage.id}
+                  className={`rounded-xl border ${
+                    isCurrent ? "border-[var(--color-primary)] bg-[var(--color-light)]/40" : "border-gray-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <p className="text-[12px] font-semibold text-[var(--color-text-dark)]">{stage.label}</p>
+                    {isCurrent ? (
+                      <span className="rounded bg-[var(--color-primary)] px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        いまここ
+                      </span>
+                    ) : null}
+                    {overdue > 0 ? (
+                      <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
+                        期限切れ {overdue}
+                      </span>
+                    ) : null}
+                    <span className="ml-auto flex items-center gap-2">
+                      <span className="h-1.5 w-20 overflow-hidden rounded-full bg-gray-200">
+                        <span
+                          className={`block h-full rounded-full ${
+                            done === items.length ? "bg-emerald-500" : "bg-[var(--color-primary)]"
+                          }`}
+                          style={{ width: `${(done / items.length) * 100}%` }}
+                        />
+                      </span>
+                      <span className="text-[11px] tabular-nums text-gray-500">
+                        {done}/{items.length}
+                      </span>
+                    </span>
+                  </div>
+                  <ul className="space-y-0.5 border-t border-gray-100 px-3 py-2">
+                    {items.map((t) => (
+                      <li key={t.id} className="flex items-start gap-2 rounded px-1 py-0.5 hover:bg-white">
                         <input
                           type="checkbox"
                           checked={Boolean(t.doneAt)}
@@ -711,12 +766,23 @@ function CardDetail({
                             {!t.doneAt && isOver(t.dueAt) ? " ・超過" : ""}
                             {t.doneAt ? ` ・完了 ${fmt(t.doneAt)}${t.doneBy ? ` (${t.doneBy})` : ""}` : ""}
                           </span>
+                          {t.note && !t.doneAt ? (
+                            <details className="mt-0.5">
+                              <summary className="cursor-pointer text-[10px] text-[var(--color-primary)]">
+                                手順・エビデンス
+                              </summary>
+                              <p className="mt-0.5 whitespace-pre-wrap text-[11px] leading-snug text-gray-600">
+                                {t.note}
+                              </p>
+                            </details>
+                          ) : null}
                         </span>
                       </li>
                     ))}
-                </ul>
-              </div>
-            ))}
+                  </ul>
+                </div>
+              );
+            })}
           </div>
         </div>
 
