@@ -786,10 +786,10 @@ export default function InterviewPracticeClient() {
   }
 
   // ── 面接中 ──
-  // スマホの 1 画面に収め、「いま何をする時間か」だけを大きく見せる。押すものは親指の届く下に置く。
+  // 面接官の絵を大きく置き、相手が話しているのか・こちらの番なのかを絵の濃さと言葉で見せる。
+  // 押すものは親指の届く下に置く。
   if (phase === "interview") {
     const remaining = Math.max(0, ANSWER_MAX_SECONDS - elapsed);
-    const status = STATUS_TEXT[step];
     return (
       <div className="flex min-h-dvh flex-col bg-[var(--color-light)]">
         <header className="mx-auto w-full max-w-md px-5 pt-5">
@@ -811,32 +811,15 @@ export default function InterviewPracticeClient() {
           </div>
         </header>
 
-        <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center px-6 py-4 text-center">
-          <StatusOrb step={step} level={level} />
-          <p
-            className={`mt-5 text-[30px] font-bold leading-tight ${
-              step === "recording"
-                ? "text-[#DC2626]"
-                : step === "failed" || step === "micError"
-                  ? "text-amber-700"
-                  : "text-[var(--color-text-dark)]"
-            }`}
-          >
-            {status.ja}
-          </p>
-          <p className="mt-1.5 text-sm text-gray-500">{status.en}</p>
-          {step === "recording" ? (
-            <p className="mt-3 text-sm font-semibold tabular-nums text-[#DC2626]">
-              残り {formatSeconds(remaining)}
-            </p>
-          ) : null}
+        <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-5 py-4 text-center">
+          <InterviewStage step={step} level={level} remaining={remaining} />
           {step === "failed" && error ? (
-            <div className="mt-4 w-full">
+            <div className="mt-3 w-full">
               <Notice text={error} />
             </div>
           ) : null}
 
-          <div className="mt-6 w-full">
+          <div className="mt-4 w-full">
             {showText ? (
               <div className="rounded-2xl bg-white px-5 py-4 text-left shadow-sm">
                 <p className="text-[11px] font-semibold tracking-wide text-[var(--color-primary)]">面接官の質問</p>
@@ -895,12 +878,19 @@ export default function InterviewPracticeClient() {
       <div className="flex min-h-dvh flex-col bg-[var(--color-light)]">
         <main className="mx-auto w-full max-w-md flex-1 px-6 pb-4 pt-8">
           <Brand />
-          <h1 className="mt-2 text-[30px] font-bold leading-tight text-[var(--color-text-dark)]">
-            面接の練習を
-            <br />
-            始めます
-          </h1>
-          <p className="mt-2 text-sm text-gray-500">Here is how the practice works.</p>
+          <div className="mt-2 flex items-center gap-4">
+            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full bg-white shadow-md">
+              <InterviewerScene talking={false} />
+            </div>
+            <div>
+              <h1 className="text-[28px] font-bold leading-tight text-[var(--color-text-dark)]">
+                面接の練習を
+                <br />
+                始めます
+              </h1>
+            </div>
+          </div>
+          <p className="mt-3 text-sm text-gray-500">Here is how the practice works.</p>
 
           <div className="mt-5 flex flex-wrap gap-2">
             {[form.level, industry?.label ?? "", "質問 約10問", "約10分"].map((chip) => (
@@ -923,8 +913,8 @@ export default function InterviewPracticeClient() {
             <IntroStep
               n={2}
               title="話す"
-              ja="赤いマイクが出たら、声で答えます。"
-              en="When the red microphone appears, answer by voice."
+              ja="面接官がうすくなり、赤いマイクが出たら、あなたの番です。声で答えます。"
+              en="When the interviewer fades and the red microphone appears, it is your turn. Answer by voice."
             />
             <IntroStep
               n={3}
@@ -1232,58 +1222,200 @@ function IntroStep({ n, title, ja, en }: { n: number; title: string; ja: string;
   );
 }
 
-/** 状態表示の大きさ。縦の短いスマホでは少し小さくして、質問文とボタンを同じ画面に収める */
-const ORB_SIZE = "h-36 w-36 [@media(min-height:740px)]:h-44 [@media(min-height:740px)]:w-44";
-const ORB_CORE_SIZE = "h-24 w-24 [@media(min-height:740px)]:h-28 [@media(min-height:740px)]:w-28";
-
-/** 面接中の画面の中央に出す、大きな状態表示 (聞く = 緑 / 話す = 赤いマイク / 待つ = くるくる) */
-function StatusOrb({ step, level }: { step: Step; level: number }) {
-  if (step === "recording") {
-    return (
-      <div className={`relative flex items-center justify-center ${ORB_SIZE}`} aria-hidden>
-        {/* 声の大きさに合わせて外側の輪が広がる (マイクが声を拾えているかの目印) */}
-        <span
-          className="absolute inset-0 rounded-full bg-[#DC2626]/15 transition-transform duration-100"
-          style={{ transform: `scale(${1 + level * 0.2})` }}
-        />
-        <span className="absolute inset-5 rounded-full bg-[#DC2626]/20" />
-        <span className={`relative flex items-center justify-center rounded-full bg-[#DC2626] text-white shadow-lg ${ORB_CORE_SIZE}`}>
-          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <rect x="9" y="2" width="6" height="12" rx="3" />
-            <path d="M5 10v1a7 7 0 0 0 14 0v-1" />
-            <line x1="12" y1="18" x2="12" y2="22" />
-          </svg>
-        </span>
-      </div>
-    );
-  }
-  if (step === "speaking") {
-    return (
-      <div className={`relative flex items-center justify-center ${ORB_SIZE}`} aria-hidden>
-        <span className="absolute inset-3 animate-ping rounded-full bg-[var(--color-primary)]/15 [animation-duration:1.8s]" />
-        <span className="absolute inset-5 rounded-full bg-[var(--color-primary)]/15" />
-        <span className={`relative flex items-center justify-center rounded-full bg-[var(--color-primary)] text-white shadow-lg ${ORB_CORE_SIZE}`}>
-          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" />
-            <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-            <path d="M18.5 5.5a9 9 0 0 1 0 13" />
-          </svg>
-        </span>
-      </div>
-    );
-  }
-  if (step === "sending") {
-    return (
-      <div className={`flex items-center justify-center ${ORB_SIZE}`} aria-hidden>
-        <span className={`animate-spin rounded-full border-[6px] border-[var(--color-primary)]/15 border-t-[var(--color-primary)] ${ORB_CORE_SIZE}`} />
-      </div>
-    );
-  }
+/** 面接官が話している間の、小さな音の印 */
+function SoundBars() {
   return (
-    <div className={`flex items-center justify-center ${ORB_SIZE}`} aria-hidden>
-      <span className={`flex items-center justify-center rounded-full bg-amber-100 text-6xl font-bold text-amber-600 ${ORB_CORE_SIZE}`}>
-        !
+    <span className="flex h-3 items-end gap-0.5" aria-hidden>
+      {[0, 150, 300].map((delay) => (
+        <span
+          key={delay}
+          className="w-0.5 animate-pulse rounded-full bg-white"
+          style={{ height: delay === 150 ? "100%" : "60%", animationDelay: `${delay}ms`, animationDuration: "0.8s" }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * 面接中の画面の主役。面接官の絵を大きく置き、だれの番かを絵の濃さで見せる。
+ *   面接官が話している間 … 絵ははっきり、口が動く。下に「聞いてください」
+ *   こちらの番           … 絵をうすくして、上に赤いマイクと「話してください」を重ねる
+ */
+function InterviewStage({ step, level, remaining }: { step: Step; level: number; remaining: number }) {
+  const talking = step === "speaking";
+  const mine = step === "recording";
+  const status = STATUS_TEXT[step];
+  return (
+    <div className="relative h-[40dvh] max-h-[400px] min-h-[230px] w-full overflow-hidden rounded-3xl bg-white shadow-md">
+      <div
+        className={`h-full w-full transition-all duration-500 ${
+          talking ? "" : "scale-[1.03] opacity-40 blur-[1.5px] grayscale-[45%]"
+        }`}
+      >
+        <InterviewerScene talking={talking} />
+      </div>
+
+      {/* だれの番か */}
+      <span
+        className={`absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-white shadow ${
+          mine ? "bg-[#DC2626]" : talking ? "bg-[var(--color-primary)]" : "bg-gray-500"
+        }`}
+      >
+        {talking ? <SoundBars /> : null}
+        {mine ? "あなたの番" : "面接官"}
+        <span className="font-normal opacity-80">{mine ? "Your turn" : "Interviewer"}</span>
       </span>
+
+      {talking ? (
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-5 pb-4 pt-14 text-left text-white">
+          <p className="text-[26px] font-bold leading-tight">{status.ja}</p>
+          <p className="mt-0.5 text-xs opacity-90">{status.en}</p>
+        </div>
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/45 px-5 text-center">
+          {mine ? (
+            <div className="relative flex h-24 w-24 items-center justify-center" aria-hidden>
+              {/* 声の大きさに合わせて外側の輪が広がる (マイクが声を拾えているかの目印) */}
+              <span
+                className="absolute inset-0 rounded-full bg-[#DC2626]/25 transition-transform duration-100"
+                style={{ transform: `scale(${1 + level * 0.45})` }}
+              />
+              <span className="relative flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#DC2626] text-white shadow-lg">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="2" width="6" height="12" rx="3" />
+                  <path d="M5 10v1a7 7 0 0 0 14 0v-1" />
+                  <line x1="12" y1="18" x2="12" y2="22" />
+                </svg>
+              </span>
+            </div>
+          ) : step === "sending" ? (
+            <span
+              className="h-16 w-16 animate-spin rounded-full border-[5px] border-[var(--color-primary)]/15 border-t-[var(--color-primary)]"
+              aria-hidden
+            />
+          ) : (
+            <span
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-4xl font-bold text-amber-600"
+              aria-hidden
+            >
+              !
+            </span>
+          )}
+          <p
+            className={`mt-3 text-[30px] font-bold leading-tight ${
+              mine ? "text-[#DC2626]" : step === "sending" ? "text-[var(--color-text-dark)]" : "text-amber-700"
+            }`}
+          >
+            {status.ja}
+          </p>
+          <p className="mt-1 text-sm font-medium text-gray-600">{status.en}</p>
+          {mine ? (
+            <p className="mt-2 text-sm font-semibold tabular-nums text-[#DC2626]">残り {formatSeconds(remaining)}</p>
+          ) : null}
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * 面接官の絵 (SVG で描いた簡単なイラスト)。talking のあいだは口が動く。
+ * 枠が横長でも顔が切れないよう、上を基準に切り抜く (preserveAspectRatio)。
+ * 写真や別のイラストに替えるときは、このコンポーネントの中身だけを差し替えればよい。
+ */
+function InterviewerScene({ talking }: { talking: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 320 400"
+      preserveAspectRatio="xMidYMin slice"
+      className="h-full w-full"
+      role="img"
+      aria-label="面接官"
+    >
+      <defs>
+        <linearGradient id="ip-wall" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#F1F5F0" />
+          <stop offset="1" stopColor="#DDE8DF" />
+        </linearGradient>
+        <linearGradient id="ip-sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#CFE7F3" />
+          <stop offset="1" stopColor="#EEF7EF" />
+        </linearGradient>
+      </defs>
+
+      {/* 部屋: 壁・窓・観葉植物 */}
+      <rect width="320" height="400" fill="url(#ip-wall)" />
+      <rect x="-12" y="26" width="98" height="196" rx="4" fill="#FFFFFF" />
+      <rect x="-6" y="32" width="86" height="184" fill="url(#ip-sky)" />
+      <circle cx="18" cy="196" r="30" fill="#A9CDB4" opacity="0.7" />
+      <circle cx="60" cy="204" r="24" fill="#8FBDA0" opacity="0.7" />
+      <rect x="35" y="32" width="4" height="184" fill="#FFFFFF" />
+      <rect x="-6" y="120" width="86" height="4" fill="#FFFFFF" />
+      <g>
+        <path d="M262 262 h40 l-5 44 h-30 z" fill="#C8B49C" />
+        <path d="M282 264 C278 236 262 222 250 214" stroke="#4E8166" strokeWidth="3" fill="none" strokeLinecap="round" />
+        <path d="M282 264 C284 232 296 214 308 204" stroke="#4E8166" strokeWidth="3" fill="none" strokeLinecap="round" />
+        <path d="M282 264 C282 240 280 214 282 190" stroke="#4E8166" strokeWidth="3" fill="none" strokeLinecap="round" />
+        <ellipse cx="248" cy="212" rx="17" ry="9" transform="rotate(32 248 212)" fill="#5E9676" />
+        <ellipse cx="310" cy="202" rx="17" ry="9" transform="rotate(-38 310 202)" fill="#5E9676" />
+        <ellipse cx="282" cy="184" rx="10" ry="19" fill="#6FA785" />
+        <ellipse cx="262" cy="238" rx="15" ry="8" transform="rotate(20 262 238)" fill="#6FA785" />
+        <ellipse cx="300" cy="234" rx="15" ry="8" transform="rotate(-24 300 234)" fill="#4E8166" />
+      </g>
+
+      {/* 人物。少し小さめに置き、顔が上半分に来るようにする (下に重ねる文字で顔が隠れないように) */}
+      <g transform="translate(26 8) scale(0.84)">
+      {/* 後ろ髪 */}
+      <path
+        d="M160 84 C100 84 86 134 90 182 C92 218 86 248 96 274 C120 286 140 270 144 250 L176 250 C180 270 200 286 224 274 C234 248 228 218 230 182 C234 134 220 84 160 84 Z"
+        fill="#4B362C"
+      />
+      {/* 首 */}
+      <path d="M143 230 h34 v42 c-10 13 -24 13 -34 0 z" fill="#EDC2A9" />
+      <path d="M143 240 c10 12 24 12 34 0 v-10 h-34 z" fill="#E0B098" opacity="0.6" />
+      {/* 上着とブラウス */}
+      <path
+        d="M34 480 C34 332 66 302 116 290 L143 270 C151 285 169 285 177 270 L204 290 C254 302 286 332 286 480 Z"
+        fill="#24344F"
+      />
+      <path d="M143 270 C151 285 169 285 177 270 L196 292 L160 356 L124 292 Z" fill="#FFFFFF" />
+      <path d="M143 270 L160 356 L138 330 L118 294 Z" fill="#1B2840" />
+      <path d="M177 270 L160 356 L182 330 L202 294 Z" fill="#1B2840" />
+      <path d="M143 270 l10 22 l7 -14 l7 14 l10 -22 c-8 14 -26 14 -34 0 z" fill="#F4F6F8" />
+
+      {/* 顔 */}
+      <ellipse cx="160" cy="172" rx="56" ry="66" fill="#F8D8C3" />
+      <circle cx="122" cy="204" r="11" fill="#F3A49B" opacity="0.32" />
+      <circle cx="198" cy="204" r="11" fill="#F3A49B" opacity="0.32" />
+      {/* 前髪 */}
+      <path
+        d="M103 176 C96 122 124 94 162 94 C200 94 226 122 217 178 C211 150 198 130 178 120 C168 138 138 152 112 152 C107 160 104 168 103 176 Z"
+        fill="#4B362C"
+      />
+      <path d="M178 120 C168 138 138 152 112 152" stroke="#3D2B23" strokeWidth="1.5" fill="none" opacity="0.5" />
+      {/* まゆ・目 (ときどき、まばたきする) */}
+      <path d="M124 160 q12 -7 25 -1" stroke="#4B362C" strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d="M171 159 q13 -6 25 1" stroke="#4B362C" strokeWidth="3" fill="none" strokeLinecap="round" />
+      {[137, 183].map((cx) => (
+        <g key={cx}>
+          <ellipse cx={cx} cy="181" rx="7.5" ry="9.5" fill="#3A2A22">
+            <animate attributeName="ry" values="9.5;9.5;1;9.5;9.5" keyTimes="0;0.93;0.955;0.98;1" dur="4.2s" repeatCount="indefinite" />
+          </ellipse>
+          <circle cx={cx + 2.5} cy="177.5" r="2.4" fill="#FFFFFF" />
+        </g>
+      ))}
+      <path d="M157 198 q3.5 5 7 0" stroke="#D9A68E" strokeWidth="2" fill="none" strokeLinecap="round" />
+      {/* 口: 話している間は開け閉めし、聞いている間はほほえむ */}
+      {talking ? (
+        <ellipse cx="160" cy="217" rx="11" ry="5" fill="#9B3E3A">
+          <animate attributeName="ry" values="3;9;4;8;2.5;7;3" dur="0.9s" repeatCount="indefinite" />
+          <animate attributeName="rx" values="11;9;11;10;12;9;11" dur="0.9s" repeatCount="indefinite" />
+        </ellipse>
+      ) : (
+        <path d="M146 213 q14 12 28 0" stroke="#B4514B" strokeWidth="3.5" fill="none" strokeLinecap="round" />
+      )}
+      </g>
+    </svg>
   );
 }
