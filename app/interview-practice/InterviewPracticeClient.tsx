@@ -17,7 +17,8 @@ import {
  * AI 面接練習の公開ページ。
  *
  * 流れ:
- *   1. 基本情報・レベル・分野を入れて「練習を始める」(ここでマイク許可を取る)
+ *   1. 基本情報・レベル・分野を入れて「次へ」
+ *   1'. 進め方の説明を読んで「面接を始める」(ここでマイク許可を取る)。以後は質問が続けて出る
  *   2. 面接官 (AI) の質問を、AI の音声で聞かせる (使えないときは端末の読み上げに切り替える)
  *   3. 読み上げが終わると録音が始まる。話し終わったら「答え終わりました」
  *   4. 回答を送ると、AI が聞き取って次の質問 (または深掘り) を返す。2 に戻る
@@ -27,7 +28,7 @@ import {
  * マイクは回答のたびに取り直す。開いたままだと、iOS で読み上げの音が小さくなるため。
  */
 
-type Phase = "form" | "interview" | "finishing" | "done";
+type Phase = "form" | "intro" | "interview" | "finishing" | "done";
 /** speaking = 読み上げ中 / recording = 録音中 / sending = AI の返事待ち / failed = 送信失敗 / micError = マイクが使えない */
 type Step = "speaking" | "recording" | "sending" | "failed" | "micError";
 
@@ -58,6 +59,15 @@ type SpeechSegment = { text: string; url: string | null };
 const CLIP_TIMEOUT_MS = 12000;
 
 const FORM_STORAGE_KEY = "interview-practice-form";
+
+/** 面接中の画面で、いま何をする時間かを大きく見せる言葉 (日本語を主役に、英語は小さく添える) */
+const STATUS_TEXT: Record<Step, { ja: string; en: string }> = {
+  speaking: { ja: "聞いてください", en: "The interviewer is speaking" },
+  recording: { ja: "話してください", en: "Recording — answer in Japanese" },
+  sending: { ja: "少し待ってください", en: "The interviewer is thinking…" },
+  failed: { ja: "送れませんでした", en: "Your answer could not be sent" },
+  micError: { ja: "マイクが使えません", en: "Please allow the microphone and try again" },
+};
 
 const EMPTY_FORM: FormValues = {
   name: "",
@@ -241,6 +251,11 @@ export default function InterviewPracticeClient() {
     if ("speechSynthesis" in window) window.speechSynthesis.getVoices();
   }, []);
 
+  // 画面が切り替わったら、いちばん上から見せる (前の画面でスクロールした位置を引きずらない)
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [phase]);
+
   // 練習中にページを閉じると最初からになるので警告する
   useEffect(() => {
     if (phase !== "interview" && phase !== "finishing") return;
@@ -293,13 +308,19 @@ export default function InterviewPracticeClient() {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        clearTimeout(startTimer);
         audio.onended = null;
         audio.onerror = null;
         audio.onpause = null;
+        audio.onplaying = null;
+        if (!played) audio.pause();
         resolve(played);
       };
-      // 再生が始まらない・終わらない端末のための保険
+      // 再生が終わらない端末のための保険
       const timer = setTimeout(() => finish(false), 60000);
+      // 再生が始まらない端末 (自動再生を黙って止める端末など) では、早めに端末の読み上げへ切り替える
+      const startTimer = setTimeout(() => finish(false), 4000);
+      audio.onplaying = () => clearTimeout(startTimer);
       audio.onended = () => finish(true);
       audio.onerror = () => finish(false);
       // やり直し・終了で止められたとき (stopEverything)
@@ -521,8 +542,8 @@ export default function InterviewPracticeClient() {
     await send(answer);
   };
 
-  const start = async () => {
-    if (starting) return;
+  /** 入力を確かめて、進め方の説明へ進む (面接はまだ始めない) */
+  const goToIntro = () => {
     if (!form.name.trim() || !form.nationality || !form.gender || !form.industry) {
       setError("すべての項目を入力してください。 / Please fill in all fields.");
       return;
@@ -535,6 +556,13 @@ export default function InterviewPracticeClient() {
       setError("同意のチェックを入れてください。 / Please check the consent box.");
       return;
     }
+    setError(null);
+    setPhase("intro");
+  };
+
+  /** 「面接を始める」: マイク許可を取り、登録して 1 問目へ */
+  const start = async () => {
+    if (starting) return;
     setStarting(true);
     setError(null);
     try {
@@ -628,9 +656,8 @@ export default function InterviewPracticeClient() {
       <Page>
         <Card>
           <Brand />
-          <h1 className="mt-1 text-lg font-bold text-[var(--color-text-dark)]">
-            お疲れさまでした / Well done!
-          </h1>
+          <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-dark)]">お疲れさまでした</h1>
+          <p className="text-sm text-gray-500">Well done!</p>
           <p className="mt-3 whitespace-pre-wrap text-[14px] leading-relaxed text-gray-800">{feedback.summary}</p>
           <p className="mt-3 rounded-xl bg-[var(--color-light)] px-4 py-3 text-[12px] leading-relaxed text-gray-600">
             {emailed ? (
@@ -713,7 +740,8 @@ export default function InterviewPracticeClient() {
             onClick={backToForm}
             className="mt-4 w-full rounded-xl bg-[var(--color-primary)] px-6 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-[var(--color-primary-hover)]"
           >
-            もう一度 練習する / Practice again
+            <span className="block text-lg font-bold leading-tight">もう一度 練習する</span>
+            <span className="block text-[11px] font-normal leading-tight opacity-80">Practice again</span>
           </button>
           <p className="mt-3 text-center text-[11px] text-gray-400">
             これは AI が作った練習用のフィードバックです。選考の結果とは関係ありません。
@@ -758,140 +786,210 @@ export default function InterviewPracticeClient() {
   }
 
   // ── 面接中 ──
+  // スマホの 1 画面に収め、「いま何をする時間か」だけを大きく見せる。押すものは親指の届く下に置く。
   if (phase === "interview") {
     const remaining = Math.max(0, ANSWER_MAX_SECONDS - elapsed);
+    const status = STATUS_TEXT[step];
     return (
-      <Page>
-        <div className="flex items-center gap-1.5">
-          {Array.from({ length: maxQuestions }).map((_, i) => (
-            <span
-              key={i}
-              className={`h-1.5 flex-1 rounded-full ${
-                i < questionNumber - 1
-                  ? "bg-[var(--color-primary)]"
-                  : i === questionNumber - 1
-                    ? "bg-[var(--color-primary)]/50"
-                    : "bg-gray-200"
-              }`}
+      <div className="flex min-h-dvh flex-col bg-[var(--color-light)]">
+        <header className="mx-auto w-full max-w-md px-5 pt-5">
+          <div className="flex items-end justify-between">
+            <p className="text-[var(--color-text-dark)]">
+              <span className="text-xs font-semibold text-gray-500">質問 </span>
+              <span className="text-3xl font-bold leading-none tabular-nums">{questionNumber}</span>
+              <span className="ml-1.5 text-xs text-gray-400">/ 最大 {maxQuestions}</span>
+            </p>
+            <button type="button" onClick={endEarly} className="py-1 text-xs text-gray-400 underline">
+              終わる / End
+            </button>
+          </div>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200">
+            <div
+              className="h-full rounded-full bg-[var(--color-primary)] transition-[width] duration-500"
+              style={{ width: `${Math.min(100, (questionNumber / maxQuestions) * 100)}%` }}
             />
-          ))}
-        </div>
+          </div>
+        </header>
 
-        <Card>
-          <p className="text-[12px] font-semibold text-gray-400">
-            質問 {questionNumber}（最大 {maxQuestions}） / Question {questionNumber}
+        <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center px-6 py-4 text-center">
+          <StatusOrb step={step} level={level} />
+          <p
+            className={`mt-5 text-[30px] font-bold leading-tight ${
+              step === "recording"
+                ? "text-[#DC2626]"
+                : step === "failed" || step === "micError"
+                  ? "text-amber-700"
+                  : "text-[var(--color-text-dark)]"
+            }`}
+          >
+            {status.ja}
           </p>
+          <p className="mt-1.5 text-sm text-gray-500">{status.en}</p>
+          {step === "recording" ? (
+            <p className="mt-3 text-sm font-semibold tabular-nums text-[#DC2626]">
+              残り {formatSeconds(remaining)}
+            </p>
+          ) : null}
+          {step === "failed" && error ? (
+            <div className="mt-4 w-full">
+              <Notice text={error} />
+            </div>
+          ) : null}
 
-          <div className="mt-3 rounded-xl bg-[var(--color-light)] px-4 py-3">
-            <p className="text-[11px] font-semibold text-[var(--color-primary)]">面接官 / Interviewer</p>
+          <div className="mt-6 w-full">
             {showText ? (
-              <p className="mt-1 text-base font-semibold leading-relaxed text-[var(--color-text-dark)]">{say}</p>
+              <div className="rounded-2xl bg-white px-5 py-4 text-left shadow-sm">
+                <p className="text-[11px] font-semibold tracking-wide text-[var(--color-primary)]">面接官の質問</p>
+                <p className="mt-1.5 text-lg font-semibold leading-relaxed text-[var(--color-text-dark)]">{say}</p>
+              </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setShowText(true)}
-                className="mt-1 text-[13px] text-gray-500 underline"
-              >
-                質問を文字で見る / Show the question as text
+              <button type="button" onClick={() => setShowText(true)} className="text-sm text-gray-500 underline">
+                質問を文字で見る
+                <span className="block text-xs text-gray-400">Show the question as text</span>
               </button>
             )}
           </div>
+        </main>
 
-          <div
-            className={`mt-4 rounded-xl px-4 py-3 ${
-              step === "recording" ? "border-2 border-[#DC2626] bg-[#FEF2F2]" : "border border-gray-200 bg-gray-50"
-            }`}
-          >
-            {step === "speaking" ? (
-              <p className="text-[13px] font-medium text-gray-700">
-                面接官が話しています… よく聞いてください。 / The interviewer is speaking. Please listen.
-              </p>
-            ) : step === "recording" ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-[#DC2626]" />
-                  <span className="text-[13px] font-semibold text-[#DC2626]">
-                    録音中… 答えてください / Speak now
-                  </span>
-                  <span className="ml-auto text-lg font-bold tabular-nums text-[#DC2626]">
-                    {formatSeconds(remaining)}
-                  </span>
-                </div>
-                <LevelMeter level={level} />
-              </>
-            ) : step === "sending" ? (
-              <div className="flex items-center gap-3">
-                <span className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-primary)]/20 border-t-[var(--color-primary)]" />
-                <p className="text-[13px] font-medium text-gray-700">
-                  面接官が考えています… / The interviewer is thinking…
-                </p>
-              </div>
-            ) : step === "micError" ? (
-              <p className="text-[13px] font-medium text-amber-700">
-                マイクを使えませんでした。マイクの許可を確認して、「もう一度聞く」を押してください。 / Could not use the
-                microphone. Please allow it and press “Listen again”.
-              </p>
-            ) : (
-              <p className="text-[13px] font-medium text-red-700">{error}</p>
-            )}
-          </div>
-
-          {step === "failed" ? (
-            <button
-              type="button"
-              onClick={() => void send(pendingRef.current)}
-              className="mt-4 w-full rounded-xl bg-[var(--color-primary)] px-6 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-[var(--color-primary-hover)]"
-            >
-              もう一度送る / Send again
-            </button>
+        {/* 押すボタンは、小さい画面や長い質問文でもスクロールせずに押せるよう下に固定する */}
+        <footer className="sticky bottom-0 mx-auto w-full max-w-md bg-[var(--color-light)] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2">
+          {step === "recording" ? (
+            <BigButton ja="答え終わりました" en="I'm done" onClick={() => void finishAnswer()} />
+          ) : step === "failed" ? (
+            <BigButton ja="もう一度送る" en="Send again" onClick={() => void send(pendingRef.current)} />
+          ) : step === "micError" ? (
+            <BigButton ja="もう一度ためす" en="Try again" onClick={() => void askAndListen(segmentsRef.current)} />
           ) : (
-            <button
-              type="button"
-              onClick={() => void finishAnswer()}
-              disabled={step !== "recording"}
-              className="mt-4 w-full rounded-xl bg-[var(--color-primary)] px-6 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              答え終わりました / I&apos;m done
-            </button>
+            <p className="flex h-16 items-center justify-center text-center text-[13px] leading-snug text-gray-400">
+              {step === "speaking" ? (
+                <span>
+                  質問が終わると、自動で録音が始まります
+                  <span className="block text-[11px]">Recording starts automatically after the question</span>
+                </span>
+              ) : (
+                <span>
+                  この画面のまま、お待ちください
+                  <span className="block text-[11px]">Please keep this screen open</span>
+                </span>
+              )}
+            </p>
           )}
           <button
             type="button"
             onClick={() => void askAndListen(segmentsRef.current)}
-            disabled={step === "speaking" || step === "sending"}
-            className="mt-2 w-full rounded-xl border border-[var(--color-secondary)] bg-white px-6 py-3 text-sm font-semibold text-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={step !== "recording" && step !== "failed"}
+            className="mt-2 h-11 w-full text-sm font-semibold text-[var(--color-primary)] disabled:invisible"
           >
-            もう一度聞く（答えも録り直す） / Listen again
+            もう一度 質問を聞く <span className="text-xs font-normal text-gray-400">/ Listen again</span>
           </button>
-        </Card>
+        </footer>
+      </div>
+    );
+  }
 
-        <button type="button" onClick={endEarly} className="mx-auto block text-[12px] text-gray-400 underline">
-          練習を終わる / End practice
-        </button>
-      </Page>
+  // ── 進め方の説明 ──
+  // 入力のあと、いきなり質問を始めない。何が起きるかを先に伝え、本人がボタンを押してから始める。
+  if (phase === "intro") {
+    const industry = PRACTICE_INDUSTRIES.find((i) => i.key === form.industry);
+    return (
+      <div className="flex min-h-dvh flex-col bg-[var(--color-light)]">
+        <main className="mx-auto w-full max-w-md flex-1 px-6 pb-4 pt-8">
+          <Brand />
+          <h1 className="mt-2 text-[30px] font-bold leading-tight text-[var(--color-text-dark)]">
+            面接の練習を
+            <br />
+            始めます
+          </h1>
+          <p className="mt-2 text-sm text-gray-500">Here is how the practice works.</p>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            {[form.level, industry?.label ?? "", "質問 約10問", "約10分"].map((chip) => (
+              <span
+                key={chip}
+                className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--color-primary)] shadow-sm"
+              >
+                {chip}
+              </span>
+            ))}
+          </div>
+
+          <ol className="mt-7 space-y-5">
+            <IntroStep
+              n={1}
+              title="聞く"
+              ja="AI の面接官が、日本語で質問します。"
+              en="The AI interviewer asks you a question in Japanese."
+            />
+            <IntroStep
+              n={2}
+              title="話す"
+              ja="赤いマイクが出たら、声で答えます。"
+              en="When the red microphone appears, answer by voice."
+            />
+            <IntroStep
+              n={3}
+              title="押す"
+              ja="話し終わったら、下のボタンを押します。すぐに次の質問が始まります。"
+              en="Press the button when you finish. The next question starts right away."
+            />
+          </ol>
+
+          <p className="mt-7 rounded-2xl bg-white px-4 py-3 text-[13px] leading-relaxed text-gray-600 shadow-sm">
+            静かな場所で、スマホの音が出るようにしてください。うまく話せなくても大丈夫です。
+            <span className="mt-1 block text-xs text-gray-400">
+              Find a quiet place and turn the sound on. It is OK to make mistakes.
+            </span>
+          </p>
+        </main>
+
+        {/* 始めるボタンは、小さい画面でもスクロールせずに押せるよう下に固定する */}
+        <footer className="sticky bottom-0 mx-auto w-full max-w-md bg-[var(--color-light)] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">
+          {error ? (
+            <div className="mb-3">
+              <Notice text={error} />
+            </div>
+          ) : null}
+          <BigButton
+            ja={starting ? "準備しています…" : "面接を始める"}
+            en={starting ? "Getting ready…" : "Start the interview"}
+            onClick={() => void start()}
+            disabled={starting}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setPhase("form");
+            }}
+            disabled={starting}
+            className="mt-2 h-11 w-full text-sm font-semibold text-gray-500 disabled:opacity-40"
+          >
+            入力にもどる <span className="text-xs font-normal text-gray-400">/ Back</span>
+          </button>
+        </footer>
+      </div>
     );
   }
 
   // ── 登録 ──
   return (
     <Page>
-      <Card>
+      <div className="px-1 pt-2">
         <Brand />
-        <h1 className="mt-1 text-lg font-bold text-[var(--color-text-dark)]">
-          AI面接練習 / AI Interview Practice
-        </h1>
-        <p className="mt-3 text-[13px] leading-relaxed text-gray-700">
+        <h1 className="mt-1 text-[28px] font-bold leading-tight text-[var(--color-text-dark)]">AI面接練習</h1>
+        <p className="text-sm text-gray-500">AI Interview Practice</p>
+        <p className="mt-3 text-[15px] leading-relaxed text-gray-700">
           AI の面接官と、声で面接の練習ができます。何回でも練習できます。終わったら、あなたの言葉でアドバイスが届きます。
-          <br />
-          <span className="text-xs text-gray-500">
-            Practice a job interview by voice with an AI interviewer. You will receive advice in your own language
-            (about 10 minutes).
-          </span>
         </p>
-      </Card>
+        <p className="mt-1 text-xs leading-relaxed text-gray-400">
+          Practice a job interview by voice with an AI interviewer, as many times as you like. You will receive advice
+          in your own language.
+        </p>
+      </div>
 
       <Card>
-        <div className="space-y-4">
-          <Field label="名前 / Name">
+        <div className="space-y-5">
+          <Field label="名前" sub="Name">
             <input
               type="text"
               value={form.name}
@@ -902,7 +1000,7 @@ export default function InterviewPracticeClient() {
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="国籍 / Nationality">
+            <Field label="国籍" sub="Nationality">
               <select
                 value={form.nationality}
                 onChange={(e) => onNationalityChange(e.target.value)}
@@ -916,7 +1014,7 @@ export default function InterviewPracticeClient() {
                 ))}
               </select>
             </Field>
-            <Field label="性別 / Gender">
+            <Field label="性別" sub="Gender">
               <select value={form.gender} onChange={(e) => update({ gender: e.target.value })} className={INPUT_CLASS}>
                 <option value="">-</option>
                 {GENDERS.map((g) => (
@@ -927,7 +1025,7 @@ export default function InterviewPracticeClient() {
               </select>
             </Field>
           </div>
-          <Field label="メールアドレス（Gmail） / Email">
+          <Field label="メールアドレス" sub="Email (Gmail)">
             <input
               type="email"
               value={form.email}
@@ -938,12 +1036,14 @@ export default function InterviewPracticeClient() {
               className={INPUT_CLASS}
             />
           </Field>
+        </div>
+      </Card>
 
+      <Card>
+        <div className="space-y-5">
           {/* ボタンが並ぶので label では包まない (label だと説明文のタップで先頭のボタンが押される) */}
           <div>
-            <span className="mb-1.5 block text-[12px] font-semibold text-gray-600">
-              日本語のレベル / Japanese level
-            </span>
+            <FieldLabel label="日本語のレベル" sub="Japanese level" />
             <div className="grid grid-cols-3 gap-2">
               {PRACTICE_LEVELS.map((l) => (
                 <button
@@ -951,7 +1051,7 @@ export default function InterviewPracticeClient() {
                   type="button"
                   onClick={() => update({ level: l })}
                   aria-pressed={form.level === l}
-                  className={`rounded-xl border px-2 py-3 text-base font-bold ${
+                  className={`h-14 rounded-xl border text-xl font-bold ${
                     form.level === l
                       ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
                       : "border-gray-200 bg-white text-[var(--color-text-dark)]"
@@ -961,10 +1061,13 @@ export default function InterviewPracticeClient() {
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-[12px] text-gray-500">{PRACTICE_LEVEL_HINTS[form.level]}</p>
+            <p className="mt-2 text-[13px] text-gray-600">
+              {PRACTICE_LEVEL_HINTS[form.level].split(" / ")[0]}
+              <span className="block text-xs text-gray-400">{PRACTICE_LEVEL_HINTS[form.level].split(" / ")[1]}</span>
+            </p>
           </div>
 
-          <Field label="応募する仕事 / Job field">
+          <Field label="応募する仕事" sub="Job field">
             <select value={form.industry} onChange={(e) => update({ industry: e.target.value })} className={INPUT_CLASS}>
               <option value="">-</option>
               {PRACTICE_INDUSTRIES.map((i) => (
@@ -975,7 +1078,7 @@ export default function InterviewPracticeClient() {
             </select>
           </Field>
 
-          <Field label="アドバイスの言葉 / Language for advice">
+          <Field label="アドバイスの言葉" sub="Language for advice">
             <select
               value={form.feedbackLanguage}
               onChange={(e) => {
@@ -994,51 +1097,47 @@ export default function InterviewPracticeClient() {
         </div>
       </Card>
 
-      <Card>
-        {!supported ? (
+      {!supported ? (
+        <Card>
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             このブラウザは録音に対応していません。LINE 内ブラウザの場合は、右上のメニューから Safari / Chrome
             で開いてからお試しください。
-            <br />
-            <span className="text-xs">Recording is not supported here. Please open this page in Safari or Chrome.</span>
+            <span className="mt-1 block text-xs">
+              Recording is not supported here. Please open this page in Safari or Chrome.
+            </span>
           </div>
-        ) : (
-          <>
-            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-              <input
-                type="checkbox"
-                checked={consent}
-                onChange={(e) => setConsent(e.target.checked)}
-                className="mt-0.5 accent-[var(--color-primary)]"
-              />
-              <span className="text-[13px] leading-relaxed text-gray-700">
-                録音した声は AI（Google Gemini）に送られ、文字にして保存されます。声そのものは保存しません。送った内容は、Google
-                がサービスの改善に使うことがあります。練習の結果は選考には使いません。以上に同意します。
-                <br />
-                <span className="text-xs text-gray-500">
-                  I agree that my voice is sent to an AI service (Google Gemini) and saved as text. The audio itself is
-                  not stored. Google may use the content to improve its services. The results are for practice only and
-                  are not used for screening.
-                </span>
+        </Card>
+      ) : (
+        <div className="space-y-3 pb-2">
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-white px-4 py-4 shadow-md">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-primary)]"
+            />
+            <span>
+              <span className="block text-[15px] font-bold text-[var(--color-text-dark)]">
+                下の内容に同意します
+                <span className="ml-1.5 text-xs font-normal text-gray-400">I agree</span>
               </span>
-            </label>
+              <span className="mt-1.5 block text-[13px] leading-relaxed text-gray-600">
+                録音した声は AI（Google Gemini）に送られ、文字にして保存されます。声そのものは保存しません。送った内容は、Google
+                がサービスの改善に使うことがあります。練習の結果は選考には使いません。
+              </span>
+              <span className="mt-1 block text-[11px] leading-relaxed text-gray-400">
+                My voice is sent to an AI service (Google Gemini) and saved as text. The audio itself is not stored.
+                Google may use the content to improve its services. The results are for practice only and are not used
+                for screening.
+              </span>
+            </span>
+          </label>
 
-            {error ? <p className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-700">{error}</p> : null}
+          {error ? <Notice text={error} /> : null}
 
-            <button
-              type="button"
-              onClick={() => void start()}
-              disabled={starting}
-              className="mt-3 w-full rounded-xl bg-[var(--color-primary)] px-6 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {starting ? "準備しています..." : "練習を始める / Start"}
-            </button>
-            <p className="mt-2 text-center text-[11px] text-gray-400">
-              静かな場所で、音が出るようにして始めてください。 / Start in a quiet place with the sound on.
-            </p>
-          </>
-        )}
-      </Card>
+          <BigButton ja="次へ" en="Next" onClick={goToIntro} />
+        </div>
+      )}
     </Page>
   );
 }
@@ -1064,31 +1163,127 @@ function Brand() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function FieldLabel({ label, sub }: { label: string; sub: string }) {
+  return (
+    <span className="mb-1.5 block">
+      <span className="text-[15px] font-bold text-[var(--color-text-dark)]">{label}</span>
+      <span className="ml-1.5 text-xs text-gray-400">{sub}</span>
+    </span>
+  );
+}
+
+function Field({ label, sub, children }: { label: string; sub: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[12px] font-semibold text-gray-600">{label}</span>
+      <FieldLabel label={label} sub={sub} />
       {children}
     </label>
   );
 }
 
-function LevelMeter({ level }: { level: number }) {
-  const bars = 20;
-  const active = Math.round(level * bars);
+/** いちばん大事な操作のボタン。日本語を大きく、英語は小さく添える */
+function BigButton({
+  ja,
+  en,
+  onClick,
+  disabled,
+}: {
+  ja: string;
+  en: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
-    <div className="mt-2 flex h-6 items-end gap-0.5" aria-hidden>
-      {Array.from({ length: bars }).map((_, i) => {
-        const on = i < active;
-        const h = 25 + (i / bars) * 75;
-        return (
-          <span
-            key={i}
-            className={`flex-1 rounded-sm transition-all duration-75 ${on ? "bg-[#DC2626]" : "bg-gray-200"}`}
-            style={{ height: `${on ? h : 20}%` }}
-          />
-        );
-      })}
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex h-16 w-full flex-col items-center justify-center rounded-2xl bg-[var(--color-primary)] text-white shadow-md hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <span className="text-lg font-bold leading-tight">{ja}</span>
+      <span className="text-[11px] font-normal leading-tight opacity-80">{en}</span>
+    </button>
+  );
+}
+
+/** 「日本語 / English」の形のメッセージを、日本語を主に、英語を小さく分けて見せる */
+function Notice({ text }: { text: string }) {
+  const [ja, ...rest] = text.split(" / ");
+  return (
+    <p className="rounded-xl bg-red-50 px-4 py-3 text-left text-sm font-medium leading-relaxed text-red-700">
+      {ja}
+      {rest.length > 0 ? <span className="mt-0.5 block text-xs font-normal">{rest.join(" / ")}</span> : null}
+    </p>
+  );
+}
+
+function IntroStep({ n, title, ja, en }: { n: number; title: string; ja: string; en: string }) {
+  return (
+    <li className="flex gap-4">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] text-lg font-bold text-white">
+        {n}
+      </span>
+      <span>
+        <span className="block text-xl font-bold leading-tight text-[var(--color-text-dark)]">{title}</span>
+        <span className="mt-1 block text-[15px] leading-relaxed text-gray-700">{ja}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-gray-400">{en}</span>
+      </span>
+    </li>
+  );
+}
+
+/** 状態表示の大きさ。縦の短いスマホでは少し小さくして、質問文とボタンを同じ画面に収める */
+const ORB_SIZE = "h-36 w-36 [@media(min-height:740px)]:h-44 [@media(min-height:740px)]:w-44";
+const ORB_CORE_SIZE = "h-24 w-24 [@media(min-height:740px)]:h-28 [@media(min-height:740px)]:w-28";
+
+/** 面接中の画面の中央に出す、大きな状態表示 (聞く = 緑 / 話す = 赤いマイク / 待つ = くるくる) */
+function StatusOrb({ step, level }: { step: Step; level: number }) {
+  if (step === "recording") {
+    return (
+      <div className={`relative flex items-center justify-center ${ORB_SIZE}`} aria-hidden>
+        {/* 声の大きさに合わせて外側の輪が広がる (マイクが声を拾えているかの目印) */}
+        <span
+          className="absolute inset-0 rounded-full bg-[#DC2626]/15 transition-transform duration-100"
+          style={{ transform: `scale(${1 + level * 0.2})` }}
+        />
+        <span className="absolute inset-5 rounded-full bg-[#DC2626]/20" />
+        <span className={`relative flex items-center justify-center rounded-full bg-[#DC2626] text-white shadow-lg ${ORB_CORE_SIZE}`}>
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="2" width="6" height="12" rx="3" />
+            <path d="M5 10v1a7 7 0 0 0 14 0v-1" />
+            <line x1="12" y1="18" x2="12" y2="22" />
+          </svg>
+        </span>
+      </div>
+    );
+  }
+  if (step === "speaking") {
+    return (
+      <div className={`relative flex items-center justify-center ${ORB_SIZE}`} aria-hidden>
+        <span className="absolute inset-3 animate-ping rounded-full bg-[var(--color-primary)]/15 [animation-duration:1.8s]" />
+        <span className="absolute inset-5 rounded-full bg-[var(--color-primary)]/15" />
+        <span className={`relative flex items-center justify-center rounded-full bg-[var(--color-primary)] text-white shadow-lg ${ORB_CORE_SIZE}`}>
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" />
+            <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+            <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+          </svg>
+        </span>
+      </div>
+    );
+  }
+  if (step === "sending") {
+    return (
+      <div className={`flex items-center justify-center ${ORB_SIZE}`} aria-hidden>
+        <span className={`animate-spin rounded-full border-[6px] border-[var(--color-primary)]/15 border-t-[var(--color-primary)] ${ORB_CORE_SIZE}`} />
+      </div>
+    );
+  }
+  return (
+    <div className={`flex items-center justify-center ${ORB_SIZE}`} aria-hidden>
+      <span className={`flex items-center justify-center rounded-full bg-amber-100 text-6xl font-bold text-amber-600 ${ORB_CORE_SIZE}`}>
+        !
+      </span>
     </div>
   );
 }
