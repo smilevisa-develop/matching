@@ -90,26 +90,33 @@ export async function POST(req: Request) {
     const drive = google.drive({ version: "v3", auth });
     const sheets = google.sheets({ version: "v4", auth });
 
-    // 1) タブ付きで空のスプレッドシートを作る
-    const created = await sheets.spreadsheets.create({
+    // 1) 指定フォルダに空のスプレッドシートを作る
+    //    (Sheets API の create はサービスアカウントのマイドライブに作られてしまい、
+    //     そこから移動する権限が無いため、Drive API でフォルダ内に直接作る)
+    const created = await drive.files.create({
+      supportsAllDrives: true,
       requestBody: {
-        properties: { title },
-        sheets: TABS.map((tab, i) => ({
-          properties: { sheetId: i + 1, title: tab.name, index: i },
+        name: title,
+        parents: [parentId],
+        mimeType: "application/vnd.google-apps.spreadsheet",
+      },
+      fields: "id,webViewLink,name",
+    });
+    const spreadsheetId = created.data.id!;
+
+    // 2) タブを作る (既定の「シート1」は最後に消す)
+    const base = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: "sheets(properties(sheetId,title))",
+    });
+    const defaultSheetId = base.data.sheets?.[0]?.properties?.sheetId ?? 0;
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: TABS.map((tab, i) => ({
+          addSheet: { properties: { sheetId: i + 1, title: tab.name, index: i } },
         })),
       },
-      fields: "spreadsheetId,spreadsheetUrl,sheets(properties(sheetId,title))",
-    });
-    const spreadsheetId = created.data.spreadsheetId!;
-
-    // 2) 指定フォルダへ移動 (作成直後はサービスアカウントのマイドライブにある)
-    const file = await drive.files.get({ fileId: spreadsheetId, fields: "parents", supportsAllDrives: true });
-    await drive.files.update({
-      fileId: spreadsheetId,
-      addParents: parentId,
-      removeParents: (file.data.parents ?? []).join(","),
-      supportsAllDrives: true,
-      fields: "id,webViewLink",
     });
 
     // 3) 各タブに値を書く
@@ -230,6 +237,8 @@ export async function POST(req: Request) {
         });
       }
     });
+    // 既定の空シートを削除する
+    requests.push({ deleteSheet: { sheetId: defaultSheetId } });
     await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
 
     try {
@@ -245,7 +254,7 @@ export async function POST(req: Request) {
     return Response.json({
       ok: true,
       title,
-      url: created.data.spreadsheetUrl,
+      url: created.data.webViewLink,
       tabs: counts,
     });
   } catch (error) {
