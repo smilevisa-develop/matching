@@ -1003,3 +1003,58 @@ model UploadedFile {
 
   @@index([expiresAt])
 }
+
+/// AI 面接練習の利用者。候補者が公開ページから自分で登録する (練習専用)。
+/// 選考データ (Person) とは別の置き場で、相互に紐づけない。
+model InterviewPracticeUser {
+  id          Int      @id @default(autoincrement())
+  /// 同じメールアドレスでの再登録は同じ利用者として扱う
+  email       String   @unique
+  name        String
+  nationality String
+  gender      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessions InterviewPracticeSession[]
+}
+
+/// AI 面接練習の 1 回ぶん。録音は保存せず、文字起こしとフィードバックだけを残す。
+model InterviewPracticeSession {
+  id     Int                   @id @default(autoincrement())
+  /// 練習中の画面が持つ鍵 (URL には出さない)
+  token  String                @unique
+  userId Int
+  user   InterviewPracticeUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// 練習レベル ("N4" / "N3" / "N2")
+  level            String
+  /// 分野の key (lib/interview-practice-questions.ts の PRACTICE_INDUSTRIES)
+  industry         String
+  /// フィードバックを書く言語のコード ("vi" など)
+  feedbackLanguage String
+
+  /// 会話の記録 (Json 配列)。
+  /// [{ role: "interviewer", text, kind, questionKey } | { role: "candidate", text, audioIssue, seconds }]
+  turns         Json   @default("[]")
+  /// いま何番目の主質問か (質問集の添字)
+  mainIndex     Int    @default(0)
+  /// ここまでに使った深掘りの回数
+  followupsUsed Int    @default(0)
+  /// "active" = 練習中 / "finished" = フィードバック作成済み
+  status        String @default("active")
+
+  /// AI のフィードバック (Json)。lib/interview-practice.ts の PracticeFeedback
+  feedback           Json?
+  /// フィードバックのメールを送れた日時 (送れていなければ null)
+  feedbackEmailedAt  DateTime?
+  /// メールを送れなかったときの理由
+  feedbackEmailError String?
+  finishedAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}

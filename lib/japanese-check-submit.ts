@@ -45,7 +45,7 @@ export type StoreResult =
   | { ok: true; count: number; forJudge: JapaneseCheckRecording[] }
   | { ok: false; error: string; status: number };
 
-function parseDataUrl(dataUrl: string): { mimeType: string; base64: string } | null {
+export function parseDataUrl(dataUrl: string): { mimeType: string; base64: string } | null {
   // MIME に codecs 等のパラメータが付く場合がある
   //   例: "data:audio/webm;codecs=opus;base64,...." (Android Chrome など)
   // ";base64," が MIME 直後とは限らないため、";base64," で分割する。

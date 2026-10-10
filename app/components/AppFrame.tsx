@@ -18,9 +18,11 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const isJapaneseCheck = pathname.startsWith("/japanese-check");
   // 内定後の事前確認資料 (公開・token 認証)
   const isDocumentCheck = pathname.startsWith("/document-check");
+  // AI 面接練習 (公開・候補者が自分で登録する)。担当者用の記録ページ (/interview-practice/log) は対象外
+  const isInterviewPractice = pathname === "/interview-practice";
 
   useEffect(() => {
-    if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck || isDocumentCheck) return;
+    if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck || isDocumentCheck || isInterviewPractice) return;
 
     const checkSession = async () => {
       try {
@@ -35,9 +37,9 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     };
 
     void checkSession();
-  }, [isAuth, isPortal, isIntake, isLegal, isChecklist, isJapaneseCheck, isDocumentCheck]);
+  }, [isAuth, isPortal, isIntake, isLegal, isChecklist, isJapaneseCheck, isDocumentCheck, isInterviewPractice]);
 
-  if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck || isDocumentCheck) {
+  if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck || isDocumentCheck || isInterviewPractice) {
     return (
       <body className={`min-h-full ${isAuth ? "bg-[var(--color-text-dark)] text-white" : "bg-[var(--color-light)] text-[var(--color-text-dark)]"}`}>
         {children}
