@@ -92,9 +92,15 @@ type GenResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
 /**
  * generateContent を実行。429/枠超過 または 503/混雑 が出たら次のキー (別プロジェクト) へ順に切り替える。
  * 全キーが枯渇したら最後のエラーを投げる。
+ *
+ * opts.keys を渡すと、そのキーだけを使う (候補者が直接使う公開機能の無料枠を、
+ * 社内の AI 取込と分けたいとき用)。
  */
-export async function generateContentRotating(params: GenParams): Promise<GenResult> {
-  const keys = getGeminiKeys();
+export async function generateContentRotating(
+  params: GenParams,
+  opts?: { keys?: string[] },
+): Promise<GenResult> {
+  const keys = opts?.keys?.length ? opts.keys : getGeminiKeys();
   if (keys.length === 0) throw new Error("GEMINI_API_KEY(S) が未設定です");
   let lastErr: unknown;
   for (let i = 0; i < keys.length; i++) {

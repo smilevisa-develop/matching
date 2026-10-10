@@ -27,6 +27,10 @@ export function proxy(request: NextRequest) {
     // 日本語チェック (公開・専用 token 認証。入力フォームとは別リンク)
     pathname.startsWith("/japanese-check/") ||
     pathname.startsWith("/api/japanese-check/") ||
+    // AI 面接練習 (公開・候補者が自分で登録する)。
+    // 担当者用の記録ページ /interview-practice/log はログインが必要なので、完全一致だけ通す
+    pathname === "/interview-practice" ||
+    pathname.startsWith("/api/interview-practice/") ||
     // 母国語 求人票チェックリスト (公開・token 認証)
     pathname.startsWith("/checklist/") ||
     pathname.startsWith("/api/checklist/") ||

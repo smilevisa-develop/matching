@@ -113,6 +113,7 @@ const NAV: NavItem[] = [
       { label: "候補者一覧", href: "/personnel" },
       { label: "候補者を追加", href: "/personnel/new" },
       { label: "一括登録", href: "/personnel/bulk-add" },
+      { label: "AI面接練習の記録", href: "/interview-practice/log" },
     ],
   },
   {
