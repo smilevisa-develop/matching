@@ -1058,3 +1058,22 @@ model InterviewPracticeSession {
   @@index([userId, createdAt])
   @@index([createdAt])
 }
+
+/// AI 面接練習で面接官が話す音声 (AI の音声合成で作ったもの) の置き場。
+/// 同じ文は 1 度だけ作り、以後はここから配る (無料枠の節約と、待ち時間の短縮)。
+model InterviewPracticeSpeech {
+  id       Int     @id @default(autoincrement())
+  /// 声の種類と文から作った鍵 (音声を配る URL に使う)
+  key      String  @unique
+  text     String
+  voice    String
+  /// 質問集にある決まった文なら true。AI がその場で作った深掘りの質問は false (1 日で消す)
+  fixed    Boolean @default(false)
+  /// 音声 (WAV)。まだ作っていなければ null
+  audio    Bytes?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fixed, createdAt])
+}

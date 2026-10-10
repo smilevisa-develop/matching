@@ -18,7 +18,7 @@ import {
  *
  * 流れ:
  *   1. 基本情報・レベル・分野を入れて「練習を始める」(ここでマイク許可を取る)
- *   2. 面接官 (AI) の質問を、ブラウザの音声合成で読み上げる
+ *   2. 面接官 (AI) の質問を、AI の音声で聞かせる (使えないときは端末の読み上げに切り替える)
  *   3. 読み上げが終わると録音が始まる。話し終わったら「答え終わりました」
  *   4. 回答を送ると、AI が聞き取って次の質問 (または深掘り) を返す。2 に戻る
  *   5. 最後まで終わると、候補者の言語でフィードバックを表示し、メールでも送る
@@ -51,6 +51,12 @@ type Feedback = {
 
 type Answer = { dataUrl: string; seconds: number };
 
+/** 面接官の発言の 1 文。url があれば AI の音声、無ければ端末の読み上げで聞かせる */
+type SpeechSegment = { text: string; url: string | null };
+
+/** AI の音声を待つ時間の上限。初めての文はサーバーが音声を作るので数秒かかる */
+const CLIP_TIMEOUT_MS = 12000;
+
 const FORM_STORAGE_KEY = "interview-practice-form";
 
 const EMPTY_FORM: FormValues = {
@@ -82,11 +88,22 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+/** 端末の日本語の声のうち、いちばん自然に聞こえそうなものを選ぶ */
+function pickJapaneseVoice(): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith("ja"));
+  const score = (v: SpeechSynthesisVoice) =>
+    (/natural|online|enhanced|premium|siri/i.test(v.name) ? 4 : 0) +
+    (/google/i.test(v.name) ? 2 : 0) +
+    (v.localService ? 0 : 1);
+  return voices.sort((x, y) => score(y) - score(x))[0] ?? null;
+}
+
 /**
- * 日本語で読み上げる。読み上げられたら true、できなかったら false を返す。
+ * 端末の音声合成で読み上げる (AI の音声が使えないときの代わり)。
+ * 読み上げられたら true、できなかったら false を返す。
  * 端末によっては onend が来ないことがあるので、文の長さから見積もった時間で打ち切る。
  */
-function speak(text: string, rate: number): Promise<boolean> {
+function speakWithDevice(text: string, rate: number): Promise<boolean> {
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return resolve(false);
     const synth = window.speechSynthesis;
@@ -101,7 +118,7 @@ function speak(text: string, rate: number): Promise<boolean> {
     const utterance = new SpeechSynthesisUtterance(text.replace(/ /g, ""));
     utterance.lang = "ja-JP";
     utterance.rate = rate;
-    const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith("ja"));
+    const voice = pickJapaneseVoice();
     if (voice) utterance.voice = voice;
     utterance.onend = () => finish(true);
     utterance.onerror = () => finish(false);
@@ -109,6 +126,54 @@ function speak(text: string, rate: number): Promise<boolean> {
     synth.cancel();
     synth.speak(utterance);
   });
+}
+
+/** AI の音声を取りに行き、再生用の URL にする。時間内に取れなければ null */
+async function fetchClip(url: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CLIP_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    // いったん手元に全部読み込んでから再生する (iOS Safari は、分割取得に対応しない音声 URL を直接は再生できない)
+    return URL.createObjectURL(await res.blob());
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 音を出さない、ごく短い WAV。iOS で音声の再生を「ユーザー操作の中」で始めておくために使う */
+function silentClipUrl(): string {
+  const samples = 800;
+  const view = new DataView(new ArrayBuffer(44 + samples * 2));
+  const ascii = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+  ascii(0, "RIFF");
+  view.setUint32(4, 36 + samples * 2, true);
+  ascii(8, "WAVEfmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, 8000, true);
+  view.setUint32(28, 16000, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  ascii(36, "data");
+  view.setUint32(40, samples * 2, true);
+  return URL.createObjectURL(new Blob([view.buffer], { type: "audio/wav" }));
+}
+
+/** サーバーの応答から、読み上げる文の並びを取り出す (speech が無ければ全体を 1 文として扱う) */
+function toSegments(data: { say?: unknown; speech?: unknown }): SpeechSegment[] {
+  if (Array.isArray(data.speech) && data.speech.length > 0) {
+    return data.speech
+      .filter((seg): seg is SpeechSegment => !!seg && typeof seg.text === "string")
+      .map((seg) => ({ text: seg.text, url: typeof seg.url === "string" ? seg.url : null }));
+  }
+  return [{ text: typeof data.say === "string" ? data.say : "", url: null }];
 }
 
 function formatSeconds(s: number): string {
@@ -139,7 +204,11 @@ export default function InterviewPracticeClient() {
 
   const tokenRef = useRef("");
   const turnCountRef = useRef(0);
-  const sayRef = useRef("");
+  const segmentsRef = useRef<SpeechSegment[]>([]);
+  /** 面接官の声を鳴らすプレーヤー (iOS は、ユーザー操作の中で 1 度再生したものしか後から鳴らせないので使い回す) */
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  /** 取得済みの AI 音声 (音声の URL → 再生用の URL)。聞き直しで取り直さないため */
+  const clipsRef = useRef(new Map<string, Promise<string | null>>());
   const practiceLevelRef = useRef<PracticeLevel>("N3");
   /** 進行中の読み上げ・録音の世代。やり直し・終了のたびに増やし、古い処理の続きを止める */
   const runRef = useRef(0);
@@ -197,7 +266,69 @@ export default function InterviewPracticeClient() {
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     recorderRef.current = null;
     releaseMic();
+    audioRef.current?.pause();
     if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  };
+
+  const loadClip = (url: string) => {
+    let clip = clipsRef.current.get(url);
+    if (!clip) {
+      clip = fetchClip(url);
+      clipsRef.current.set(url, clip);
+      // 取れなかったものは覚えておかない (次の機会に取り直す)
+      void clip.then((src) => {
+        if (!src) clipsRef.current.delete(url);
+      });
+    }
+    return clip;
+  };
+
+  /** AI の音声を 1 つ再生する。最後まで鳴らせたら true */
+  const playClip = (src: string, rate: number): Promise<boolean> =>
+    new Promise((resolve) => {
+      const audio = audioRef.current;
+      if (!audio) return resolve(false);
+      let settled = false;
+      const finish = (played: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        audio.onended = null;
+        audio.onerror = null;
+        audio.onpause = null;
+        resolve(played);
+      };
+      // 再生が始まらない・終わらない端末のための保険
+      const timer = setTimeout(() => finish(false), 60000);
+      audio.onended = () => finish(true);
+      audio.onerror = () => finish(false);
+      // やり直し・終了で止められたとき (stopEverything)
+      audio.onpause = () => {
+        if (!audio.ended) finish(true);
+      };
+      audio.src = src;
+      audio.playbackRate = rate;
+      audio.play().catch(() => finish(false));
+    });
+
+  /**
+   * 面接官の発言を、文ごとに順番に聞かせる。
+   * AI の音声が取れた文はそれを鳴らし、取れなかった文は端末の読み上げにする。
+   * どちらでも聞かせられなかった文があれば false。
+   */
+  const speakSegments = async (segments: SpeechSegment[], run: number): Promise<boolean> => {
+    const rate = SPEECH_RATE[practiceLevelRef.current];
+    // 2 文目以降も先に取りに行っておく (文と文の間を空けない)
+    const clips = segments.map((seg) => (seg.url ? loadClip(seg.url) : Promise.resolve(null)));
+    let allSpoken = true;
+    for (let i = 0; i < segments.length; i++) {
+      const src = await clips[i];
+      if (run !== runRef.current) return allSpoken;
+      if (src && (await playClip(src, rate.ai))) continue;
+      if (run !== runRef.current) return allSpoken;
+      if (!(await speakWithDevice(segments[i].text, rate.device))) allSpoken = false;
+    }
+    return allSpoken;
   };
 
   // ページを離れるときに、マイクと読み上げを止める
@@ -302,14 +433,14 @@ export default function InterviewPracticeClient() {
   };
 
   /** 面接官の発言を読み上げ、終わったら録音を始める */
-  const askAndListen = async (text: string) => {
+  const askAndListen = async (segments: SpeechSegment[]) => {
     stopEverything();
     const run = runRef.current;
-    sayRef.current = text;
-    setSay(text);
+    segmentsRef.current = segments;
+    setSay(segments.map((seg) => seg.text).join(" "));
     setError(null);
     setStep("speaking");
-    const spoken = await speak(text, SPEECH_RATE[practiceLevelRef.current]);
+    const spoken = await speakSegments(segments, run);
     if (run !== runRef.current) return;
     // 読み上げられない端末では、質問を文字で見せる
     if (!spoken) setShowText(true);
@@ -363,13 +494,14 @@ export default function InterviewPracticeClient() {
       if (data.done) {
         // 終わりのあいさつを聞いてから、フィードバックへ進む
         const run = runRef.current;
-        sayRef.current = data.say;
+        const segments = toSegments(data);
+        segmentsRef.current = segments;
         setSay(data.say);
         setStep("speaking");
-        await speak(data.say, SPEECH_RATE[practiceLevelRef.current]);
+        await speakSegments(segments, run);
         if (run === runRef.current) await finish();
       } else {
-        await askAndListen(data.say);
+        await askAndListen(toSegments(data));
       }
     } catch {
       setError("通信に失敗しました。通信環境の良い場所で、もう一度送ってください。 / Network error. Please send it again.");
@@ -439,6 +571,10 @@ export default function InterviewPracticeClient() {
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
       }
+      // AI の音声のプレーヤーも同じ理由で、ここで 1 度 (無音を) 再生しておく
+      if (!audioRef.current) audioRef.current = new Audio();
+      audioRef.current.src = silentClipUrl();
+      void audioRef.current.play().catch(() => {});
 
       // 2. 登録して 1 問目を受け取る
       const res = await fetch("/api/interview-practice/start", {
@@ -464,7 +600,7 @@ export default function InterviewPracticeClient() {
       // やさしいレベルは、最初から質問を文字でも見せる
       setShowText(form.level === "N4");
       setPhase("interview");
-      void askAndListen(data.say);
+      void askAndListen(toSegments(data));
     } catch {
       setError("通信に失敗しました。もう一度お試しください。 / Network error. Please try again.");
     } finally {
@@ -720,7 +856,7 @@ export default function InterviewPracticeClient() {
           )}
           <button
             type="button"
-            onClick={() => void askAndListen(sayRef.current)}
+            onClick={() => void askAndListen(segmentsRef.current)}
             disabled={step === "speaking" || step === "sending"}
             className="mt-2 w-full rounded-xl border border-[var(--color-secondary)] bg-white px-6 py-3 text-sm font-semibold text-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-40"
           >
