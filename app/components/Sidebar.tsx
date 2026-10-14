@@ -167,6 +167,7 @@ export default function Sidebar() {
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [accountName, setAccountName] = useState("読み込み中...");
   const [accountRole, setAccountRole] = useState("");
+  const [syncState, setSyncState] = useState<"idle" | "running" | "done">("idle");
 
   const isSectionActive = (href: string) => {
     return pathname === href || pathname.startsWith(`${href}/`);
@@ -228,6 +229,26 @@ export default function Sidebar() {
 
     void loadAccount();
   }, []);
+
+  // スプシへの反映を定期実行を待たずに今すぐ走らせる
+  const syncNow = async () => {
+    setSyncState("running");
+    try {
+      const res = await fetch("/api/sync", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      const error = !res.ok || !data.ok ? (data.error ?? res.statusText) : data.dealSyncError;
+      if (error) {
+        setSyncState("idle");
+        alert(`同期に失敗しました: ${error}`);
+        return;
+      }
+      setSyncState("done");
+      window.setTimeout(() => setSyncState("idle"), 4000);
+    } catch {
+      setSyncState("idle");
+      alert("同期に失敗しました");
+    }
+  };
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -340,9 +361,19 @@ export default function Sidebar() {
       </nav>
 
       <div className="space-y-3 border-t border-white/10 pt-4">
-        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-          <p className="text-sm font-medium text-white">{accountName}</p>
-          <p className="mt-1 text-xs text-white/55">{accountRole}</p>
+        <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-white">{accountName}</p>
+            <p className="mt-1 text-xs text-white/55">{accountRole}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void syncNow()}
+            disabled={syncState === "running"}
+            className="shrink-0 rounded-lg border border-white/15 px-2.5 py-1.5 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-60"
+          >
+            {syncState === "running" ? "同期中…" : syncState === "done" ? "同期済み ✓" : "同期"}
+          </button>
         </div>
         <button
           type="button"
