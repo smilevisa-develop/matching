@@ -104,6 +104,8 @@ function SettingsIcon({ active }: { active: boolean }) {
   );
 }
 
+type SyncLine = { label: string; value: string; failed?: boolean };
+
 const NAV: NavItem[] = [
   // 毎日開く画面なので一番上に置く
   { label: "案件進捗", href: "/daily", icon: BroadcastIcon },
@@ -167,7 +169,8 @@ export default function Sidebar() {
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [accountName, setAccountName] = useState("読み込み中...");
   const [accountRole, setAccountRole] = useState("");
-  const [syncState, setSyncState] = useState<"idle" | "running" | "done">("idle");
+  const [syncing, setSyncing] = useState(false);
+  const [syncReport, setSyncReport] = useState<{ ok: boolean; lines: SyncLine[] } | null>(null);
 
   const isSectionActive = (href: string) => {
     return pathname === href || pathname.startsWith(`${href}/`);
@@ -230,23 +233,42 @@ export default function Sidebar() {
     void loadAccount();
   }, []);
 
-  // スプシへの反映を定期実行を待たずに今すぐ走らせる
+  // スプシへの反映を定期実行を待たずに今すぐ走らせ、何が反映されたかを出す
   const syncNow = async () => {
-    setSyncState("running");
+    setSyncing(true);
     try {
       const res = await fetch("/api/sync", { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      const error = !res.ok || !data.ok ? (data.error ?? res.statusText) : data.dealSyncError;
-      if (error) {
-        setSyncState("idle");
-        alert(`同期に失敗しました: ${error}`);
+      if (!res.ok || !data.ok) {
+        setSyncReport({ ok: false, lines: [{ label: "同期", value: data.error ?? res.statusText, failed: true }] });
         return;
       }
-      setSyncState("done");
-      window.setTimeout(() => setSyncState("idle"), 4000);
+      const count = (n: unknown) => (Array.isArray(n) ? n.length : Number(n ?? 0));
+      const changed = (updated: unknown, added: unknown) =>
+        count(updated) + count(added) === 0 ? "変更なし" : `更新 ${count(updated)} ・ 追加 ${count(added)}`;
+      const lines: SyncLine[] = [
+        { label: "候補者 → スプシ", value: changed(data.result?.updated, data.result?.appended) },
+        {
+          label: "企業マスタ → システム",
+          value: data.companyMaster ? changed(data.companyMaster.updated, data.companyMaster.created) : "対象外",
+        },
+      ];
+      if (data.dealSyncError) {
+        lines.push({ label: "企業・案件 → スプシ", value: data.dealSyncError, failed: true });
+      } else {
+        lines.push(
+          { label: "企業 → スプシ", value: changed(0, data.companies?.appended) },
+          {
+            label: "案件 → スプシ",
+            value: changed(data.deals?.updated, count(data.deals?.appended) + count(data.deals?.adopted)),
+          },
+        );
+      }
+      setSyncReport({ ok: !data.dealSyncError, lines });
     } catch {
-      setSyncState("idle");
-      alert("同期に失敗しました");
+      setSyncReport({ ok: false, lines: [{ label: "同期", value: "通信に失敗しました", failed: true }] });
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -369,10 +391,26 @@ export default function Sidebar() {
           <button
             type="button"
             onClick={() => void syncNow()}
-            disabled={syncState === "running"}
-            className="shrink-0 rounded-lg border border-white/15 px-2.5 py-1.5 text-xs font-medium text-white/85 transition hover:bg-white/10 disabled:opacity-60"
+            disabled={syncing}
+            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-bold text-[var(--color-text-dark)] shadow transition hover:bg-white/90 disabled:opacity-70"
           >
-            {syncState === "running" ? "同期中…" : syncState === "done" ? "同期済み ✓" : "同期"}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={syncing ? "animate-spin" : ""}
+            >
+              <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" />
+              <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" />
+              <path d="M21 3v5h-5" />
+              <path d="M3 21v-5h5" />
+            </svg>
+            {syncing ? "同期中" : "同期"}
           </button>
         </div>
         <button
@@ -383,6 +421,44 @@ export default function Sidebar() {
           ログアウト
         </button>
       </div>
+
+      {syncReport ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSyncReport(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-6 text-gray-800 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-lg font-bold text-[var(--color-text-dark)]">
+              {syncReport.ok ? "同期が完了しました" : "同期に失敗しました"}
+            </p>
+            <ul className="mt-4 divide-y divide-gray-100 text-sm">
+              {syncReport.lines.map((line) => (
+                <li key={line.label} className="flex items-start justify-between gap-3 py-2">
+                  <span className="shrink-0">
+                    <span className={line.failed ? "text-red-600" : "text-emerald-600"}>
+                      {line.failed ? "✕" : "✓"}
+                    </span>{" "}
+                    {line.label}
+                  </span>
+                  <span className={`text-right ${line.failed ? "text-red-600" : "text-gray-500"}`}>
+                    {line.value}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => setSyncReport(null)}
+              className="mt-4 w-full rounded-lg bg-[var(--color-primary)] py-2 text-sm font-semibold text-white"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }
