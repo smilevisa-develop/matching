@@ -90,7 +90,6 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
               field: deal.field,
               company: deal.company,
               owner: deal.owner,
-              priority: deal.priority,
               status: deal.status,
               unitPrice: deal.unitPrice,
               deadline: deal.deadline?.toISOString() ?? null,

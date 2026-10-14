@@ -10,11 +10,6 @@ import CloseButton from "@/app/components/CloseButton";
 import { DEAL_STATUSES, normalizeDealStatus } from "@/lib/deal-stages";
 
 const STATUS_OPTIONS = DEAL_STATUSES;
-const PRIORITY_OPTIONS = [
-  { value: "normal", label: "通常" },
-  { value: "high", label: "高" },
-  { value: "urgent", label: "急ぎ" },
-] as const;
 
 type DealDetail = {
   id: number;
@@ -22,7 +17,6 @@ type DealDetail = {
   field: string | null;
   company: { id: number; name: string; externalId: string | null };
   owner: { id: number; name: string } | null;
-  priority: string;
   status: string;
   unitPrice: string | null;
   deadline: string | null;
@@ -67,7 +61,6 @@ export default function DealDetailClient({
   const [editForm, setEditForm] = useState({
     title: deal.title,
     field: normalizeSswIndustry(deal.field) ?? SSW_INDUSTRIES[0],
-    priority: deal.priority,
     status: normalizeDealStatus(deal.status),
     companyExternalId: deal.company.externalId ?? "",
     unitPrice: deal.unitPrice ?? "",
@@ -99,7 +92,6 @@ export default function DealDetailClient({
     setEditForm({
       title: currentDeal.title,
       field: normalizeSswIndustry(currentDeal.field) ?? SSW_INDUSTRIES[0],
-      priority: currentDeal.priority,
       status: normalizeDealStatus(currentDeal.status),
       companyExternalId: currentDeal.company.externalId ?? "",
       unitPrice: currentDeal.unitPrice ?? "",
@@ -171,7 +163,6 @@ export default function DealDetailClient({
         company: { ...prev.company, externalId: nextExternalId || null },
         title: editForm.title,
         field: editForm.field || null,
-        priority: editForm.priority,
         status: editForm.status,
         unitPrice: editForm.unitPrice || null,
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
@@ -261,9 +252,6 @@ export default function DealDetailClient({
               <span className={statusClass(normalizeDealStatus(currentDeal.status))}>
                 {normalizeDealStatus(currentDeal.status)}
               </span>
-              {currentDeal.priority && currentDeal.priority !== "normal" ? (
-                <span className={priorityClass(currentDeal.priority)}>{priorityLabel(currentDeal.priority)}</span>
-              ) : null}
             </div>
             {!editing ? (
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
@@ -338,13 +326,6 @@ export default function DealDetailClient({
               <select className={EDIT_INPUT} value={editForm.status} onChange={(e) => setEditForm((c) => ({ ...c, status: e.target.value }))}>
                 {STATUS_OPTIONS.map((status) => (
                   <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </EditField>
-            <EditField label="優先度">
-              <select className={EDIT_INPUT} value={editForm.priority} onChange={(e) => setEditForm((c) => ({ ...c, priority: e.target.value }))}>
-                {PRIORITY_OPTIONS.map((priority) => (
-                  <option key={priority.value} value={priority.value}>{priority.label}</option>
                 ))}
               </select>
             </EditField>
@@ -504,25 +485,6 @@ function EditField({
       {children}
     </div>
   );
-}
-
-function priorityLabel(priority: string) {
-  switch (priority) {
-    case "urgent":
-      return "急ぎ";
-    case "high":
-      return "高";
-    default:
-      return "通常";
-  }
-}
-
-function priorityClass(priority: string) {
-  if (priority === "urgent")
-    return "rounded-full bg-[#DC2626] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm";
-  if (priority === "high")
-    return "rounded-full bg-[#F59E0B] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm";
-  return "rounded-full bg-[var(--color-light)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)]";
 }
 
 // 求人メモに含まれる「流入:」「入社状況:」行は候補者情報なので、表示時に除外

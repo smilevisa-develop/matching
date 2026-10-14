@@ -31,7 +31,6 @@ export default function NewDealClient({
     companyId: initialCompanyId,
     ownerId: accounts[0]?.id ? String(accounts[0].id) : "",
     field: SSW_INDUSTRIES[0] as string,
-    priority: "normal",
     status: "募集中",
     unitPrice: "",
     deadline: "",
@@ -93,13 +92,6 @@ export default function NewDealClient({
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>{account.name}</option>
             ))}
-          </select>
-        </Field>
-        <Field label="優先度">
-          <select className={INPUT} value={form.priority} onChange={(e) => setForm((current) => ({ ...current, priority: e.target.value }))}>
-            <option value="normal">通常</option>
-            <option value="high">高</option>
-            <option value="urgent">急ぎ</option>
           </select>
         </Field>
         <Field label="求人ステップ">
