@@ -105,6 +105,8 @@ function SettingsIcon({ active }: { active: boolean }) {
 }
 
 const NAV: NavItem[] = [
+  // 毎日開く画面なので一番上に置く
+  { label: "案件進捗", href: "/daily", icon: BroadcastIcon },
   {
     label: "候補者",
     href: "/personnel",
