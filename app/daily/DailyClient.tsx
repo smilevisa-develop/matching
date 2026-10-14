@@ -10,6 +10,7 @@ import CandidateKanban, {
 } from "@/app/components/CandidateKanban";
 import { dealGroup } from "@/lib/deal-stages";
 import { isTestCompany } from "@/lib/test-companies";
+import { buildDailyReport, type ReportFollowUp } from "@/lib/daily-report";
 
 export type DailyDeal = {
   companyId: number;
@@ -23,6 +24,10 @@ export type DailyDeal = {
   companyExternalId: string | null;
   companyName: string;
   ownerName: string | null;
+  lastActivityAt: string | null;
+  deadline: string | null;
+  memo: string | null;
+  isTest: boolean;
   candidates: CandidateCard[];
 };
 
@@ -41,8 +46,11 @@ export default function DailyClient({
   offerTarget,
   recommendTarget,
   offersThisMonth,
+  followUps,
 }: {
   deals: DailyDeal[];
+  /** 内定者フォローの状態 (要対応の判定つき) */
+  followUps: ReportFollowUp[];
   /** 今月 (日本時間) に内定日がある内定者の数 */
   offersThisMonth: number;
   offerTarget: number | null;
@@ -174,8 +182,37 @@ export default function DailyClient({
     </section>
   );
 
+  const [copied, setCopied] = useState(false);
+  // Slack にそのまま貼れる報告文 (要対応を先頭に、順調なものは 1 行ずつ)
+  const copyReport = async () => {
+    const text = buildDailyReport({
+      date: new Date(),
+      offersThisMonth,
+      offerTarget,
+      companies: deals,
+      followUps,
+      url: `${window.location.origin}/daily`,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt("コピーできなかったので、ここから選択してコピーしてください", text);
+    }
+  };
+
   return (
     <div className="space-y-5">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => void copyReport()}
+          className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)]"
+        >
+          {copied ? "コピーしました ✓" : "Slack 用にコピー"}
+        </button>
+      </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="今月の内定" value={offersThisMonth} target={offerTarget} editable />
         <Kpi label="推薦" value={sum("recommendedCount")} target={recommendTarget} editable />

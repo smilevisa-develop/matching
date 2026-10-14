@@ -3,7 +3,8 @@ import { requireCurrentAccount } from "@/lib/auth";
 import { getCoreSettings } from "@/lib/app-settings";
 import RefreshOnFocus from "@/app/components/RefreshOnFocus";
 import { normalizeDealStatus } from "@/lib/deal-stages";
-import { TEST_COMPANY_EXTERNAL_IDS } from "@/lib/test-companies";
+import { TEST_COMPANY_EXTERNAL_IDS, isTestCompany } from "@/lib/test-companies";
+import { calcUrgency, resolveStage } from "@/lib/onboarding-flow";
 import DailyClient from "./DailyClient";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,9 @@ export default async function DailyPage() {
             recommendedCount: true,
             interviewCount: true,
             offerCount: true,
+            createdAt: true,
+            deadline: true,
+            notes: true,
             owner: { select: { name: true } },
             candidates: {
               orderBy: { updatedAt: "desc" },
@@ -41,6 +45,7 @@ export default async function DailyPage() {
                 id: true,
                 stage: true,
                 note: true,
+                updatedAt: true,
                 person: {
                   select: {
                     id: true,
@@ -60,6 +65,62 @@ export default async function DailyPage() {
     }),
     getCoreSettings(),
   ]);
+
+  // 内定者フォローの要対応 (内定者管理ボードと同じ判定。チェックリスト・問題記録は今は使っていないので数えない)
+  const placements = await prisma.personPlacement.findMany({
+    select: {
+      stage: true,
+      stageChangedAt: true,
+      offerAcceptedAt: true,
+      applicationPlannedAt: true,
+      applicationAt: true,
+      applicationResultAt: true,
+      entryAt: true,
+      joinPlannedAt: true,
+      joinAt: true,
+      followUpOwner: { select: { name: true } },
+      person: {
+        select: {
+          id: true,
+          name: true,
+          resumeProfile: { select: { visaExpiryDate: true } },
+          dealCandidates: {
+            orderBy: { updatedAt: "desc" },
+            take: 1,
+            select: { deal: { select: { company: { select: { name: true, externalId: true } } } } },
+          },
+        },
+      },
+    },
+  });
+  const followUps = placements
+    .filter((p) => !isTestCompany(p.person.dealCandidates[0]?.deal.company.externalId))
+    .map((p) => {
+      const urgency = calcUrgency({
+        stage: resolveStage(p),
+        openIssues: 0,
+        overdueTasks: 0,
+        nextActionDueAt: null,
+        applicationPlannedAt: p.applicationPlannedAt,
+        applicationAt: p.applicationAt,
+        joinPlannedAt: p.joinPlannedAt,
+        joinAt: p.joinAt,
+        visaExpiryDate: p.person.resumeProfile?.visaExpiryDate ?? null,
+        stageChangedAt: p.stageChangedAt,
+      });
+      // 入社・請求の工程にいる人は入社済みなので、予定日超過や滞留では要対応にしない (在留期限だけ見る)
+      const reasons =
+        resolveStage(p) === "joined" ? urgency.reasons.filter((r) => r.startsWith("在留期限")) : urgency.reasons;
+      const level = reasons.length === 0 ? "normal" : urgency.level;
+      return {
+        personId: p.person.id,
+        name: p.person.name,
+        companyName: p.person.dealCandidates[0]?.deal.company.name ?? null,
+        ownerName: p.followUpOwner?.name ?? null,
+        level,
+        reasons,
+      };
+    });
 
   // 月は日本時間で決める (サーバーは UTC で動いている)
   const [year, monthNo] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit" })
@@ -90,6 +151,7 @@ export default async function DailyPage() {
         offerTarget={target?.offer ?? settings.monthlyOfferTarget}
         recommendTarget={target?.recommendCount ?? null}
         offersThisMonth={offersThisMonth}
+        followUps={followUps}
         deals={[...companies].sort(byExternalId).map((c) => {
           // 求人がまだ無い企業 (追加してから一度も開いていない) も、企業の採用状況で並べる
           const d = c.deals[0];
@@ -104,6 +166,20 @@ export default async function DailyPage() {
             companyExternalId: c.externalId,
             companyName: c.name,
             ownerName: d?.owner?.name ?? null,
+            // 最後に動いた日 = カンバンで候補者を最後に動かした日 (候補者がいなければ求人を作った日)。
+            // 求人の更新日はステータスや担当者の一括変更でも動くので使わない
+            lastActivityAt: (d
+              ? d.candidates.map((x) => x.updatedAt).reduce((a, b) => (a > b ? a : b), d.createdAt)
+              : null
+            )?.toISOString() ?? null,
+            deadline: d?.deadline?.toISOString() ?? null,
+            // スプシ同期の記録行 (流入: / 入社状況:) は除く。企業詳細の表示と同じ
+            memo:
+              (d?.notes ?? "")
+                .split("\n")
+                .map((l) => l.trim())
+                .find((l) => l && !/^(流入|入社状況)[:：]/.test(l)) ?? null,
+            isTest: isTestCompany(c.externalId),
             candidates: (d?.candidates ?? []).map((cand) => ({
               id: cand.id,
               note: cand.note,
