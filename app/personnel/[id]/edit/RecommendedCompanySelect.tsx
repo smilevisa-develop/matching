@@ -1,108 +1,97 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import SearchableSelect from "@/app/components/SearchableSelect";
 
+export type CompanyLink = { companyId: number; dealId: number; stage: string };
+
 /**
- * 推薦先企業の選択 (候補者詳細ヘッダー)。
+ * 推薦先企業 (候補者詳細ヘッダー)。
  *
- * - 企業を選択式で手動設定できる (案件紐づけフローに不慣れでも設定可能)。
- * - 案件 (DealCandidate) に紐づいている場合、そこから導出した企業を表示。
- *   紐づけと違う企業に変えようとしたら確認ダイアログを出す。
- * - 保存すると Person.recommendedCompany に入り、スプシ「推薦先企業」へ優先反映。
+ * 選んだ企業のカンバンに候補者を入れ、変えたり取り消したりしたら元の企業のカンバンから外す。
+ * 企業詳細・進捗管理のカンバンと同じデータなので、どこから見ても同じ状態になる。
+ * 横には、その企業のカンバンでの今のステータスを出す。
  */
 export default function RecommendedCompanySelect({
   personId,
-  initial,
-  companyOptions,
-  dealCompanies,
+  companies,
+  initialLinks,
+  legacyValue,
 }: {
   personId: number;
-  /** 手動上書き値 (空なら未設定) */
-  initial: string | null;
-  /** 選択肢になる企業名の一覧 */
-  companyOptions: string[];
-  /** 案件から導出された企業名 (紐づけ済みの企業) */
-  dealCompanies: string[];
+  /** 選択肢 (label は「企業ID_企業名」) */
+  companies: { id: number; label: string }[];
+  /** 今カンバンに入っている企業 (新しい順) */
+  initialLinks: CompanyLink[];
+  /** 以前の手入力の推薦先 (カンバンに紐づいていないときだけ表示する) */
+  legacyValue: string | null;
 }) {
   const router = useRouter();
-  // 案件から導出した企業 (紐づけ済み)。手動上書きが無ければこれを自動表示する。
-  const autoValue = dealCompanies.join(", ");
-  const [value, setValue] = useState(initial ?? autoValue);
+  const [links, setLinks] = useState(initialLinks);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
 
-  const save = async (next: string) => {
+  const current = links[0] ?? null;
+  const labelOf = (companyId: number) => companies.find((c) => c.id === companyId)?.label ?? "";
+
+  const save = async (companyId: number | null) => {
+    const removeCompanyId = current?.companyId ?? null;
+    if (current && companyId !== current.companyId && current.stage !== "接続済み") {
+      const ok = window.confirm(
+        `「${labelOf(current.companyId)}」のカンバンから外します（今のステータス: ${current.stage}）。\n` +
+          "このカードで数えた推薦・面接・内定などの人数も戻ります。よろしいですか？",
+      );
+      if (!ok) return;
+    }
     setSaving(true);
-    setSaved(false);
     try {
       const res = await fetch(`/api/personnel/${personId}/recommended-company`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: next }),
+        body: JSON.stringify({ companyId, removeCompanyId }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         alert(data.error ?? "保存に失敗しました");
-        return false;
+        return;
       }
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setLinks(data.links as CompanyLink[]);
       router.refresh();
-      return true;
-    } catch {
-      alert("保存に失敗しました");
-      return false;
     } finally {
       setSaving(false);
     }
   };
 
-  const handleChange = async (next: string) => {
-    // 案件に紐づいていて、その企業と違うものに変えようとしたら確認
-    if (
-      next &&
-      dealCompanies.length > 0 &&
-      !dealCompanies.includes(next)
-    ) {
-      const ok = window.confirm(
-        `この候補者は求人で「${dealCompanies.join("・")}」に紐づいています。\n` +
-          `推薦先を「${next}」に変更してよろしいですか？`,
-      );
-      if (!ok) return; // キャンセル → 変更しない
-    }
-    setValue(next);
-    // 案件由来の値と同じなら手動上書きは保存しない (自動反映のまま = 空)
-    await save(next && next === autoValue ? "" : next);
-  };
-
-  // 選択肢: 企業一覧 + (案件由来だが一覧に無い企業も念のため足す)
-  const options = Array.from(
-    new Set(
-      [...companyOptions, ...dealCompanies, autoValue, initial ?? "", value].filter(Boolean),
-    ),
-  ).sort((a, b) => a.localeCompare(b, "ja"));
+  // 選んでいる企業を先頭に出すため、他にも紐づいている企業は「ほか N 社」とだけ出す
+  const others = links.length - 1;
 
   return (
     <div className="min-w-0">
       <label className="block text-[11px] font-medium text-gray-500">推薦先企業</label>
-      <div className="mt-0.5 flex items-center gap-2">
-        <div className="max-w-[240px] flex-1">
+      <div className="mt-0.5 flex flex-wrap items-center gap-2">
+        <div className="w-[240px] max-w-full">
           <SearchableSelect
-            items={options.map((c) => ({ id: c, name: c }))}
-            value={value}
-            onChange={(v) => void handleChange(v)}
-            placeholder="未設定（企業を選択）"
+            items={companies.map((c) => ({ id: String(c.id), name: c.label }))}
+            value={current ? String(current.companyId) : ""}
+            onChange={(v) => void save(v ? Number(v) : null)}
+            placeholder={legacyValue ? `${legacyValue}（カンバン未登録）` : "未設定（企業を選択）"}
             emptyValueLabel="未設定"
             searchPlaceholder="企業名で検索…"
           />
         </div>
         {saving ? (
           <span className="text-[11px] text-gray-400">保存中…</span>
-        ) : saved ? (
-          <span className="text-[11px] font-medium text-[#15803D]">保存しました</span>
+        ) : current ? (
+          <Link
+            href={`/companies/deals/${current.dealId}`}
+            className="rounded-full bg-[var(--color-light)] px-2.5 py-1 text-xs font-semibold text-[var(--color-primary)] hover:underline"
+            title="企業のカンバンを開く"
+          >
+            {current.stage}
+          </Link>
         ) : null}
+        {!saving && others > 0 ? <span className="text-[11px] text-gray-400">ほか {others} 社</span> : null}
       </div>
     </div>
   );

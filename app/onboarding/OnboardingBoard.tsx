@@ -80,6 +80,8 @@ export default function OnboardingBoard({
       <div className="flex gap-3 overflow-x-auto pb-2">
         {COLUMNS.map((col) => {
           const list = cards.filter((c) => c.stage === col.id);
+          const dragging = cards.find((c) => c.personId === draggingId);
+          const isTarget = Boolean(dragging) && overStage === col.id && dragging?.stage !== col.id;
           return (
             <div
               key={col.id}
@@ -87,30 +89,45 @@ export default function OnboardingBoard({
                 e.preventDefault();
                 setOverStage(col.id);
               }}
-              onDragLeave={() => setOverStage((s) => (s === col.id ? null : s))}
+              onDragLeave={(e) => {
+                // 列の中の子要素へ移っただけなら、光らせたままにする
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  setOverStage((s) => (s === col.id ? null : s));
+                }
+              }}
               onDrop={() => {
                 const card = cards.find((c) => c.personId === draggingId);
                 if (card && card.stage !== col.id) void save(card.personId, { stage: col.id });
                 setDraggingId(null);
                 setOverStage(null);
               }}
-              className={`flex h-[calc(100vh-11rem)] w-[220px] shrink-0 flex-col rounded-2xl border ${
-                overStage === col.id
-                  ? "border-[var(--color-primary)] bg-[var(--color-light)]"
+              className={`flex h-[calc(100vh-11rem)] w-[220px] shrink-0 flex-col rounded-2xl border transition-all duration-150 ${
+                isTarget
+                  ? "scale-[1.02] border-[var(--color-primary)] bg-[var(--color-light)] shadow-lg ring-2 ring-[var(--color-primary)]"
                   : "border-gray-200 bg-gray-50"
               }`}
             >
               <p className="px-3 py-2.5 text-sm font-semibold text-[var(--color-text-dark)]">{col.label}</p>
               <div className="flex-1 space-y-2 overflow-y-auto px-2 pb-2">
+                {isTarget ? (
+                  <div className="rounded-xl border-2 border-dashed border-[var(--color-primary)] bg-white/70 px-3 py-4 text-center text-xs font-semibold text-[var(--color-primary)]">
+                    ここに移動
+                  </div>
+                ) : null}
                 {list.map((card) => (
                   <button
                     key={card.personId}
                     type="button"
                     draggable
                     onDragStart={() => setDraggingId(card.personId)}
-                    onDragEnd={() => setDraggingId(null)}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setOverStage(null);
+                    }}
                     onClick={() => setOpenId(card.personId)}
-                    className="w-full cursor-grab rounded-xl border border-gray-200 bg-white p-3 text-left shadow-sm hover:shadow-md"
+                    className={`w-full cursor-grab rounded-xl border border-gray-200 bg-white p-3 text-left shadow-sm hover:shadow-md ${
+                      card.personId === draggingId ? "opacity-40" : ""
+                    }`}
                   >
                     <p className="text-sm font-semibold text-[var(--color-text-dark)]">{card.personName}</p>
                     <p className="mt-0.5 truncate text-xs text-gray-500">

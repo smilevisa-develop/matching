@@ -46,7 +46,13 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
         documents: true,
         resumeProfile: true,
         japaneseCheck: true,
-        dealCandidates: { select: { deal: { select: { company: { select: { name: true, externalId: true } } } } } },
+        dealCandidates: {
+          orderBy: { updatedAt: "desc" },
+          select: {
+            stage: true,
+            deal: { select: { id: true, company: { select: { id: true, name: true, externalId: true } } } },
+          },
+        },
       },
     }),
     prisma.partner.findMany({
@@ -70,7 +76,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
       orderBy: { updatedAt: "desc" },
       select: { id: true, title: true, company: { select: { name: true } } },
     }),
-    prisma.company.findMany({ orderBy: { name: "asc" }, select: { name: true, externalId: true } }),
+    prisma.company.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, externalId: true } }),
   ]);
   if (!person) notFound();
 
@@ -83,8 +89,8 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
     ),
   );
   const companyOptions = companies
-    .map((c) => companyLabel(c.externalId, c.name))
-    .filter(Boolean);
+    .map((c) => ({ id: c.id, label: companyLabel(c.externalId, c.name) }))
+    .filter((c) => c.label);
 
   // ── 母国語チェックリスト: 前提(推薦先企業の求人情報の有無) と 送信履歴 ──
   // 実効的な推薦先 = 手動上書き(recommendedCompany) があればそれ、無ければ案件由来(dealCompanies)
@@ -301,9 +307,13 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
             extraControl={
               <RecommendedCompanySelect
                 personId={person.id}
-                initial={person.recommendedCompany}
-                companyOptions={companyOptions}
-                dealCompanies={dealCompanies}
+                companies={companyOptions}
+                initialLinks={person.dealCandidates.map((dc) => ({
+                  companyId: dc.deal.company.id,
+                  dealId: dc.deal.id,
+                  stage: dc.stage,
+                }))}
+                legacyValue={person.dealCandidates.length === 0 ? person.recommendedCompany : null}
               />
             }
             iconActions={

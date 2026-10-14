@@ -89,24 +89,51 @@ export default function CandidateKanban({
   onMove: (candidateId: number, stage: string) => void;
 }) {
   const [draggingCandidateId, setDraggingCandidateId] = useState<number | null>(null);
+  // いまカードを重ねている列 (ドロップ先を光らせる)
+  const [overColumn, setOverColumn] = useState<string | null>(null);
+  // 動かした直後のカード (一瞬だけ強調して、どこに入ったか分かるようにする)
+  const [justMovedId, setJustMovedId] = useState<number | null>(null);
+  const dragging = candidates.find((c) => c.id === draggingCandidateId) ?? null;
+
+  const endDrag = () => {
+    setDraggingCandidateId(null);
+    setOverColumn(null);
+  };
 
   return (
     <div className="grid grid-cols-9 gap-2">
     {CANDIDATE_STAGES.map((column) => {
       const columnCandidates = candidates.filter((candidate) => candidate.stage === column);
       const colors = COLUMN_COLOR[column] ?? COLUMN_COLOR["接続済み"];
+      const isTarget = dragging !== null && overColumn === column && dragging.stage !== column;
       return (
         <section
           key={column}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
+          onDragOver={(event) => {
             event.preventDefault();
-            if (draggingCandidateId) {
-              onMove(draggingCandidateId, column);
-              setDraggingCandidateId(null);
+            event.dataTransfer.dropEffect = "move";
+            if (overColumn !== column) setOverColumn(column);
+          }}
+          onDragLeave={(event) => {
+            // 列の中の子要素へ移っただけなら、光らせたままにする
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setOverColumn((cur) => (cur === column ? null : cur));
             }
           }}
-          className={`flex max-h-[calc(100vh-18rem)] min-w-0 flex-col rounded-xl border ${colors.border} bg-white p-2`}
+          onDrop={(event) => {
+            event.preventDefault();
+            if (draggingCandidateId && dragging?.stage !== column) {
+              onMove(draggingCandidateId, column);
+              setJustMovedId(draggingCandidateId);
+              window.setTimeout(() => setJustMovedId(null), 1200);
+            }
+            endDrag();
+          }}
+          className={`flex max-h-[calc(100vh-18rem)] min-w-0 flex-col rounded-xl border bg-white p-2 transition-all duration-150 ${
+            isTarget
+              ? "scale-[1.02] border-[var(--color-primary)] bg-[var(--color-light)] shadow-lg ring-2 ring-[var(--color-primary)]"
+              : colors.border
+          }`}
         >
           <div className={`flex items-center justify-between gap-1.5 rounded-lg px-2 py-1.5 ${colors.head}`}>
             <h3 className="text-[11px] font-semibold truncate">{column}</h3>
@@ -115,14 +142,24 @@ export default function CandidateKanban({
             </span>
           </div>
           <div className="mt-2 flex-1 space-y-1.5 overflow-y-auto pr-0.5">
+            {isTarget ? (
+              <div className="rounded-lg border-2 border-dashed border-[var(--color-primary)] bg-white/70 px-2 py-3 text-center text-[11px] font-semibold text-[var(--color-primary)]">
+                ここに移動
+              </div>
+            ) : null}
             {columnCandidates.map((candidate) => (
               <Link
                 key={candidate.id}
                 href={`/personnel/${candidate.person.id}/edit`}
                 draggable
-                onDragStart={() => setDraggingCandidateId(candidate.id)}
-                onDragEnd={() => setDraggingCandidateId(null)}
-                className={`block rounded-lg border p-2 transition ${colors.tile}`}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  setDraggingCandidateId(candidate.id);
+                }}
+                onDragEnd={endDrag}
+                className={`block rounded-lg border p-2 transition ${colors.tile} ${
+                  candidate.id === draggingCandidateId ? "opacity-40" : ""
+                } ${candidate.id === justMovedId ? "ring-2 ring-[var(--color-primary)] ring-offset-1" : ""}`}
                 title={`${formatCandidateLabel(candidate.person)}\n${candidate.person.name}\n${candidate.person.nationality} / ${candidate.person.residenceStatus}\n紹介パートナー: ${candidate.person.partner?.name ?? "未設定"}${candidate.note ? `\n備考: ${candidate.note}` : ""}`}
               >
                 <div className="flex items-start gap-1.5">
@@ -146,7 +183,7 @@ export default function CandidateKanban({
                 ) : null}
               </Link>
             ))}
-            {columnCandidates.length === 0 ? (
+            {columnCandidates.length === 0 && !isTarget ? (
               <div className="rounded-2xl border border-dashed border-gray-200 px-3 py-6 text-center text-xs text-gray-400">
                 候補者なし
               </div>
