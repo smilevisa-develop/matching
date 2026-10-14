@@ -7,9 +7,9 @@ const DRIVE_FOLDER_RE = /\/folders\/([a-zA-Z0-9_-]+)/;
 const SHEETS_URL_RE = /\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/;
 
 // 候補者・企業のルートフォルダ (env で上書き可能、未設定時はこの既定値を使用)
-const DEFAULT_PERSON_ROOT_FOLDER_URL =
+export const DEFAULT_PERSON_ROOT_FOLDER_URL =
   "https://drive.google.com/drive/folders/1Pmv-hFyk8DKIuu24mtMS5c26DWXmjqXr";
-const DEFAULT_COMPANY_ROOT_FOLDER_URL =
+export const DEFAULT_COMPANY_ROOT_FOLDER_URL =
   "https://drive.google.com/drive/folders/1TEqGDtoQZlLU8bg8c4cWZSNDp7mRwbin";
 
 export function parseGoogleDocId(urlOrId: string) {
@@ -765,13 +765,51 @@ export async function findFolderByPrefix({
     pageSize: 20,
   });
   const files = res.data.files ?? [];
-  // 厳密に namePrefix で始まるものを優先
-  const match = files.find((f) => (f.name ?? "").startsWith(namePrefix)) ?? files[0];
+  // namePrefix で始まるものだけを使う (大文字・小文字は区別しない)。
+  // 「72sv」で「172sv_…」や「72svx…」を拾わないよう、直後が英数字なら別物とみなす。
+  // 以前は見つからないとき「含むだけ」のフォルダを拾っていて、別の会社のフォルダに紐づくことがあった。
+  const p = namePrefix.toLowerCase();
+  const match = files.find((f) => {
+    const name = (f.name ?? "").toLowerCase();
+    return name.startsWith(p) && !/^[a-z0-9]/.test(name.slice(p.length));
+  });
   if (!match || !match.id) return null;
   return {
     folderId: match.id,
     folderUrl: match.webViewLink ?? `https://drive.google.com/drive/folders/${match.id}`,
   };
+}
+
+/** Drive のファイル・フォルダの名前を変える */
+export async function renameDriveItem(fileId: string, name: string): Promise<void> {
+  const { drive } = await getGoogleClients();
+  await drive.files.update({ fileId, requestBody: { name }, supportsAllDrives: true });
+}
+
+/** 親フォルダ直下のフォルダ一覧 (作成日時つき)。企業フォルダの整理・照合に使う */
+export async function listChildFolders(
+  parentFolderUrl: string,
+): Promise<{ id: string; name: string; createdTime: string }[]> {
+  const parentId = parseGoogleDriveFolderId(parentFolderUrl);
+  if (!parentId) return [];
+  const { drive } = await getGoogleClients();
+  const out: { id: string; name: string; createdTime: string }[] = [];
+  let pageToken: string | undefined;
+  do {
+    const res = await drive.files.list({
+      q: `'${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      fields: "nextPageToken, files(id, name, createdTime)",
+      pageSize: 200,
+      pageToken,
+    });
+    for (const f of res.data.files ?? []) {
+      if (f.id) out.push({ id: f.id, name: f.name ?? "", createdTime: f.createdTime ?? "" });
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+  return out;
 }
 
 /**

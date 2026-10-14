@@ -1,5 +1,5 @@
 /**
- * スプシ・Drive への全件同期 (候補者 + 企業マスタ + 案件 + Drive フォルダ)。
+ * スプシ・Drive への全件同期 (候補者 + 企業マスタ + 案件 + 既存の Drive フォルダの紐づけ)。
  *
  * 呼び出し元:
  *   - 毎時の cron (/api/cron/sync-sheet)
@@ -20,54 +20,47 @@ import {
 } from "@/lib/company-master-sync";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 import {
-  buildPersonFolderName,
-  ensureCompanyDriveFolder,
-  ensurePersonDriveFolder,
+  DEFAULT_COMPANY_ROOT_FOLDER_URL,
+  DEFAULT_PERSON_ROOT_FOLDER_URL,
+  findFolderByPrefix,
+  formatPersonIdPrefix,
 } from "@/lib/google-docs";
 
 export type DriveFolderSyncResult = { companies: number; persons: number; failed: string[] };
 
 /**
- * Drive フォルダがまだ無い企業・候補者に、フォルダを紐づける (無ければ作る)。
- * 候補者は登録時に作っているので、ここで拾うのは登録時に失敗した分だけ。
+ * Drive フォルダがまだ紐づいていない企業・候補者に、既存のフォルダを紐づける。
+ * 企業は「企業ID_」、候補者は「候補者ID(4 桁)_」で始まるフォルダだけを対象にする。
+ * 新しいフォルダは作らない (名前に企業IDが無い既存フォルダと重複して作ってしまうため)。
  */
 async function syncDriveFolders(): Promise<DriveFolderSyncResult> {
   const result: DriveFolderSyncResult = { companies: 0, persons: 0, failed: [] };
   const noFolder = { OR: [{ driveFolderUrl: null }, { driveFolderUrl: "" }] };
+  const companyRoot = process.env.GOOGLE_COMPANY_FILES_FOLDER_URL?.trim() || DEFAULT_COMPANY_ROOT_FOLDER_URL;
+  const personRoot = process.env.GOOGLE_CANDIDATE_FILES_FOLDER_URL?.trim() || DEFAULT_PERSON_ROOT_FOLDER_URL;
 
   const companies = await prisma.company.findMany({
-    where: noFolder,
+    where: { ...noFolder, externalId: { not: null } },
     select: { id: true, name: true, externalId: true },
     orderBy: { id: "asc" },
   });
   for (const c of companies) {
     try {
-      const folder = await ensureCompanyDriveFolder({ externalId: c.externalId, companyName: c.name });
-      if (!folder.folderUrl) throw new Error("フォルダ URL が空");
-      await prisma.company.update({ where: { id: c.id }, data: { driveFolderUrl: folder.folderUrl } });
+      const found = await findFolderByPrefix({ parentFolderUrl: companyRoot, namePrefix: c.externalId! });
+      if (!found) continue;
+      await prisma.company.update({ where: { id: c.id }, data: { driveFolderUrl: found.folderUrl } });
       result.companies++;
     } catch (e) {
       result.failed.push(`${c.name}: ${e instanceof Error ? e.message : "error"}`);
     }
   }
 
-  const persons = await prisma.person.findMany({
-    where: noFolder,
-    select: { id: true, name: true, onboarding: { select: { englishName: true } } },
-    orderBy: { id: "asc" },
-  });
+  const persons = await prisma.person.findMany({ where: noFolder, select: { id: true, name: true }, orderBy: { id: "asc" } });
   for (const p of persons) {
     try {
-      const folder = await ensurePersonDriveFolder({
-        personId: p.id,
-        personName: buildPersonFolderName({
-          id: p.id,
-          englishName: p.onboarding?.englishName ?? null,
-          name: p.name,
-        }),
-      });
-      if (!folder.folderUrl) throw new Error("フォルダ URL が空");
-      await prisma.person.update({ where: { id: p.id }, data: { driveFolderUrl: folder.folderUrl } });
+      const found = await findFolderByPrefix({ parentFolderUrl: personRoot, namePrefix: `${formatPersonIdPrefix(p.id)}_` });
+      if (!found) continue;
+      await prisma.person.update({ where: { id: p.id }, data: { driveFolderUrl: found.folderUrl } });
       result.persons++;
     } catch (e) {
       result.failed.push(`${p.name}: ${e instanceof Error ? e.message : "error"}`);
