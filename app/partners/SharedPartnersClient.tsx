@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CHANNELS } from "@/lib/candidate-profile";
-import { RELATIONSHIP_STATUSES, parseCsv } from "@/lib/partner-profile";
+import { parseCsv } from "@/lib/partner-profile";
 import RatingStars from "./RatingStars";
 
 export type PartnerRow = {
@@ -29,14 +29,12 @@ export default function SharedPartnersClient({
   initialPartners: PartnerRow[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [relFilter, setRelFilter] = useState<string>("all");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("active");
   const [sort, setSort] = useState<SortState>({ key: "rating", dir: "desc" });
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return initialPartners.filter((p) => {
-      if (relFilter !== "all" && (p.relationshipStatus ?? "") !== relFilter) return false;
       if (!q) return true;
       const haystack = [
         p.name,
@@ -52,7 +50,7 @@ export default function SharedPartnersClient({
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [initialPartners, searchTerm, relFilter]);
+  }, [initialPartners, searchTerm]);
 
   const activeCount = useMemo(() => filtered.filter((p) => p.isActive).length, [filtered]);
   const inactiveCount = filtered.length - activeCount;
@@ -65,7 +63,7 @@ export default function SharedPartnersClient({
     return [...visible].sort((a, b) => comparePartners(a, b, sort));
   }, [filtered, activeFilter, sort]);
 
-  const filtering = Boolean(searchTerm) || relFilter !== "all";
+  const filtering = Boolean(searchTerm);
 
   const toggleSort = (key: SortKey) =>
     setSort((cur) =>
@@ -79,20 +77,6 @@ export default function SharedPartnersClient({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput value={searchTerm} onChange={setSearchTerm} placeholder="名前・国・担当・国籍で検索" />
-          <FilterTab label="すべて" active={relFilter === "all"} onClick={() => setRelFilter("all")} />
-          {RELATIONSHIP_STATUSES.map((r) => (
-            <FilterTab
-              key={r}
-              label={r}
-              active={relFilter === r}
-              onClick={() => setRelFilter(r)}
-            />
-          ))}
-          <FilterTab
-            label="未設定"
-            active={relFilter === ""}
-            onClick={() => setRelFilter("")}
-          />
         </div>
         <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1">
           <ActiveToggle
@@ -366,22 +350,6 @@ function RelationshipBadge({ status }: { status: string | null }) {
 function channelLabel(value: string | null) {
   if (!value) return null;
   return CHANNELS.find((c) => c.value === value)?.label ?? value;
-}
-
-function FilterTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-        active
-          ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
-          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-      }`}
-    >
-      {label}
-    </button>
-  );
 }
 
 function SearchInput({
