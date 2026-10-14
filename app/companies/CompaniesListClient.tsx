@@ -100,7 +100,6 @@ function CompaniesTable({
             <th className="px-4 py-3 text-left font-semibold">企業名</th>
             <th className="px-4 py-3 text-left font-semibold">業種</th>
             <th className="px-4 py-3 text-left font-semibold">採用状況</th>
-            <th className="px-4 py-3 text-left font-semibold w-24 whitespace-nowrap">求人件数</th>
             <th className="w-24 whitespace-nowrap px-3 py-3 text-center font-semibold">保管場所</th>
           </tr>
         </thead>
@@ -129,11 +128,6 @@ function CompaniesTable({
                   </span>
                 </Link>
               </td>
-              <td className="p-0 text-gray-600">
-                <Link href={`/companies/${company.id}`} className="block px-4 py-3">
-                  {company.deals.length}件
-                </Link>
-              </td>
               <td className="px-4 py-3 text-center">
                 <CompanyDriveCell
                   companyId={company.id}
@@ -145,7 +139,7 @@ function CompaniesTable({
           ))}
           {companies.length === 0 ? (
             <tr>
-              <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
+              <td colSpan={5} className="px-4 py-10 text-center text-gray-400">
                 {emptyLabel}
               </td>
             </tr>

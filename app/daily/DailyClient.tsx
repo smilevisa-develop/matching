@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 
 export type DailyDeal = {
   id: number;
-  title: string;
   status: string;
   notes: string;
   recommendedCount: number;
@@ -87,7 +86,7 @@ export default function DailyClient({
         <table className="w-full min-w-[860px] text-sm">
           <thead>
             <tr className="bg-[var(--color-light)] text-[var(--color-text-dark)]">
-              <th className="px-4 py-3 text-left font-semibold">求人</th>
+              <th className="px-4 py-3 text-left font-semibold">企業</th>
               <th className="w-24 px-2 py-3 text-left font-semibold">担当</th>
               {COUNTS.map((c) => (
                 <th key={c.key} className="w-24 px-2 py-3 text-center font-semibold">
@@ -102,9 +101,11 @@ export default function DailyClient({
             {rows.map((d) => (
               <tr key={d.id} className="border-t border-gray-100 align-top">
                 <td className="px-4 py-3">
-                  <Link href={`/companies/deals/${d.id}`} className="block hover:underline">
-                    <span className="font-medium text-[var(--color-text-dark)]">{d.companyName}</span>
-                    <span className="block text-xs text-gray-500">{d.title}</span>
+                  <Link
+                    href={`/companies/deals/${d.id}`}
+                    className="font-medium text-[var(--color-text-dark)] hover:underline"
+                  >
+                    {d.companyName}
                   </Link>
                 </td>
                 <td className="px-2 py-3 text-gray-600">{d.ownerName ?? "-"}</td>
@@ -138,7 +139,7 @@ export default function DailyClient({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
-                  求人なし
+                  なし
                 </td>
               </tr>
             ) : null}

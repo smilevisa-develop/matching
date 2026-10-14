@@ -108,7 +108,7 @@ type SyncLine = { label: string; value: string; failed?: boolean };
 
 const NAV: NavItem[] = [
   // 毎日開く画面なので一番上に置く
-  { label: "求人進捗", href: "/daily", icon: BroadcastIcon },
+  { label: "デイリー報告", href: "/daily", icon: BroadcastIcon },
   {
     label: "候補者",
     href: "/personnel",

@@ -4,14 +4,17 @@ import DailyClient from "./DailyClient";
 
 export const dynamic = "force-dynamic";
 
-/** 求人進捗 (毎日の報告 Word の置き換え)。1 求人 1 行で、数字とメモだけを更新する。 */
+/**
+ * デイリー報告 (毎日の報告 Word の置き換え)。1 企業 1 行で、数字とメモだけを更新する。
+ * 1 企業 = 1 求人の運用なので、企業を開いたときと同じく最後に更新した Deal を使う。
+ */
 export default async function DailyPage() {
   const account = await requireCurrentAccount();
   const deals = await prisma.deal.findMany({
-    orderBy: { id: "asc" },
+    orderBy: { updatedAt: "desc" },
     select: {
       id: true,
-      title: true,
+      companyId: true,
       status: true,
       notes: true,
       recommendedCount: true,
@@ -22,14 +25,18 @@ export default async function DailyPage() {
     },
   });
 
+  const seen = new Set<number>();
+  const rows = deals
+    .filter((d) => !seen.has(d.companyId) && seen.add(d.companyId))
+    .sort((a, b) => a.id - b.id);
+
   return (
     <div className="space-y-5 p-8">
-      <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">求人進捗</h1>
+      <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">デイリー報告</h1>
       <DailyClient
         myName={account.name}
-        initialDeals={deals.map((d) => ({
+        initialDeals={rows.map((d) => ({
           id: d.id,
-          title: d.title,
           status: d.status,
           notes: d.notes ?? "",
           recommendedCount: d.recommendedCount,
