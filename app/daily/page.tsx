@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * 数字 (人数カウンター) と候補者の状態は企業詳細と同じデータで、入力は企業詳細で行う。
  */
 export default async function DailyPage() {
-  const account = await requireCurrentAccount();
+  await requireCurrentAccount();
   const [deals, settings] = await Promise.all([
     prisma.deal.findMany({
       orderBy: { updatedAt: "desc" },
@@ -31,7 +31,18 @@ export default async function DailyPage() {
           select: {
             id: true,
             stage: true,
-            person: { select: { id: true, name: true, onboarding: { select: { englishName: true } } } },
+            note: true,
+            person: {
+              select: {
+                id: true,
+                name: true,
+                nationality: true,
+                residenceStatus: true,
+                photoUrl: true,
+                partner: { select: { id: true, name: true } },
+                onboarding: { select: { englishName: true } },
+              },
+            },
           },
         },
       },
@@ -44,17 +55,22 @@ export default async function DailyPage() {
     .filter((d) => !seen.has(d.companyId) && seen.add(d.companyId))
     .sort((a, b) => a.id - b.id);
 
-  const month = new Date().toISOString().slice(0, 7);
-  const offerTarget =
-    settings.monthlyTargets.find((t) => t.month === month)?.offer ?? settings.monthlyOfferTarget;
+  // 月は日本時間で決める (サーバーは UTC で動いている)
+  const [year, monthNo] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit" })
+    .format(new Date())
+    .split("-");
+  const target = settings.monthlyTargets.find((t) => t.month === `${year}-${monthNo}`);
 
   return (
     <div className="space-y-5 p-8">
       <RefreshOnFocus />
-      <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">進捗管理</h1>
+      <h1 className="flex items-baseline gap-3 text-2xl font-bold text-[var(--color-text-dark)]">
+        進捗管理
+        <span className="text-4xl text-[var(--color-primary)]">{Number(monthNo)}月</span>
+      </h1>
       <DailyClient
-        myName={account.name}
-        offerTarget={offerTarget}
+        offerTarget={target?.offer ?? settings.monthlyOfferTarget}
+        recommendTarget={target?.recommendCount ?? null}
         deals={rows.map((d) => ({
           id: d.id,
           status: d.status,
@@ -67,9 +83,17 @@ export default async function DailyPage() {
           ownerName: d.owner?.name ?? null,
           candidates: d.candidates.map((c) => ({
             id: c.id,
+            note: c.note,
             stage: c.stage,
-            personId: c.person.id,
-            name: c.person.onboarding?.englishName?.trim() || c.person.name,
+            person: {
+              id: c.person.id,
+              name: c.person.name,
+              englishName: c.person.onboarding?.englishName ?? null,
+              nationality: c.person.nationality,
+              residenceStatus: c.person.residenceStatus,
+              photoUrl: c.person.photoUrl,
+              partner: c.person.partner,
+            },
           })),
         }))}
       />
