@@ -15,6 +15,7 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
+import { generateWithClaude } from "./claude";
 
 /** 使える Gemini キー一覧 (GEMINI_API_KEYS を優先し GEMINI_API_KEY も足す・重複排除) */
 export function getGeminiKeys(): string[] {
@@ -134,7 +135,8 @@ export class GeminiQuotaExhaustedError extends Error {
 }
 
 /**
- * generateContent を実行。
+ * generateContent を実行。画像・PDF・文章だけの依頼は先に Claude (lib/claude.ts) で処理する。
+ * Gemini では:
  *   429/枠超過 → 次のキー (別プロジェクト=別枠) へ
  *   全キーで枠切れ → 別モデル (モデルごとに別枠) へ
  *   503/混雑 → 次のキーで再試行
@@ -150,6 +152,17 @@ export async function generateContentRotating(
   opts?: { keys?: string[] },
 ): Promise<GenResult> {
   const keys = opts?.keys?.length ? opts.keys : getGeminiKeys();
+
+  // 画像・PDF・文章だけの依頼は Claude を先に使う (Gemini の無料枠は 1 日 20 回と少ないため)。
+  // 音声つきの依頼や、Claude が失敗したとき (クレジット切れなど) は Gemini で処理する。
+  try {
+    const claude = await generateWithClaude(params as Parameters<typeof generateWithClaude>[0]);
+    if (claude) return claude as unknown as GenResult;
+  } catch (e) {
+    if (keys.length === 0) throw e;
+    console.warn("[claude] 失敗したため Gemini で処理します:", e instanceof Error ? e.message : e);
+  }
+
   if (keys.length === 0) throw new Error("GEMINI_API_KEY(S) が未設定です");
 
   let lastErr: unknown = null;

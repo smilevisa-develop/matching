@@ -306,9 +306,10 @@ async function callGeminiWithRetry<T>(fn: () => Promise<T>, attempts = 3): Promi
 }
 
 export async function extractCandidateFromFiles(files: SourceFile[]): Promise<ExtractedCandidate> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  // Claude (ANTHROPIC_API_KEY) か Gemini のどちらかがあれば動く
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY が未設定です");
+    throw new Error("AI のキー (ANTHROPIC_API_KEY か GEMINI_API_KEY) が未設定です");
   }
 
   const supportedFiles = files.filter((file) => isSupported(file.mimeType));
@@ -384,8 +385,9 @@ const KIND_CATALOG_FOR_PROMPT = [
 ];
 
 export async function classifyFilesByAi(files: SourceFile[]): Promise<AiFileClassification[]> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) throw new Error("GEMINI_API_KEY が未設定です");
+  // Claude (ANTHROPIC_API_KEY) か Gemini のどちらかがあれば動く
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) throw new Error("AI のキー (ANTHROPIC_API_KEY か GEMINI_API_KEY) が未設定です");
   const supportedFiles = files.filter((file) => isSupported(file.mimeType));
   if (supportedFiles.length === 0) return [];
 
@@ -463,8 +465,9 @@ export async function classifyFilesByAi(files: SourceFile[]): Promise<AiFileClas
  * 履歴書 PDF/画像と違って画像 OCR は使わないので、レイアウトの細かい情報は失われる。
  */
 export async function extractCandidateFromText(text: string): Promise<ExtractedCandidate> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) throw new Error("GEMINI_API_KEY が未設定です");
+  // Claude (ANTHROPIC_API_KEY) か Gemini のどちらかがあれば動く
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) throw new Error("AI のキー (ANTHROPIC_API_KEY か GEMINI_API_KEY) が未設定です");
   const trimmed = text?.trim();
   if (!trimmed) throw new Error("テキストが空です");
 
@@ -687,8 +690,9 @@ ${JOB_POSTING_SCHEMA}`;
  * Gemini に渡して JSON 化する。ファイル不要。
  */
 export async function extractJobPostingFromText(text: string): Promise<ExtractedJobPosting> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) throw new Error("GEMINI_API_KEY が未設定です");
+  // Claude (ANTHROPIC_API_KEY) か Gemini のどちらかがあれば動く
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) throw new Error("AI のキー (ANTHROPIC_API_KEY か GEMINI_API_KEY) が未設定です");
   const trimmed = text?.trim();
   if (!trimmed) throw new Error("テキストが空です");
 
@@ -715,9 +719,10 @@ export async function extractJobPostingFromText(text: string): Promise<Extracted
 }
 
 export async function extractJobPostingFromFiles(files: SourceFile[]): Promise<ExtractedJobPosting> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  // Claude (ANTHROPIC_API_KEY) か Gemini のどちらかがあれば動く
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY が未設定です");
+    throw new Error("AI のキー (ANTHROPIC_API_KEY か GEMINI_API_KEY) が未設定です");
   }
 
   const supportedFiles = files.filter((file) => isSupported(file.mimeType));
