@@ -8,11 +8,62 @@ export const CANDIDATE_STAGES = [
   "接続済み",
   "事前面談済み",
   "推薦済み",
+  "面接済み",
   "内定済み",
+  "内定辞退",
   "書類NG",
   "面談NG",
   "不合格",
 ] as const;
+
+export type CounterField =
+  | "recommendedCount"
+  | "interviewCount"
+  | "offerCount"
+  | "declineCount"
+  | "rejectCount";
+
+// 選考が進む順。ここを通過するたびに対応する人数カウンターを 1 増やす
+const PIPELINE: { stage: string; counter: CounterField | null }[] = [
+  { stage: "接続済み", counter: null },
+  { stage: "事前面談済み", counter: null },
+  { stage: "推薦済み", counter: "recommendedCount" },
+  { stage: "面接済み", counter: "interviewCount" },
+  { stage: "内定済み", counter: "offerCount" },
+];
+
+// 選考の流れから外れる列。入ったときに 1 増やし、戻したら 1 減らす
+const EXIT_COUNTERS: Record<string, CounterField> = {
+  内定辞退: "declineCount",
+  不合格: "rejectCount",
+};
+
+/**
+ * 候補者をカンバンで動かしたときに、人数カウンターをいくつ増減するかを返す。
+ *
+ * - 先へ進めたら、通過した段階ぶん増やす (事前面談済み → 内定済み なら 推薦・面接・内定 が +1)
+ * - 間違えて進めたものを戻したら、そのぶん減らす
+ * - 内定辞退 / 不合格 は入ったら +1、出したら -1。それまでに数えた推薦・面接・内定はそのまま
+ * - 書類NG / 面談NG は数えない
+ */
+export function stageCounterDeltas(prev: string, next: string): Partial<Record<CounterField, number>> {
+  const deltas: Partial<Record<CounterField, number>> = {};
+  const add = (field: CounterField | null, n: number) => {
+    if (field) deltas[field] = (deltas[field] ?? 0) + n;
+  };
+  if (prev === next) return deltas;
+
+  add(EXIT_COUNTERS[prev] ?? null, -1);
+  add(EXIT_COUNTERS[next] ?? null, 1);
+
+  const from = PIPELINE.findIndex((p) => p.stage === prev);
+  const to = PIPELINE.findIndex((p) => p.stage === next);
+  if (from >= 0 && to >= 0) {
+    for (let i = from + 1; i <= to; i++) add(PIPELINE[i].counter, 1);
+    for (let i = to + 1; i <= from; i++) add(PIPELINE[i].counter, -1);
+  }
+  return deltas;
+}
 
 // Deal.status にはスプシ側の表記 (「！至急募集！」「ストップ」「一時中断」など) も入っている
 const URGENT_STATUSES = ["至急募集", "！至急募集！"];

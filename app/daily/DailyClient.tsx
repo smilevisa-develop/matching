@@ -178,7 +178,7 @@ function DealTable({
 function CandidateProgress({ candidates }: { candidates: DailyDeal["candidates"] }) {
   if (candidates.length === 0) return <p className="py-2 text-center text-xs text-gray-400">候補者なし</p>;
   return (
-    <div className="grid grid-cols-7 gap-2">
+    <div className="grid grid-cols-9 gap-2">
       {CANDIDATE_STAGES.map((stage) => {
         const list = candidates.filter((c) => c.stage === stage);
         return (

@@ -44,6 +44,16 @@ const COLUMN_COLOR: Record<string, { border: string; head: string; tile: string 
     head: "bg-[#FCE7F3] text-[#9D174D]",
     tile: "bg-[#FDF2F8] border-[#FBCFE8] hover:border-[#EC4899]",
   },
+  面接済み: {
+    border: "border-[#A5F3FC]",
+    head: "bg-[#CFFAFE] text-[#0E7490]",
+    tile: "bg-[#ECFEFF] border-[#A5F3FC] hover:border-[#22D3EE]",
+  },
+  内定辞退: {
+    border: "border-[#E5E7EB]",
+    head: "bg-[#F3F4F6] text-[#4B5563]",
+    tile: "bg-[#F9FAFB] border-[#E5E7EB] hover:border-[#9CA3AF]",
+  },
   不合格: {
     border: "border-[#FECACA]",
     head: "bg-[#FEE2E2] text-[#B91C1C]",
@@ -257,7 +267,10 @@ export default function DealDetailClient({
     if (!response.ok || !result.ok) {
       alert(result.error || "候補者ステップの更新に失敗しました");
       setCandidates(deal.candidates);
+      return;
     }
+    // ステージの移動に合わせてサーバー側で人数カウンターも動くので、その結果を表示に反映する
+    if (result.counters) setCurrentDeal((prev) => ({ ...prev, ...result.counters }));
   };
 
   const addCandidate = async () => {
@@ -438,10 +451,7 @@ export default function DealDetailClient({
 
       {/* 人数カウンター */}
       <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-[var(--color-text-dark)]">人数カウンター</h2>
-          <p className="text-xs text-gray-500">上下矢印で即時更新</p>
-        </div>
+        <h2 className="text-base font-semibold text-[var(--color-text-dark)]">人数カウンター</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <CounterCell label="募集" value={currentDeal.requiredCount} onChange={(n) => void updateCounter("requiredCount", n)} />
           <CounterCell label="推薦" value={currentDeal.recommendedCount} onChange={(n) => void updateCounter("recommendedCount", n)} />
@@ -473,7 +483,7 @@ export default function DealDetailClient({
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-7 gap-2">
+        <div className="mt-4 grid grid-cols-9 gap-2">
         {CANDIDATE_COLUMNS.map((column) => {
           const columnCandidates = candidates.filter((candidate) => candidate.stage === column);
           const colors = COLUMN_COLOR[column] ?? COLUMN_COLOR["接続済み"];
