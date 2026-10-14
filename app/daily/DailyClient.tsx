@@ -87,7 +87,7 @@ export default function DailyClient({
         <table className="w-full min-w-[860px] text-sm">
           <thead>
             <tr className="bg-[var(--color-light)] text-[var(--color-text-dark)]">
-              <th className="px-4 py-3 text-left font-semibold">案件</th>
+              <th className="px-4 py-3 text-left font-semibold">求人</th>
               <th className="w-24 px-2 py-3 text-left font-semibold">担当</th>
               {COUNTS.map((c) => (
                 <th key={c.key} className="w-24 px-2 py-3 text-center font-semibold">
@@ -138,7 +138,7 @@ export default function DailyClient({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
-                  案件なし
+                  求人なし
                 </td>
               </tr>
             ) : null}

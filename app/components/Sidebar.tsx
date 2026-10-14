@@ -108,7 +108,7 @@ type SyncLine = { label: string; value: string; failed?: boolean };
 
 const NAV: NavItem[] = [
   // 毎日開く画面なので一番上に置く
-  { label: "案件進捗", href: "/daily", icon: BroadcastIcon },
+  { label: "求人進捗", href: "/daily", icon: BroadcastIcon },
   {
     label: "候補者",
     href: "/personnel",
@@ -270,12 +270,12 @@ export default function Sidebar() {
         });
       }
       if (data.dealSyncError) {
-        lines.push({ label: "企業・案件 → スプシ", value: data.dealSyncError, failed: true });
+        lines.push({ label: "企業・求人 → スプシ", value: data.dealSyncError, failed: true });
       } else {
         lines.push(
           { label: "企業 → スプシ", value: changed(0, data.companies?.appended) },
           {
-            label: "案件 → スプシ",
+            label: "求人 → スプシ",
             value: changed(data.deals?.updated, count(data.deals?.appended) + count(data.deals?.adopted)),
           },
         );
