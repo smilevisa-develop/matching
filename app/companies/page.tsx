@@ -52,7 +52,7 @@ export default async function CompaniesPage() {
         </div>
         <Link
           href="/companies/new"
-          className="rounded-lg bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-primary-hover)]"
+          className="shrink-0 rounded-lg bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-primary-hover)]"
         >
           + 企業を追加
         </Link>

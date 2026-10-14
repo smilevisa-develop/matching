@@ -101,6 +101,9 @@ export async function removeCandidateFromKanban(candidateId: number) {
   return data.counters as Record<string, number>;
 }
 
+/** 選考中の列 (画面に広く出す)。それ以外 (内定辞退・NG・不合格) は右端に寄せる */
+const ACTIVE_STAGES: string[] = ["接続済み", "事前面談済み", "推薦済み", "面接済み", "内定済み"];
+
 export default function CandidateKanban({
   candidates,
   onMove,
@@ -124,7 +127,9 @@ export default function CandidateKanban({
   };
 
   return (
-    <div className="grid grid-cols-9 gap-2">
+    // 選考中の 5 列 (接続済み〜内定済み) で見える幅をちょうど使い切り、
+    // 内定辞退・書類NG・面談NG・不合格 は右へスクロールしたときだけ見える
+    <div className="flex gap-2 overflow-x-auto pb-1">
     {CANDIDATE_STAGES.map((column) => {
       const columnCandidates = candidates.filter((candidate) => candidate.stage === column);
       const colors = COLUMN_COLOR[column] ?? COLUMN_COLOR["接続済み"];
@@ -152,7 +157,9 @@ export default function CandidateKanban({
             }
             endDrag();
           }}
-          className={`flex max-h-[calc(100vh-18rem)] min-w-0 flex-col rounded-xl border bg-white p-2 transition-all duration-150 ${
+          className={`flex max-h-[calc(100vh-18rem)] shrink-0 flex-col rounded-xl border bg-white p-2 transition-all duration-150 ${
+            ACTIVE_STAGES.includes(column) ? "w-[calc((100%-2rem)/5)] min-w-[150px]" : "w-[150px]"
+          } ${
             isTarget
               ? "scale-[1.02] border-[var(--color-primary)] bg-[var(--color-light)] shadow-lg ring-2 ring-[var(--color-primary)]"
               : colors.border
