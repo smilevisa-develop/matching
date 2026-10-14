@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FixedQuestionSetting } from "@/lib/app-settings";
 import {
   RECOMMENDATION_COLUMN_OPTIONS,
@@ -125,6 +125,15 @@ export default function SettingsClient({
         : [];
   const [monthlyTargetRows, setMonthlyTargetRows] = useState<MonthlyTargetRow[]>(initialRows);
   const [monthlyTargetOpen, setMonthlyTargetOpen] = useState(false);
+  // 進捗管理の目標の数字から来たとき (/settings#monthly-targets) は、月次目標を開いた状態で見せる
+  useEffect(() => {
+    if (window.location.hash !== "#monthly-targets") return;
+    const timer = window.setTimeout(() => {
+      setMonthlyTargetOpen(true);
+      document.getElementById("monthly-targets")?.scrollIntoView({ block: "start" });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const [savingMonthlyTarget, setSavingMonthlyTarget] = useState(false);
 
   const addMonthlyTargetRow = () => {
@@ -634,6 +643,7 @@ export default function SettingsClient({
       </SectionCard>
 
       {isAdmin && (
+        <div id="monthly-targets" className="scroll-mt-6">
         <SectionCard
           title="月次目標"
           description="売上ダッシュボードのゲージで使う、月ごとの内定数と売上の目標値を積み上げで管理します。"
@@ -727,6 +737,7 @@ export default function SettingsClient({
             </p>
           </div>
         </SectionCard>
+        </div>
       )}
 
       {isAdmin && (

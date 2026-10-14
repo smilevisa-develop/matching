@@ -32,8 +32,11 @@ export default function DailyClient({
   deals,
   offerTarget,
   recommendTarget,
+  canEditTargets,
 }: {
   deals: DailyDeal[];
+  /** 月次目標 (設定画面) を編集できるのは管理者だけ */
+  canEditTargets: boolean;
   offerTarget: number | null;
   recommendTarget: number | null;
 }) {
@@ -152,8 +155,8 @@ export default function DailyClient({
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="内定" value={sum("offerCount")} target={offerTarget} />
-        <Kpi label="推薦" value={sum("recommendedCount")} target={recommendTarget} />
+        <Kpi label="内定" value={sum("offerCount")} target={offerTarget} editable={canEditTargets} />
+        <Kpi label="推薦" value={sum("recommendedCount")} target={recommendTarget} editable={canEditTargets} />
         <Kpi label="面接" value={sum("interviewCount")} target={null} />
         <Kpi label="募集中の企業" value={active.length} target={null} />
       </div>
@@ -163,10 +166,21 @@ export default function DailyClient({
   );
 }
 
-/** 数字 1 つ。目標があれば「現状 / 目標」と達成率のバーを出す */
-function Kpi({ label, value, target }: { label: string; value: number; target: number | null }) {
+/** 数字 1 つ。目標があれば「現状 / 目標」と達成率のバーを出す。目標の数字を押すと設定の月次目標へ飛ぶ */
+function Kpi({
+  label,
+  value,
+  target,
+  editable = false,
+}: {
+  label: string;
+  value: number;
+  target: number | null;
+  editable?: boolean;
+}) {
   const rate = target && target > 0 ? Math.round((value / target) * 100) : null;
   const barColor = rate === null ? "" : rate >= 100 ? "bg-emerald-500" : rate >= 50 ? "bg-[var(--color-primary)]" : "bg-amber-500";
+  const targetText = rate !== null ? `/ ${target}` : editable ? "/ 目標を設定" : null;
   return (
     <div className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
       <div className="flex items-baseline justify-between gap-2">
@@ -177,7 +191,16 @@ function Kpi({ label, value, target }: { label: string; value: number; target: n
       </div>
       <p className="text-xl font-bold tabular-nums leading-tight text-[var(--color-text-dark)]">
         {value}
-        {rate !== null ? <span className="text-sm font-medium text-gray-400"> / {target}</span> : null}
+        {targetText && editable ? (
+          <Link
+            href="/settings#monthly-targets"
+            className="ml-1 text-sm font-medium text-gray-400 underline decoration-dotted underline-offset-2 hover:text-[var(--color-primary)]"
+          >
+            {targetText}
+          </Link>
+        ) : targetText ? (
+          <span className="ml-1 text-sm font-medium text-gray-400">{targetText}</span>
+        ) : null}
       </p>
       {rate !== null ? (
         <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">

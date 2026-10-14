@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * 数字 (人数カウンター) と候補者の状態は企業詳細と同じデータで、入力は企業詳細で行う。
  */
 export default async function DailyPage() {
-  await requireCurrentAccount();
+  const account = await requireCurrentAccount();
   const [deals, settings] = await Promise.all([
     prisma.deal.findMany({
       orderBy: { updatedAt: "desc" },
@@ -69,6 +69,7 @@ export default async function DailyPage() {
         <span className="text-4xl text-[var(--color-primary)]">{Number(monthNo)}月</span>
       </h1>
       <DailyClient
+        canEditTargets={account.role === "admin"}
         offerTarget={target?.offer ?? settings.monthlyOfferTarget}
         recommendTarget={target?.recommendCount ?? null}
         deals={rows.map((d) => ({
