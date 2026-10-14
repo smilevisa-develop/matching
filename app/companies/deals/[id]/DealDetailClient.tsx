@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { SSW_INDUSTRIES, normalizeSswIndustry } from "@/lib/company-options";
@@ -279,16 +278,15 @@ export default function DealDetailClient({
             ) : null}
           </div>
           <div className="flex gap-2">
-            <Link href={`/companies/${currentDeal.company.id}`} className="self-start rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50">
-              企業詳細へ戻る
-            </Link>
-            <button
-              type="button"
-              onClick={() => setRecommendationOpen(true)}
-              className="self-start rounded-lg bg-[var(--color-primary)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--color-primary-hover)]"
-            >
-              推薦リスト作成
-            </button>
+            {!editing ? (
+              <button
+                type="button"
+                onClick={() => setRecommendationOpen(true)}
+                className="self-start rounded-lg bg-[var(--color-primary)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--color-primary-hover)]"
+              >
+                推薦リスト作成
+              </button>
+            ) : null}
             {!editing ? (
               <button
                 type="button"
