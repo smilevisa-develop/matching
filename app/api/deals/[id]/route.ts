@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { after } from "next/server";
+import { normalizeDealStatus } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -69,7 +70,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     if (body.title !== undefined) updateData.title = String(body.title).trim();
     if (body.field !== undefined) updateData.field = String(body.field ?? "").trim() || null;
-    if (body.status !== undefined) updateData.status = String(body.status);
+    if (body.status !== undefined) updateData.status = normalizeDealStatus(body.status);
     if (body.priority !== undefined) updateData.priority = String(body.priority);
     if (body.ownerId !== undefined) updateData.ownerId = body.ownerId ? Number(body.ownerId) : null;
     if (body.unitPrice !== undefined) updateData.unitPrice = String(body.unitPrice ?? "").trim() || null;

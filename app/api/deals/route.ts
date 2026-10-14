@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { after } from "next/server";
+import { normalizeDealStatus } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 
 export async function GET() {
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
         ownerId: Number.isFinite(ownerId ?? NaN) ? ownerId : null,
         field: String(body.field ?? "").trim() || null,
         priority: String(body.priority ?? "normal"),
-        status: String(body.status ?? "募集中"),
+        status: normalizeDealStatus(body.status),
         unitPrice: String(body.unitPrice ?? "").trim() || null,
         deadline: body.deadline ? new Date(String(body.deadline)) : null,
         acceptedAt: body.acceptedAt ? new Date(String(body.acceptedAt)) : null,

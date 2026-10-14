@@ -10,7 +10,6 @@ export type CompanyRow = {
   industry: string | null;
   hiringStatus: string;
   driveFolderUrl: string | null;
-  deals: { id: number }[];
 };
 
 export default function CompaniesListClient({
@@ -62,14 +61,14 @@ export default function CompaniesListClient({
       {stopped.length > 0 ? (
         <div className="space-y-3">
           <div className="flex items-center gap-3 pt-2">
-            <h2 className="text-sm font-semibold text-gray-500">採用停止中</h2>
+            <h2 className="text-sm font-semibold text-gray-500">ストップ・成約</h2>
             <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-gray-500">
               {filteredStopped.length}{searchTerm ? ` / ${stopped.length}` : ""} 件
             </span>
           </div>
           <CompaniesTable
             companies={filteredStopped}
-            emptyLabel={searchTerm ? `「${searchTerm}」に一致する停止中企業はありません` : "停止中の企業はありません"}
+            emptyLabel={searchTerm ? `「${searchTerm}」に一致する企業はありません` : "ストップ・成約の企業はありません"}
             muted
           />
         </div>

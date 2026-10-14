@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
+import { dealGroup, normalizeDealStatus } from "@/lib/deal-stages";
 import { compareExternalIdDescendingWithFallback, findExternalIdByName } from "@/lib/company-id-mapping";
 import { findFolderByPrefix } from "@/lib/google-docs";
 import CompaniesListClient from "./CompaniesListClient";
@@ -21,8 +22,11 @@ export default async function CompaniesPage() {
 
   const companies = await prisma.company.findMany({
     include: {
+      // 1 企業 = 1 求人。企業を開いたときと同じく最後に更新した求人のステータスを使う
       deals: {
-        select: { id: true },
+        select: { status: true },
+        orderBy: { updatedAt: "desc" },
+        take: 1,
       },
     },
   });
@@ -35,19 +39,16 @@ export default async function CompaniesPage() {
     compareExternalIdDescendingWithFallback(a.externalId, b.externalId)
   );
 
-  const active = sorted
-    .filter((company) => company.hiringStatus !== "停止")
-    .map(toRow);
-  const stopped = sorted
-    .filter((company) => company.hiringStatus === "停止")
-    .map(toRow);
+  const rows = sorted.map(toRow);
+  const active = rows.filter((company) => dealGroup(company.hiringStatus) !== "stopped");
+  const stopped = rows.filter((company) => dealGroup(company.hiringStatus) === "stopped");
 
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">企業一覧</h1>
-          <p className="mt-1 text-sm text-gray-500">{companies.length} 件 (稼働中 {active.length} / 停止 {stopped.length})</p>
+          <p className="mt-1 text-sm text-gray-500">{companies.length} 件 (募集中 {active.length} / ストップ {stopped.length})</p>
         </div>
         <Link
           href="/companies/new"
@@ -69,7 +70,7 @@ type RawCompany = {
   industry: string | null;
   hiringStatus: string;
   driveFolderUrl: string | null;
-  deals: { id: number }[];
+  deals: { status: string }[];
 };
 
 function toRow(c: RawCompany) {
@@ -78,9 +79,9 @@ function toRow(c: RawCompany) {
     externalId: c.externalId,
     name: c.name,
     industry: c.industry,
-    hiringStatus: c.hiringStatus,
+    // 求人のステータスが正。求人がまだ無い企業だけ、追加時に選んだ採用状況を使う
+    hiringStatus: normalizeDealStatus(c.deals[0]?.status ?? c.hiringStatus),
     driveFolderUrl: c.driveFolderUrl,
-    deals: c.deals,
   };
 }
 

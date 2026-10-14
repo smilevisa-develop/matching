@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { after } from "next/server";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
+import { COMPANY_EXTERNAL_ID_RE } from "@/lib/deal-stages";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -24,6 +25,37 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       return Response.json({ ok: false, error: "企業が見つかりません" }, { status: 404 });
     }
 
+    return Response.json({ ok: true, company });
+  } catch (error) {
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : "error" },
+      { status: error instanceof AuthError ? error.status : 500 }
+    );
+  }
+}
+
+/** 企業IDだけを直す (PUT は全項目を上書きするので、ID の修正用に分けている) */
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requireApiAccount();
+    const { id } = await params;
+    const body = await req.json();
+    const externalId = String(body.externalId ?? "").trim().toLowerCase();
+    if (!COMPANY_EXTERNAL_ID_RE.test(externalId)) {
+      return Response.json(
+        { ok: false, error: "企業IDは半角英数字で入力してください (例: 73sv)" },
+        { status: 400 },
+      );
+    }
+    const dup = await prisma.company.findFirst({ where: { externalId, NOT: { id: Number(id) } } });
+    if (dup) {
+      return Response.json(
+        { ok: false, error: `企業ID "${externalId}" は「${dup.name}」で使われています` },
+        { status: 409 },
+      );
+    }
+    const company = await prisma.company.update({ where: { id: Number(id) }, data: { externalId } });
+    after(() => requestCompanyDatabaseSync());
     return Response.json({ ok: true, company });
   } catch (error) {
     return Response.json(

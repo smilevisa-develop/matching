@@ -65,15 +65,32 @@ export function stageCounterDeltas(prev: string, next: string): Partial<Record<C
   return deltas;
 }
 
-// Deal.status にはスプシ側の表記 (「！至急募集！」「ストップ」「一時中断」など) も入っている
-const URGENT_STATUSES = ["至急募集", "！至急募集！"];
-const STOPPED_STATUSES = ["成約", "クローズ", "ストップ", "一時中断", "失注"];
+/**
+ * 企業の募集状況 (Deal.status)。企業一覧・企業詳細・進捗管理すべてでこの表記を使う。
+ * スプシへ書くときだけ lib/deal-sheet-sync.ts の toSheetStatus で表記を変える。
+ */
+export const DEAL_STATUSES = ["至急募集", "募集中", "面接中", "成約", "一時中断", "ストップ"] as const;
+
+// 過去に使っていた表記・スプシ側の表記 → 今の表記
+const STATUS_ALIAS: Record<string, string> = {
+  "！至急募集！": "至急募集",
+  クローズ: "ストップ",
+  停止: "ストップ",
+};
+
+export function normalizeDealStatus(status: string | null | undefined): string {
+  const s = (status ?? "").trim();
+  return STATUS_ALIAS[s] ?? (s || "募集中");
+}
 
 export type DealGroup = "urgent" | "open" | "stopped";
 
 export function dealGroup(status: string): DealGroup {
-  const s = status.trim();
-  if (URGENT_STATUSES.includes(s)) return "urgent";
-  if (STOPPED_STATUSES.includes(s)) return "stopped";
+  const s = normalizeDealStatus(status);
+  if (s === "至急募集") return "urgent";
+  if (["成約", "一時中断", "ストップ", "失注"].includes(s)) return "stopped";
   return "open";
 }
+
+/** 企業IDの形式 (半角英数字のみ。例: 73sv)。これ以外はスプシの企業マスタに載せられない */
+export const COMPANY_EXTERNAL_ID_RE = /^[0-9a-z]+$/;

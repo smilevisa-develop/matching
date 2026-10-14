@@ -7,7 +7,9 @@ import CandidateKanban, { type CandidateCard } from "@/app/components/CandidateK
 import { dealGroup } from "@/lib/deal-stages";
 
 export type DailyDeal = {
-  id: number;
+  companyId: number;
+  /** 企業詳細へのリンク */
+  href: string;
   status: string;
   requiredCount: number;
   recommendedCount: number;
@@ -91,11 +93,11 @@ export default function DailyClient({
           </thead>
           <tbody>
             {rows.map((d) => (
-              <Fragment key={d.id}>
+              <Fragment key={d.companyId}>
                 <tr
-                  onClick={() => setOpenId((cur) => (cur === d.id ? null : d.id))}
+                  onClick={() => setOpenId((cur) => (cur === d.companyId ? null : d.companyId))}
                   className={`cursor-pointer border-t border-gray-100 hover:bg-gray-50 ${
-                    openId === d.id ? "bg-gray-50" : ""
+                    openId === d.companyId ? "bg-gray-50" : ""
                   }`}
                 >
                   <td className="px-4 py-3 font-mono text-[13px] text-[var(--color-primary)]">
@@ -115,7 +117,7 @@ export default function DailyClient({
                   ))}
                   <td className="p-0 text-center">
                     <Link
-                      href={`/companies/deals/${d.id}`}
+                      href={d.href}
                       onClick={(e) => e.stopPropagation()}
                       aria-label={`${d.companyName} の詳細を開く`}
                       className="block px-3 py-3 text-lg leading-none text-gray-400 hover:text-[var(--color-primary)]"
@@ -124,7 +126,7 @@ export default function DailyClient({
                     </Link>
                   </td>
                 </tr>
-                {openId === d.id ? (
+                {openId === d.companyId ? (
                   <tr className="border-t border-gray-100 bg-gray-50">
                     <td colSpan={COUNTS.length + 4} className="px-4 py-3">
                       <CandidateKanban
@@ -157,7 +159,7 @@ export default function DailyClient({
         <Kpi label="面接" value={sum("interviewCount")} target={null} />
         <Kpi label="募集中の企業" value={active.length} target={null} />
       </div>
-      {island("急ぎ募集", urgent)}
+      {island("至急募集", urgent)}
       {island("募集中", open)}
     </div>
   );

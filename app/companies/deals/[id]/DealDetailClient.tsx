@@ -8,8 +8,9 @@ import PersonPicker from "@/app/components/PersonPicker";
 import CandidateKanban, { type CandidateCard } from "@/app/components/CandidateKanban";
 import RecommendationsClient from "@/app/recommendations/RecommendationsClient";
 import CloseButton from "@/app/components/CloseButton";
+import { DEAL_STATUSES, normalizeDealStatus } from "@/lib/deal-stages";
 
-const STATUS_OPTIONS = ["至急募集", "募集中", "面接中", "成約", "クローズ"] as const;
+const STATUS_OPTIONS = DEAL_STATUSES;
 const PRIORITY_OPTIONS = [
   { value: "normal", label: "通常" },
   { value: "high", label: "高" },
@@ -20,7 +21,7 @@ type DealDetail = {
   id: number;
   title: string;
   field: string | null;
-  company: { id: number; name: string };
+  company: { id: number; name: string; externalId: string | null };
   owner: { id: number; name: string } | null;
   priority: string;
   status: string;
@@ -68,7 +69,8 @@ export default function DealDetailClient({
     title: deal.title,
     field: normalizeSswIndustry(deal.field) ?? SSW_INDUSTRIES[0],
     priority: deal.priority,
-    status: deal.status,
+    status: normalizeDealStatus(deal.status),
+    companyExternalId: deal.company.externalId ?? "",
     unitPrice: deal.unitPrice ?? "",
     deadline: deal.deadline ? deal.deadline.slice(0, 10) : "",
     acceptedAt: deal.acceptedAt ? deal.acceptedAt.slice(0, 10) : "",
@@ -99,7 +101,8 @@ export default function DealDetailClient({
       title: currentDeal.title,
       field: normalizeSswIndustry(currentDeal.field) ?? SSW_INDUSTRIES[0],
       priority: currentDeal.priority,
-      status: currentDeal.status,
+      status: normalizeDealStatus(currentDeal.status),
+      companyExternalId: currentDeal.company.externalId ?? "",
       unitPrice: currentDeal.unitPrice ?? "",
       deadline: currentDeal.deadline ? currentDeal.deadline.slice(0, 10) : "",
       acceptedAt: currentDeal.acceptedAt ? currentDeal.acceptedAt.slice(0, 10) : "",
@@ -135,11 +138,27 @@ export default function DealDetailClient({
     }
     setSavingEdit(true);
     try {
+      // 企業IDを変えたときは先に企業側を直す (重複や形式の誤りはここで止める)
+      const nextExternalId = editForm.companyExternalId.trim().toLowerCase();
+      if (nextExternalId !== (currentDeal.company.externalId ?? "")) {
+        const res = await fetch(`/api/companies/${currentDeal.company.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ externalId: nextExternalId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          alert(data.error || "企業IDの更新に失敗しました");
+          return;
+        }
+      }
+      const { companyExternalId: _companyExternalId, ...dealForm } = editForm;
+      void _companyExternalId;
       const response = await fetch(`/api/deals/${currentDeal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...editForm,
+          ...dealForm,
           ownerId: editForm.ownerId ? Number(editForm.ownerId) : null,
         }),
       });
@@ -150,6 +169,7 @@ export default function DealDetailClient({
       }
       setCurrentDeal((prev) => ({
         ...prev,
+        company: { ...prev.company, externalId: nextExternalId || null },
         title: editForm.title,
         field: editForm.field || null,
         priority: editForm.priority,
@@ -239,13 +259,16 @@ export default function DealDetailClient({
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-semibold text-[var(--color-text-dark)]">求人情報</h2>
-              <span className={statusClass(currentDeal.status)}>{currentDeal.status}</span>
+              <span className={statusClass(normalizeDealStatus(currentDeal.status))}>
+                {normalizeDealStatus(currentDeal.status)}
+              </span>
               {currentDeal.priority && currentDeal.priority !== "normal" ? (
                 <span className={priorityClass(currentDeal.priority)}>{priorityLabel(currentDeal.priority)}</span>
               ) : null}
             </div>
             {!editing ? (
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+                <InfoRow label="企業ID" value={currentDeal.company.externalId ?? "未設定"} />
                 <InfoRow label="企業" value={currentDeal.company.name} />
                 <InfoRow label="担当者" value={currentDeal.owner?.name ?? "未設定"} />
                 <InfoRow label="単価" value={formatUnitPrice(currentDeal.unitPrice)} />
@@ -295,7 +318,15 @@ export default function DealDetailClient({
           ) : null
         ) : (
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <EditField label="求人名 *" className="md:col-span-2">
+            <EditField label="企業ID">
+              <input
+                className={EDIT_INPUT}
+                value={editForm.companyExternalId}
+                onChange={(e) => setEditForm((c) => ({ ...c, companyExternalId: e.target.value }))}
+                placeholder="73sv"
+              />
+            </EditField>
+            <EditField label="求人名 *">
               <input className={EDIT_INPUT} value={editForm.title} onChange={(e) => setEditForm((c) => ({ ...c, title: e.target.value }))} />
             </EditField>
             <EditField label="分野">
@@ -511,7 +542,7 @@ function statusClass(status: string) {
   if (status === "至急募集") return "rounded-full bg-[#FEE2E2] px-2.5 py-1 text-[11px] font-medium text-[#B91C1C]";
   if (status === "募集中") return "rounded-full bg-[#FEF3C7] px-2.5 py-1 text-[11px] font-medium text-[#92400E]";
   if (status === "面接中") return "rounded-full bg-[#DBEAFE] px-2.5 py-1 text-[11px] font-medium text-[#1D4ED8]";
-  if (status === "クローズ") return "rounded-full bg-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-600";
+  if (status === "ストップ" || status === "一時中断") return "rounded-full bg-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-600";
   return "rounded-full bg-[#DCFCE7] px-2.5 py-1 text-[11px] font-medium text-[#166534]";
 }
 

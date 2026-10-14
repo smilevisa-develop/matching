@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
+import { normalizeDealStatus } from "@/lib/deal-stages";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
     select: {
       id: true,
       name: true,
+      hiringStatus: true,
       deals: { select: { id: true }, orderBy: { updatedAt: "desc" }, take: 1 },
     },
   });
@@ -27,9 +29,9 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
 
   let dealId = company.deals[0]?.id;
   if (!dealId) {
-    // 求人がまだ無ければ 1 件作成 (タイトルは企業名)
+    // 求人がまだ無ければ 1 件作成 (タイトルは企業名、ステータスは企業追加時に選んだ採用状況)
     const created = await prisma.deal.create({
-      data: { title: company.name, companyId },
+      data: { title: company.name, companyId, status: normalizeDealStatus(company.hiringStatus) },
       select: { id: true },
     });
     dealId = created.id;
