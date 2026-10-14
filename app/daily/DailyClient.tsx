@@ -26,9 +26,10 @@ type CountKey = "requiredCount" | "recommendedCount" | "interviewCount" | "offer
 
 const COUNTS: { key: CountKey; label: string }[] = [
   { key: "requiredCount", label: "募集人数" },
-  { key: "recommendedCount", label: "推薦" },
-  { key: "interviewCount", label: "面接" },
-  { key: "offerCount", label: "内定" },
+  // 企業ごとの累計 (月ごとではない)。上部の「今月の内定」と区別するため見出しに付ける
+  { key: "recommendedCount", label: "推薦累計" },
+  { key: "interviewCount", label: "面接累計" },
+  { key: "offerCount", label: "内定累計" },
 ];
 
 export default function DailyClient({
