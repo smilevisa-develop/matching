@@ -158,7 +158,7 @@ export default function CandidateKanban({
             endDrag();
           }}
           className={`flex max-h-[calc(100vh-18rem)] shrink-0 flex-col rounded-xl border bg-white p-2 transition-all duration-150 ${
-            ACTIVE_STAGES.includes(column) ? "w-[calc((100%-2rem)/5)] min-w-[150px]" : "w-[150px]"
+            ACTIVE_STAGES.includes(column) ? "w-[calc((100%-2rem)/5)] min-w-[120px]" : "w-[130px]"
           } ${
             isTarget
               ? "scale-[1.02] border-[var(--color-primary)] bg-[var(--color-light)] shadow-lg ring-2 ring-[var(--color-primary)]"
@@ -230,7 +230,7 @@ export default function CandidateKanban({
               </Link>
             ))}
             {columnCandidates.length === 0 && !isTarget ? (
-              <div className="rounded-2xl border border-dashed border-gray-200 px-3 py-6 text-center text-xs text-gray-400">
+              <div className="rounded-lg border border-dashed border-gray-200 px-2 py-2 text-center text-[11px] text-gray-400">
                 候補者なし
               </div>
             ) : null}

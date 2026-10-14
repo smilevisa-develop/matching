@@ -157,6 +157,8 @@ export default function DailyClient({
                 {openId === d.companyId ? (
                   <tr className="border-t border-gray-100 bg-gray-50">
                     <td colSpan={COUNTS.length + 4} className="px-4 py-3">
+                      {/* 表のセルは中身に合わせて広がるので、幅 0 + 最小幅 100% にして表の幅を押し広げないようにする */}
+                      <div className="w-0 min-w-full">
                       <CandidateKanban
                         candidates={d.candidates
                           .filter((c) => !removed.has(c.id))
@@ -164,6 +166,7 @@ export default function DailyClient({
                         onMove={(id, stage) => void moveCandidate(id, stage)}
                         onRemove={(candidate) => void removeCandidate(candidate)}
                       />
+                      </div>
                     </td>
                   </tr>
                 ) : null}
