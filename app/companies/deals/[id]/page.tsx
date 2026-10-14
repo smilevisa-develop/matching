@@ -6,6 +6,8 @@ import DealDetailClient from "./DealDetailClient";
 import DealTabs from "./DealTabs";
 import JobPostingsPanel from "./JobPostingsPanel";
 import ConditionsPanel, { type ConditionsRecord } from "./ConditionsPanel";
+import CompanyDocumentsPanel from "./CompanyDocumentsPanel";
+import RefreshOnFocus from "@/app/components/RefreshOnFocus";
 
 export const dynamic = "force-dynamic";
 
@@ -61,8 +63,14 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
 
   if (!deal) notFound();
 
+  const syncKey = [
+    deal.updatedAt.getTime(),
+    ...deal.candidates.map((c) => `${c.id}:${c.stage}`),
+  ].join("|");
+
   return (
     <div className="space-y-6 p-8">
+      <RefreshOnFocus />
       <div>
         <Link href="/companies" className="text-xs font-medium text-[var(--color-primary)] hover:underline">
           ← 企業一覧
@@ -74,6 +82,8 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
       <DealTabs
         progressContent={
           <DealDetailClient
+            // 進捗管理など別の画面で数字・候補者の状態が変わったら、最新の内容で作り直す
+            key={syncKey}
             deal={{
               id: deal.id,
               title: deal.title,
@@ -113,12 +123,16 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
           />
         }
         conditionContent={
-          <ConditionsPanel
-            dealId={deal.id}
-            initialConditions={(deal.conditions ?? {}) as ConditionsRecord}
-            templates={jobPostingTemplates}
-            defaultJobPostingTitle={`${deal.company.name} ${deal.title} 求人票`}
-          />
+          <div className="space-y-6">
+            <ConditionsPanel
+              dealId={deal.id}
+              initialConditions={(deal.conditions ?? {}) as ConditionsRecord}
+              templates={jobPostingTemplates}
+              defaultJobPostingTitle={`${deal.company.name} ${deal.title} 求人票`}
+            />
+            {/* 事前確認資料 (内定後に候補者へ母国語で確認してもらう) */}
+            <CompanyDocumentsPanel companyId={deal.company.id} />
+          </div>
         }
         jobPostingContent={
           <JobPostingsPanel

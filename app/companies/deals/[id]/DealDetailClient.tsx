@@ -7,18 +7,10 @@ import { SSW_INDUSTRIES, normalizeSswIndustry } from "@/lib/company-options";
 import PersonPicker from "@/app/components/PersonPicker";
 import PersonAvatar from "@/app/components/PersonAvatar";
 import RecommendationsClient from "@/app/recommendations/RecommendationsClient";
-import CompanyDocumentsPanel from "./CompanyDocumentsPanel";
+import { CANDIDATE_STAGES } from "@/lib/deal-stages";
 import CloseButton from "@/app/components/CloseButton";
 
-const CANDIDATE_COLUMNS = [
-  "接続済み",
-  "事前面談済み",
-  "推薦済み",
-  "内定済み",
-  "書類NG",
-  "面談NG",
-  "不合格",
-] as const;
+const CANDIDATE_COLUMNS = CANDIDATE_STAGES;
 
 // カンバン各カラムの色分け (見やすさのため緑系のグラデーション + NG / 不合格は赤系)
 const COLUMN_COLOR: Record<string, { border: string; head: string; tile: string }> = {
@@ -459,9 +451,6 @@ export default function DealDetailClient({
           <CounterCell label="不合格" value={currentDeal.rejectCount} onChange={(n) => void updateCounter("rejectCount", n)} tone="red" />
         </div>
       </section>
-
-      {/* 事前確認資料 (内定後に候補者へ母国語で確認してもらう) */}
-      <CompanyDocumentsPanel companyId={currentDeal.company.id} />
 
       {/* 候補者追加 + カンバン (一つの島) */}
       <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
