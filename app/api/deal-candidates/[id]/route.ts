@@ -73,3 +73,46 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 }
+
+/**
+ * カンバンから候補者を外す (間違えて入れたとき)。候補者本体は残る。
+ * このカードで数えた人数カウンター (推薦・面接・内定など) も、接続済みまで戻したのと同じだけ戻す。
+ */
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requireApiAccount();
+    const { id } = await params;
+    const counters = await prisma.$transaction(async (tx) => {
+      const link = await tx.dealCandidate.findUniqueOrThrow({
+        where: { id: Number(id) },
+        select: { stage: true, dealId: true },
+      });
+      const select = {
+        recommendedCount: true,
+        interviewCount: true,
+        offerCount: true,
+        declineCount: true,
+        rejectCount: true,
+      };
+      const deal = await tx.deal.findUniqueOrThrow({ where: { id: link.dealId }, select });
+      const deltas = Object.entries(stageCounterDeltas(link.stage, "接続済み")).filter(([, n]) => n !== 0) as [
+        CounterField,
+        number,
+      ][];
+      await tx.dealCandidate.delete({ where: { id: Number(id) } });
+      if (deltas.length === 0) return deal;
+      return tx.deal.update({
+        where: { id: link.dealId },
+        data: Object.fromEntries(deltas.map(([f, n]) => [f, Math.max(0, deal[f] + n)])),
+        select,
+      });
+    });
+    after(() => requestCompanyDatabaseSync());
+    return Response.json({ ok: true, counters });
+  } catch (error) {
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : "error" },
+      { status: error instanceof AuthError ? error.status : 500 }
+    );
+  }
+}

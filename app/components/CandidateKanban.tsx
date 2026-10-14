@@ -7,7 +7,7 @@ import { CANDIDATE_STAGES } from "@/lib/deal-stages";
 
 /**
  * 候補者のカンバン。企業詳細と進捗管理 (行を開いたとき) の両方で同じものを使う。
- * 列をまたいでドラッグすると onMove が呼ばれる (保存は呼び出し側)。
+ * 列をまたいでドラッグすると onMove、カードの × で onRemove が呼ばれる (保存は呼び出し側)。
  */
 
 export type CandidateCard = {
@@ -81,12 +81,35 @@ function formatCandidateLabel(person: { id: number; name: string; englishName?: 
   return `${prefix} ${label}`;
 }
 
+/** カンバンから外す前の確認。カードで数えた人数も戻ることを伝える */
+export function confirmRemoveCandidate(candidate: CandidateCard): boolean {
+  const counted = !["接続済み", "事前面談済み", "面談NG"].includes(candidate.stage);
+  return window.confirm(
+    `${formatCandidateLabel(candidate.person)} をこのカンバンから外します（候補者本体は残ります）。` +
+      (counted ? `\n今のステータス「${candidate.stage}」で数えた推薦・面接・内定などの人数も戻ります。` : ""),
+  );
+}
+
+/** カンバンから外す (保存)。成功したら更新後の人数カウンターを返す */
+export async function removeCandidateFromKanban(candidateId: number) {
+  const res = await fetch(`/api/deal-candidates/${candidateId}`, { method: "DELETE" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    alert(data.error || "外せませんでした");
+    return null;
+  }
+  return data.counters as Record<string, number>;
+}
+
 export default function CandidateKanban({
   candidates,
   onMove,
+  onRemove,
 }: {
   candidates: CandidateCard[];
   onMove: (candidateId: number, stage: string) => void;
+  /** カードの × を押したとき (このカンバンから外す。確認と保存は呼び出し側) */
+  onRemove?: (candidate: CandidateCard) => void;
 }) {
   const [draggingCandidateId, setDraggingCandidateId] = useState<number | null>(null);
   // いまカードを重ねている列 (ドロップ先を光らせる)
@@ -157,11 +180,27 @@ export default function CandidateKanban({
                   setDraggingCandidateId(candidate.id);
                 }}
                 onDragEnd={endDrag}
-                className={`block rounded-lg border p-2 transition ${colors.tile} ${
+                className={`group relative block rounded-lg border p-2 transition ${colors.tile} ${
                   candidate.id === draggingCandidateId ? "opacity-40" : ""
                 } ${candidate.id === justMovedId ? "ring-2 ring-[var(--color-primary)] ring-offset-1" : ""}`}
                 title={`${formatCandidateLabel(candidate.person)}\n${candidate.person.name}\n${candidate.person.nationality} / ${candidate.person.residenceStatus}\n紹介パートナー: ${candidate.person.partner?.name ?? "未設定"}${candidate.note ? `\n備考: ${candidate.note}` : ""}`}
               >
+                {onRemove ? (
+                  <button
+                    type="button"
+                    aria-label="このカンバンから外す"
+                    title="このカンバンから外す"
+                    onClick={(event) => {
+                      // カードはリンクなので、押したときに候補者詳細へ飛ばないようにする
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onRemove(candidate);
+                    }}
+                    className="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] leading-none text-gray-400 shadow-sm hover:bg-red-50 hover:text-red-600 group-hover:flex"
+                  >
+                    ✕
+                  </button>
+                ) : null}
                 <div className="flex items-start gap-1.5">
                   <PersonAvatar
                     photoUrl={candidate.person.photoUrl}

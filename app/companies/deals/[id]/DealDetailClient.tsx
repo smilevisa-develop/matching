@@ -4,7 +4,11 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { SSW_INDUSTRIES, normalizeSswIndustry } from "@/lib/company-options";
 import PersonPicker from "@/app/components/PersonPicker";
-import CandidateKanban, { type CandidateCard } from "@/app/components/CandidateKanban";
+import CandidateKanban, {
+  confirmRemoveCandidate,
+  removeCandidateFromKanban,
+  type CandidateCard,
+} from "@/app/components/CandidateKanban";
 import RecommendationsClient from "@/app/recommendations/RecommendationsClient";
 import CloseButton from "@/app/components/CloseButton";
 import { DEAL_STATUSES, normalizeDealStatus } from "@/lib/deal-stages";
@@ -208,6 +212,14 @@ export default function DealDetailClient({
     }
     // ステージの移動に合わせてサーバー側で人数カウンターも動くので、その結果を表示に反映する
     if (result.counters) setCurrentDeal((prev) => ({ ...prev, ...result.counters }));
+  };
+
+  const removeCandidate = async (candidate: CandidateCard) => {
+    if (!confirmRemoveCandidate(candidate)) return;
+    const counters = await removeCandidateFromKanban(candidate.id);
+    if (!counters) return;
+    setCandidates((current) => current.filter((c) => c.id !== candidate.id));
+    setCurrentDeal((prev) => ({ ...prev, ...counters }));
   };
 
   const addCandidate = async () => {
@@ -421,7 +433,11 @@ export default function DealDetailClient({
         </div>
 
         <div className="mt-4">
-          <CandidateKanban candidates={candidates} onMove={(id, stage) => void moveCandidate(id, stage)} />
+          <CandidateKanban
+            candidates={candidates}
+            onMove={(id, stage) => void moveCandidate(id, stage)}
+            onRemove={(candidate) => void removeCandidate(candidate)}
+          />
         </div>
       </section>
 

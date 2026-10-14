@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
-import CandidateKanban, { type CandidateCard } from "@/app/components/CandidateKanban";
+import CandidateKanban, {
+  confirmRemoveCandidate,
+  removeCandidateFromKanban,
+  type CandidateCard,
+} from "@/app/components/CandidateKanban";
 import { dealGroup } from "@/lib/deal-stages";
 import { isTestCompany } from "@/lib/test-companies";
 
@@ -80,6 +84,15 @@ export default function DailyClient({
     router.refresh();
   };
 
+  // 外したカード (サーバーの内容を取り直すまでの見た目用)
+  const [removed, setRemoved] = useState<Set<number>>(new Set());
+  const removeCandidate = async (candidate: CandidateCard) => {
+    if (!confirmRemoveCandidate(candidate)) return;
+    if (!(await removeCandidateFromKanban(candidate.id))) return;
+    setRemoved((cur) => new Set(cur).add(candidate.id));
+    router.refresh();
+  };
+
   const island = (title: string, rows: DailyDeal[]) => (
     <section>
       <h2 className="mb-2 text-sm font-semibold text-[var(--color-text-dark)]">{title}</h2>
@@ -137,8 +150,11 @@ export default function DailyClient({
                   <tr className="border-t border-gray-100 bg-gray-50">
                     <td colSpan={COUNTS.length + 4} className="px-4 py-3">
                       <CandidateKanban
-                        candidates={d.candidates.map((c) => ({ ...c, stage: stageOf(c) }))}
+                        candidates={d.candidates
+                          .filter((c) => !removed.has(c.id))
+                          .map((c) => ({ ...c, stage: stageOf(c) }))}
                         onMove={(id, stage) => void moveCandidate(id, stage)}
+                        onRemove={(candidate) => void removeCandidate(candidate)}
                       />
                     </td>
                   </tr>
