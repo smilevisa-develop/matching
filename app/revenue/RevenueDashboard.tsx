@@ -173,7 +173,7 @@ export default function RevenueDashboard({
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <BarLineChart
-            title="求人数"
+            title="求人件数"
             yearMonths={yearMonths}
             actuals={yearMonths.map((m) => actualsByMonth[m]?.jobOpenings ?? 0)}
             targets={yearMonths.map((m) => monthlyTargets.find((t) => t.month === m)?.jobOpenings ?? null)}
@@ -532,7 +532,7 @@ function MonthlyTargetTable({
     headerBg: string;
     bodyBg: string;
   }[] = [
-    { key: "jobOpenings", label: "求人数", actualKey: "jobOpenings", headerBg: "#2E5E4E", bodyBg: "#F1F6F3" },
+    { key: "jobOpenings", label: "求人件数", actualKey: "jobOpenings", headerBg: "#2E5E4E", bodyBg: "#F1F6F3" },
     { key: "recommendCount", label: "推薦者数", actualKey: "recommendCount", headerBg: "#3E7D67", bodyBg: "#EAF1EC" },
     { key: "offer", label: "内定者数", actualKey: "offer", headerBg: "#5D9B85", bodyBg: "#F1F8F4" },
     { key: "revenue", label: "売上 (円)", actualKey: "revenue", yen: true, headerBg: "#C89F5B", bodyBg: "#FBF6EB" },

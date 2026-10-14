@@ -178,7 +178,7 @@ function PartnerTable({
             <th className="px-4 py-3 text-left font-semibold">紹介可能国籍</th>
             <SortableTh label="評価" sortKey="rating" sort={sort} onSort={onSort} className="w-32" />
             <SortableTh
-              label="実績 (案件)"
+              label="実績 (求人)"
               sortKey="dealCount"
               sort={sort}
               onSort={onSort}

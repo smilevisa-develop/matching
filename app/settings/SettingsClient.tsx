@@ -562,7 +562,7 @@ export default function SettingsClient({
 
       <SectionCard
         title="求人票テンプレート"
-        description="求人票作成用の Google Docs テンプレートを登録します。作成した求人票は案件に紐づく企業の Drive フォルダに自動保存されます。"
+        description="求人票作成用の Google Docs テンプレートを登録します。作成した求人票は求人に紐づく企業の Drive フォルダに自動保存されます。"
         open={jobPostingTemplatesOpen}
         onToggle={() => setJobPostingTemplatesOpen((current) => !current)}
       >
@@ -649,7 +649,7 @@ export default function SettingsClient({
               <div className="space-y-2">
                 <div className="hidden grid-cols-[140px_repeat(4,1fr)_40px] gap-2 px-2 text-[11px] font-medium text-gray-500 md:grid">
                   <span>月</span>
-                  <span>求人数 目標</span>
+                  <span>求人件数 目標</span>
                   <span>推薦者数 目標</span>
                   <span>内定者数 目標</span>
                   <span>売上 目標 (円)</span>
@@ -739,7 +739,7 @@ export default function SettingsClient({
           <div className="space-y-4">
             <div className="rounded-2xl border border-[var(--color-secondary)] bg-[var(--color-light)] p-4">
               <p className="text-xs text-gray-500">
-                チェックを入れた項目が、案件ごとに作成される推薦リストの列として候補者情報から自動入力されます。
+                チェックを入れた項目が、求人ごとに作成される推薦リストの列として候補者情報から自動入力されます。
               </p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-3">
                 {RECOMMENDATION_COLUMN_OPTIONS.map((option) => {
@@ -943,7 +943,7 @@ function SummaryCard({
         {currentAccount.loginId} / {currentAccount.role === "admin" ? "管理者" : "通常アカウント"}
       </p>
       <p className="mt-3 text-sm leading-6 text-gray-500">
-        候補者・企業・パートナー・案件は全員共通です。ここで変えるのは主に自分のカレンダーと、管理者だけが触れる共通ルールです。
+        候補者・企業・パートナー・求人は全員共通です。ここで変えるのは主に自分のカレンダーと、管理者だけが触れる共通ルールです。
       </p>
     </section>
   );

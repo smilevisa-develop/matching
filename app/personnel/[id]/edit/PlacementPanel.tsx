@@ -188,7 +188,7 @@ export default function PlacementPanel({
           <p className="mt-1 text-xs text-gray-500">{personName} さんの内定後の手続き日程を管理します。</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <DateField label="案件受付日" value={placement.acceptedAt} onChange={(v) => { setDate("acceptedAt", v); void persist({ acceptedAt: v || null }); }} />
+          <DateField label="求人受付日" value={placement.acceptedAt} onChange={(v) => { setDate("acceptedAt", v); void persist({ acceptedAt: v || null }); }} />
           <DateField label="事前面談日" value={placement.preInterviewAt} onChange={(v) => { setDate("preInterviewAt", v); void persist({ preInterviewAt: v || null }); }} />
           <DateField label="企業面談日" value={placement.companyInterviewAt} onChange={(v) => { setDate("companyInterviewAt", v); void persist({ companyInterviewAt: v || null }); }} />
           <DateField label="内定日" value={placement.offerAt} onChange={(v) => { setDate("offerAt", v); void persist({ offerAt: v || null }); }} />
@@ -270,7 +270,7 @@ export default function PlacementPanel({
               <div key={invoice.id} className="rounded-2xl border border-gray-200 bg-[var(--color-light)] p-4">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-semibold text-[var(--color-text-dark)]">
-                    {invoice.dealTitle ?? "案件未設定"}
+                    {invoice.dealTitle ?? "求人未設定"}
                     {invoice.companyName ? <span className="ml-2 text-xs text-gray-500">({invoice.companyName})</span> : null}
                   </p>
                   <button
@@ -283,7 +283,7 @@ export default function PlacementPanel({
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                   <SelectField
-                    label="案件"
+                    label="求人"
                     value={invoice.dealId ? String(invoice.dealId) : ""}
                     onChange={(v) => void patchInvoice(invoice.id, { dealId: v ? Number(v) : null })}
                   >

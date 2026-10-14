@@ -154,7 +154,7 @@ export default function CompanyDetailClient({ initialCompany }: { initialCompany
                 <InfoRow label="業種" value={normalizeSswIndustry(company.industry) ?? "-"} />
                 <InfoRow label="所在地" value={company.location ?? "-"} />
                 <InfoRow label="採用状況" value={company.hiringStatus} />
-                <InfoRow label="求人数" value={`${company.deals.length}件`} />
+                <InfoRow label="求人件数" value={`${company.deals.length}件`} />
                 {company.driveFolderUrl ? (
                   <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
                     <span className="text-gray-400">Drive フォルダ</span>
@@ -277,7 +277,7 @@ export default function CompanyDetailClient({ initialCompany }: { initialCompany
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-[var(--color-text-dark)]">この企業への請求</h2>
-            <p className="mt-1 text-xs text-gray-500">{company.invoices.length} 件 (候補者/案件ごとに請求発行済)</p>
+            <p className="mt-1 text-xs text-gray-500">{company.invoices.length} 件 (候補者/求人ごとに請求発行済)</p>
           </div>
           <Link href="/invoices/companies" className="text-xs text-[var(--color-primary)] hover:underline">
             請求管理を見る
@@ -294,7 +294,7 @@ export default function CompanyDetailClient({ initialCompany }: { initialCompany
                 <tr className="bg-[var(--color-light)] text-left text-xs font-semibold text-gray-600">
                   <th className="px-3 py-2">ステータス</th>
                   <th className="px-3 py-2">候補者</th>
-                  <th className="px-3 py-2">案件</th>
+                  <th className="px-3 py-2">求人</th>
                   <th className="px-3 py-2 text-right">請求額</th>
                   <th className="px-3 py-2">請求日</th>
                   <th className="px-3 py-2">請求書</th>

@@ -628,7 +628,7 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
       <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="text-base font-semibold text-[var(--color-text-dark)]">過去の実績</h2>
         <div className="mt-4 grid gap-3 grid-cols-2 md:grid-cols-5">
-          <SummaryCard label="求人数" value={summary.dealCount.toLocaleString()} />
+          <SummaryCard label="求人件数" value={summary.dealCount.toLocaleString()} />
           <SummaryCard label="募集人数 合計" value={summary.req.toLocaleString()} />
           <SummaryCard label="内定 合計" value={summary.offer.toLocaleString()} />
           <SummaryCard label="成約 合計" value={summary.contract.toLocaleString()} />

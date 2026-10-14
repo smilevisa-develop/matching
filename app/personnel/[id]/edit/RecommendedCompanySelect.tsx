@@ -67,7 +67,7 @@ export default function RecommendedCompanySelect({
       !dealCompanies.includes(next)
     ) {
       const ok = window.confirm(
-        `この候補者は案件で「${dealCompanies.join("・")}」に紐づいています。\n` +
+        `この候補者は求人で「${dealCompanies.join("・")}」に紐づいています。\n` +
           `推薦先を「${next}」に変更してよろしいですか？`,
       );
       if (!ok) return; // キャンセル → 変更しない

@@ -49,7 +49,7 @@ export default function EditableIdBadge({
     if (
       !confirm(
         `候補者 ID を ${personId} → ${newId} に変更します。\n` +
-          `全ての関連データ (書類・案件紐づけ・請求 等) の personId も自動追従します。\n` +
+          `全ての関連データ (書類・求人紐づけ・請求 等) の personId も自動追従します。\n` +
           `続行しますか?`,
       )
     ) {
