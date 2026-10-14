@@ -100,10 +100,7 @@ export default function OnboardingBoard({
                   : "border-gray-200 bg-gray-50"
               }`}
             >
-              <div className="flex items-center justify-between px-3 py-2.5">
-                <p className="text-sm font-semibold text-[var(--color-text-dark)]">{col.label}</p>
-                <span className="text-xs text-gray-400">{list.length}</span>
-              </div>
+              <p className="px-3 py-2.5 text-sm font-semibold text-[var(--color-text-dark)]">{col.label}</p>
               <div className="flex-1 space-y-2 overflow-y-auto px-2 pb-2">
                 {list.map((card) => (
                   <button
