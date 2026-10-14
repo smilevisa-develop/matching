@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 import CandidateKanban, { type CandidateCard } from "@/app/components/CandidateKanban";
 import { dealGroup } from "@/lib/deal-stages";
+import { isTestCompany } from "@/lib/test-companies";
 
 export type DailyDeal = {
   companyId: number;
@@ -48,7 +49,9 @@ export default function DailyClient({
   const urgent = deals.filter((d) => dealGroup(d.status) === "urgent");
   const open = deals.filter((d) => dealGroup(d.status) === "open");
   const active = [...urgent, ...open];
-  const sum = (key: CountKey) => active.reduce((n, d) => n + d[key], 0);
+  // テスト企業は一覧には出すが、上部の数字には含めない
+  const counted = active.filter((d) => !isTestCompany(d.companyExternalId));
+  const sum = (key: CountKey) => counted.reduce((n, d) => n + d[key], 0);
 
   // 企業詳細のカンバンと同じ API。人数カウンターもサーバー側で連動する
   const moveCandidate = async (candidateId: number, stage: string) => {
@@ -157,7 +160,7 @@ export default function DailyClient({
         <Kpi label="内定" value={sum("offerCount")} target={offerTarget} editable />
         <Kpi label="推薦" value={sum("recommendedCount")} target={recommendTarget} editable />
         <Kpi label="面接" value={sum("interviewCount")} target={null} />
-        <Kpi label="募集中の企業" value={active.length} target={null} />
+        <Kpi label="募集中の企業" value={counted.length} target={null} />
       </div>
       {island("至急募集", urgent)}
       {island("募集中", open)}
