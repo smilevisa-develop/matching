@@ -30,7 +30,8 @@ export default function SharedPartnersClient({
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [relFilter, setRelFilter] = useState<string>("all");
-  const [showInactive, setShowInactive] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("active");
+  const [sort, setSort] = useState<SortState>({ key: "rating", dir: "desc" });
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -53,13 +54,25 @@ export default function SharedPartnersClient({
     });
   }, [initialPartners, searchTerm, relFilter]);
 
-  const active = useMemo(() => filtered.filter((p) => p.isActive), [filtered]);
-  const inactive = useMemo(() => filtered.filter((p) => !p.isActive), [filtered]);
+  const activeCount = useMemo(() => filtered.filter((p) => p.isActive).length, [filtered]);
+  const inactiveCount = filtered.length - activeCount;
 
-  const totalActive = initialPartners.filter((p) => p.isActive).length;
-  const totalInactive = initialPartners.length - totalActive;
+  const rows = useMemo(() => {
+    const visible =
+      activeFilter === "all"
+        ? filtered
+        : filtered.filter((p) => p.isActive === (activeFilter === "active"));
+    return [...visible].sort((a, b) => comparePartners(a, b, sort));
+  }, [filtered, activeFilter, sort]);
 
   const filtering = Boolean(searchTerm) || relFilter !== "all";
+
+  const toggleSort = (key: SortKey) =>
+    setSort((cur) =>
+      cur.key === key
+        ? { key, dir: cur.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: DEFAULT_DIR[key] },
+    );
 
   return (
     <div className="space-y-4">
@@ -81,94 +94,123 @@ export default function SharedPartnersClient({
             onClick={() => setRelFilter("")}
           />
         </div>
-        <span className="text-xs text-gray-500">
-          {filtering
-            ? `アクティブ ${active.length} / 非アクティブ ${inactive.length} 件`
-            : `アクティブ ${totalActive} 件 ・ 非アクティブ ${totalInactive} 件`}
-        </span>
+        <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1">
+          <ActiveToggle
+            label={`アクティブ ${activeCount}`}
+            active={activeFilter === "active"}
+            onClick={() => setActiveFilter("active")}
+          />
+          <ActiveToggle
+            label={`非アクティブ ${inactiveCount}`}
+            active={activeFilter === "inactive"}
+            onClick={() => setActiveFilter("inactive")}
+          />
+          <ActiveToggle
+            label={`全件 ${filtered.length}`}
+            active={activeFilter === "all"}
+            onClick={() => setActiveFilter("all")}
+          />
+        </div>
       </div>
 
       <PartnerTable
-        rows={active}
+        rows={rows}
+        sort={sort}
+        onSort={toggleSort}
         emptyLabel={
           filtering
-            ? "条件に一致するアクティブなパートナーが見つかりません"
-            : "アクティブなパートナーがまだ登録されていません"
+            ? "条件に一致するパートナーが見つかりません"
+            : activeFilter === "inactive"
+              ? "非アクティブなパートナーはいません"
+              : "パートナーがまだ登録されていません"
         }
       />
-
-      {inactive.length > 0 || (!filtering && totalInactive > 0) ? (
-        <section className="rounded-xl border border-gray-200 bg-gray-50">
-          <button
-            type="button"
-            onClick={() => setShowInactive((v) => !v)}
-            className="flex w-full items-center justify-between px-4 py-3 text-left"
-            aria-expanded={showInactive}
-          >
-            <span className="text-sm font-semibold text-gray-600">
-              非アクティブなパートナー
-              <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-600">
-                {inactive.length} 件
-              </span>
-            </span>
-            <span
-              className={`inline-block text-gray-400 transition-transform ${
-                showInactive ? "rotate-180" : ""
-              }`}
-            >
-              ▼
-            </span>
-          </button>
-          {showInactive ? (
-            <div className="border-t border-gray-200 bg-white p-2">
-              <PartnerTable
-                rows={inactive}
-                emptyLabel={
-                  filtering
-                    ? "条件に一致する非アクティブなパートナーが見つかりません"
-                    : "非アクティブなパートナーはいません"
-                }
-                muted
-              />
-            </div>
-          ) : null}
-        </section>
-      ) : null}
     </div>
   );
 }
 
+type ActiveFilter = "active" | "inactive" | "all";
+type SortKey = "id" | "name" | "country" | "rating" | "dealCount";
+type SortState = { key: SortKey; dir: "asc" | "desc" };
+
+const DEFAULT_DIR: Record<SortKey, "asc" | "desc"> = {
+  id: "desc",
+  name: "asc",
+  country: "asc",
+  rating: "desc",
+  dealCount: "desc",
+};
+
+function comparePartners(a: PartnerRow, b: PartnerRow, sort: SortState) {
+  const sign = sort.dir === "asc" ? 1 : -1;
+  let diff = 0;
+  switch (sort.key) {
+    case "id":
+      diff = a.id - b.id;
+      break;
+    case "name":
+      diff = a.name.localeCompare(b.name, "ja");
+      break;
+    case "country":
+      // 未設定は昇順・降順どちらでも末尾
+      if (!a.country !== !b.country) return a.country ? -1 : 1;
+      diff = (a.country ?? "").localeCompare(b.country ?? "", "ja");
+      break;
+    case "rating":
+      // 未評価は昇順・降順どちらでも末尾
+      if (!a.rating !== !b.rating) return a.rating ? -1 : 1;
+      diff = (a.rating ?? 0) - (b.rating ?? 0);
+      break;
+    case "dealCount":
+      diff = a.dealCount - b.dealCount || a.personCount - b.personCount;
+      break;
+  }
+  if (diff !== 0) return diff * sign;
+  // 同順位は 評価 → 実績 → 新しい順
+  return (b.rating ?? 0) - (a.rating ?? 0) || b.dealCount - a.dealCount || b.id - a.id;
+}
+
 function PartnerTable({
   rows,
+  sort,
+  onSort,
   emptyLabel,
-  muted,
 }: {
   rows: PartnerRow[];
+  sort: SortState;
+  onSort: (key: SortKey) => void;
   emptyLabel: string;
-  muted?: boolean;
 }) {
   return (
-    <div
-      className={`overflow-x-auto rounded-xl border border-gray-200 shadow-sm ${
-        muted ? "bg-gray-50" : "bg-white"
-      }`}
-    >
+    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
       <table className="w-full min-w-[960px] text-sm">
         <thead>
           <tr className="bg-[var(--color-light)] text-[var(--color-text-dark)]">
-            <th className="px-4 py-3 text-left font-semibold w-16">ID</th>
-            <th className="px-4 py-3 text-left font-semibold">パートナー名</th>
-            <th className="px-4 py-3 text-left font-semibold w-24">拠点国</th>
+            <SortableTh label="ID" sortKey="id" sort={sort} onSort={onSort} className="w-16" />
+            <SortableTh label="パートナー名" sortKey="name" sort={sort} onSort={onSort} />
+            <SortableTh label="拠点国" sortKey="country" sort={sort} onSort={onSort} className="w-24" />
             <th className="px-4 py-3 text-left font-semibold w-24">役割</th>
             <th className="px-4 py-3 text-left font-semibold w-28 whitespace-nowrap">関係性</th>
             <th className="px-4 py-3 text-left font-semibold">紹介可能国籍</th>
-            <th className="px-4 py-3 text-left font-semibold w-32">評価</th>
-            <th className="px-4 py-3 text-right font-semibold w-28 whitespace-nowrap">実績 (案件)</th>
+            <SortableTh label="評価" sortKey="rating" sort={sort} onSort={onSort} className="w-32" />
+            <SortableTh
+              label="実績 (案件)"
+              sortKey="dealCount"
+              sort={sort}
+              onSort={onSort}
+              align="right"
+              className="w-32"
+            />
           </tr>
         </thead>
-        <tbody className={muted ? "text-gray-500" : undefined}>
+        <tbody>
           {rows.map((p) => (
-            <tr key={p.id} className="border-t border-gray-100 hover:bg-gray-50">
+            <tr
+              key={p.id}
+              className={`border-t border-gray-100 hover:bg-gray-50 ${
+                p.isActive ? "" : "bg-gray-50 opacity-60"
+              }`}
+            >
               <td className="p-0 font-mono text-[13px] text-[var(--color-primary)]">
                 <Link href={`/partners/${p.id}`} className="block px-4 py-3">
                   #{p.id}
@@ -180,6 +222,11 @@ function PartnerTable({
                   {p.contactName ? (
                     <span className="ml-2 text-[11px] font-normal text-gray-400">({p.contactName})</span>
                   ) : null}
+                  {p.isActive ? null : (
+                    <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                      非アクティブ
+                    </span>
+                  )}
                 </Link>
               </td>
               <td className="p-0 text-gray-600">
@@ -242,6 +289,58 @@ function PartnerTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function SortableTh({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  align = "left",
+  className = "",
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: SortState;
+  onSort: (key: SortKey) => void;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  const current = sort.key === sortKey;
+  return (
+    <th
+      className={`p-0 font-semibold whitespace-nowrap ${className}`}
+      aria-sort={current ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`flex w-full items-center gap-1 px-4 py-3 hover:bg-black/5 ${
+          align === "right" ? "justify-end" : "justify-start"
+        }`}
+      >
+        {label}
+        <span className={`text-[10px] ${current ? "text-[var(--color-primary)]" : "text-gray-300"}`}>
+          {current ? (sort.dir === "asc" ? "▲" : "▼") : "▲▼"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+function ActiveToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+        active ? "bg-[var(--color-primary)] text-white" : "text-gray-600 hover:bg-gray-100"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
