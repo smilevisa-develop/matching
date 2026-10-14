@@ -3,7 +3,7 @@
  *
  * 川村さんの指示 (2026/10): 一目で「期日に対して止まっていて、注力すべきか」が分かるように。
  * 内定者フォローも同様に、順調か進んでいないかが分かるように。
- * そのため、要対応 (赤・黄) を先頭にまとめ、順調なものは件数だけにする。
+ * そのため、急ぎ (至急募集) の案件を先頭に、各欄の中では止まっている (赤・黄) 会社を上に並べる。
  */
 
 import { dealGroup } from "./deal-stages";
@@ -78,37 +78,43 @@ export function buildDailyReport(input: {
 }): string {
   const now = input.date.getTime();
   const open = input.companies.filter((c) => !c.isTest && dealGroup(c.status) !== "stopped");
-  const withAlert = open.map((c) => ({ c, ...companyAlert(c, now) }));
-  const alerts = withAlert
-    .filter((a) => a.level !== "normal")
-    .sort((a, b) => (a.level === b.level ? 0 : a.level === "red" ? -1 : 1));
-  const fine = withAlert.filter((a) => a.level === "normal");
+  const rank = (level: AlertLevel) => (level === "red" ? 0 : level === "amber" ? 1 : 2);
+  // 止まっている (赤・黄) 会社を上に。同じ色の中は元の並び (企業ID順) のまま
+  const withAlert = (list: ReportCompany[]) =>
+    list
+      .map((c, i) => ({ c, i, ...companyAlert(c, now) }))
+      .sort((a, b) => rank(a.level) - rank(b.level) || a.i - b.i);
+  const urgent = withAlert(open.filter((c) => dealGroup(c.status) === "urgent"));
+  const normal = withAlert(open.filter((c) => dealGroup(c.status) !== "urgent"));
+  const line = (a: { c: ReportCompany; level: AlertLevel; reason: string | null }) =>
+    a.level === "normal" ? `・${companyLine(a.c)}` : `${mark(a.level)} ${companyLine(a.c)}｜${a.reason}`;
+  const stalled = (list: { level: AlertLevel }[]) => list.filter((a) => a.level !== "normal").length;
+
   const followAlerts = input.followUps
     .filter((f) => f.level !== "normal")
-    .sort((a, b) => (a.level === b.level ? 0 : a.level === "red" ? -1 : 1));
+    .sort((a, b) => rank(a.level) - rank(b.level));
   const followFine = input.followUps.length - followAlerts.length;
 
   const date = input.date.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" });
   const target = input.offerTarget
     ? `${input.offersThisMonth}/${input.offerTarget}名（${Math.round((input.offersThisMonth / input.offerTarget) * 100)}%）`
     : `${input.offersThisMonth}名`;
-  const urgentCount = open.filter((c) => dealGroup(c.status) === "urgent").length;
 
   const lines: string[] = [];
-  lines.push(`【${date} 進捗】今月の内定 ${target}・募集中 ${open.length}社（うち至急 ${urgentCount}社）`);
+  lines.push(`【${date} 進捗】今月の内定 ${target}・募集中 ${open.length}社（うち至急 ${urgent.length}社）`);
   lines.push("");
-  lines.push(`■要対応の案件 ${alerts.length}社`);
-  if (alerts.length === 0) lines.push("なし");
-  for (const a of alerts) lines.push(`${mark(a.level)} ${companyLine(a.c)}｜${a.reason}`);
+  lines.push(`■急ぎの案件 ${urgent.length}社${stalled(urgent) ? `（止まっている ${stalled(urgent)}社）` : ""}`);
+  if (urgent.length === 0) lines.push("なし");
+  for (const a of urgent) lines.push(line(a));
   lines.push("");
-  lines.push(`■内定者フォロー 要対応 ${followAlerts.length}名`);
+  lines.push(`■募集中の案件 ${normal.length}社${stalled(normal) ? `（止まっている ${stalled(normal)}社）` : ""}`);
+  for (const a of normal) lines.push(line(a));
+  lines.push("");
+  lines.push(`■内定者フォロー 要対応 ${followAlerts.length}名（順調 ${followFine}名）`);
   if (followAlerts.length === 0) lines.push("なし");
   for (const f of followAlerts) {
-    lines.push(`${mark(f.level)} ${f.name}${f.companyName ? `（${f.companyName}）` : ""}${f.ownerName ? ` 担当:${f.ownerName}` : ""}｜${f.reasons.join("・")}`);
+    lines.push(`${mark(f.level)} ${f.name}${f.companyName ? `（${f.companyName}）` : ""} 担当:${f.ownerName ?? "未設定"}｜${f.reasons.join("・")}`);
   }
-  lines.push("");
-  lines.push(`順調: 案件 ${fine.length}社・内定者 ${followFine}名`);
-  for (const a of fine) lines.push(`・${companyLine(a.c)}`);
   lines.push("");
   lines.push(`詳細 → ${input.url}`);
   return lines.join("\n");

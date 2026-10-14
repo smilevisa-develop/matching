@@ -87,7 +87,9 @@ export default async function DailyPage() {
           dealCandidates: {
             orderBy: { updatedAt: "desc" },
             take: 1,
-            select: { deal: { select: { company: { select: { name: true, externalId: true } } } } },
+            select: {
+              deal: { select: { owner: { select: { name: true } }, company: { select: { name: true, externalId: true } } } },
+            },
           },
         },
       },
@@ -116,7 +118,8 @@ export default async function DailyPage() {
         personId: p.person.id,
         name: p.person.name,
         companyName: p.person.dealCandidates[0]?.deal.company.name ?? null,
-        ownerName: p.followUpOwner?.name ?? null,
+        // 内定フォロー担当がいなければ、その企業の担当者 (採用担当) を出す
+        ownerName: p.followUpOwner?.name ?? p.person.dealCandidates[0]?.deal.owner?.name ?? null,
         level,
         reasons,
       };
