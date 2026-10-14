@@ -1,4 +1,4 @@
-import { generateContentRotating, getGeminiModel } from "./gemini-keys";
+import { GeminiQuotaExhaustedError, generateContentRotating, getGeminiModel } from "./gemini-keys";
 
 export type ExtractedCandidate = {
   name?: string;
@@ -286,6 +286,8 @@ async function callGeminiWithRetry<T>(fn: () => Promise<T>, attempts = 3): Promi
     try {
       return await fn();
     } catch (error) {
+      // 今日の枠を使い切っている。待っても回復しないので、回復時刻つきの文面をそのまま返す
+      if (error instanceof GeminiQuotaExhaustedError) throw new Error(error.message);
       lastError = error;
       const message = errorToText(error);
       console.error(`[gemini] attempt ${i + 1}/${attempts} failed:`, message);
