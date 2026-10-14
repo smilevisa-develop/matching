@@ -642,8 +642,8 @@ export default function SettingsClient({
         </div>
       </SectionCard>
 
-      {isAdmin && (
-        <div id="monthly-targets" className="scroll-mt-6">
+      {/* 月次目標は全員が編集できる */}
+      <div id="monthly-targets" className="scroll-mt-6">
         <SectionCard
           title="月次目標"
           description="売上ダッシュボードのゲージで使う、月ごとの内定数と売上の目標値を積み上げで管理します。"
@@ -737,8 +737,7 @@ export default function SettingsClient({
             </p>
           </div>
         </SectionCard>
-        </div>
-      )}
+      </div>
 
       {isAdmin && (
         <SectionCard

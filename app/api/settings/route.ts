@@ -49,9 +49,9 @@ export async function PATCH(req: Request) {
       typeof body.calendarEmbedUrl === "string" ? body.calendarEmbedUrl.trim() : undefined;
     const nextCalendarLabel =
       typeof body.calendarLabel === "string" ? body.calendarLabel.trim() : undefined;
-    const nextFixedQuestions =
+    const requestedFixedQuestions =
       body.fixedQuestions !== undefined ? normalizeFixedQuestions(body.fixedQuestions) : undefined;
-    const nextRecommendationColumns =
+    const requestedRecommendationColumns =
       body.recommendationColumns !== undefined
         ? sanitizeRecommendationColumns(body.recommendationColumns)
         : undefined;
@@ -65,7 +65,7 @@ export async function PATCH(req: Request) {
     const nextMonthlyRevenueTarget = toIntOrNull(body.monthlyRevenueTarget);
     const nextMonthlyTargets =
       body.monthlyTargets !== undefined ? sanitizeMonthlyTargets(body.monthlyTargets) : undefined;
-    const nextRecommendationTemplateUrl =
+    const requestedRecommendationTemplateUrl =
       body.recommendationTemplateUrl !== undefined
         ? typeof body.recommendationTemplateUrl === "string"
           ? body.recommendationTemplateUrl.trim() || null
@@ -87,14 +87,19 @@ export async function PATCH(req: Request) {
       },
     });
 
+    // 月次目標は全員が編集できる。それ以外の共通設定は管理者だけ (通常アカウントの値は無視する)
+    const isAdmin = account.role === "admin";
+    const nextFixedQuestions = isAdmin ? requestedFixedQuestions : undefined;
+    const nextRecommendationColumns = isAdmin ? requestedRecommendationColumns : undefined;
+    const nextRecommendationTemplateUrl = isAdmin ? requestedRecommendationTemplateUrl : undefined;
+
     if (
-      (nextFixedQuestions !== undefined ||
-        nextRecommendationColumns !== undefined ||
-        nextMonthlyOfferTarget !== undefined ||
-        nextMonthlyRevenueTarget !== undefined ||
-        nextMonthlyTargets !== undefined ||
-        nextRecommendationTemplateUrl !== undefined) &&
-      account.role === "admin"
+      nextFixedQuestions !== undefined ||
+      nextRecommendationColumns !== undefined ||
+      nextMonthlyOfferTarget !== undefined ||
+      nextMonthlyRevenueTarget !== undefined ||
+      nextMonthlyTargets !== undefined ||
+      nextRecommendationTemplateUrl !== undefined
     ) {
       await prisma.coreSettings.upsert({
         where: { id: 1 },

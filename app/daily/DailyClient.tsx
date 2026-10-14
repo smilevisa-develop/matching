@@ -32,11 +32,8 @@ export default function DailyClient({
   deals,
   offerTarget,
   recommendTarget,
-  canEditTargets,
 }: {
   deals: DailyDeal[];
-  /** 月次目標 (設定画面) を編集できるのは管理者だけ */
-  canEditTargets: boolean;
   offerTarget: number | null;
   recommendTarget: number | null;
 }) {
@@ -155,8 +152,8 @@ export default function DailyClient({
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="内定" value={sum("offerCount")} target={offerTarget} editable={canEditTargets} />
-        <Kpi label="推薦" value={sum("recommendedCount")} target={recommendTarget} editable={canEditTargets} />
+        <Kpi label="内定" value={sum("offerCount")} target={offerTarget} editable />
+        <Kpi label="推薦" value={sum("recommendedCount")} target={recommendTarget} editable />
         <Kpi label="面接" value={sum("interviewCount")} target={null} />
         <Kpi label="募集中の企業" value={active.length} target={null} />
       </div>
