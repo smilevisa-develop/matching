@@ -253,6 +253,22 @@ export default function Sidebar() {
           value: data.companyMaster ? changed(data.companyMaster.updated, data.companyMaster.created) : "対象外",
         },
       ];
+      const drive = data.drive ?? {};
+      if (drive.error || drive.failed?.length) {
+        lines.push({
+          label: "Drive フォルダ",
+          value: drive.error ?? `失敗 ${drive.failed.length} 件（${drive.failed[0]}）`,
+          failed: true,
+        });
+      } else {
+        lines.push({
+          label: "Drive フォルダ",
+          value:
+            count(drive.companies) + count(drive.persons) === 0
+              ? "変更なし"
+              : `企業 ${count(drive.companies)} ・ 候補者 ${count(drive.persons)}`,
+        });
+      }
       if (data.dealSyncError) {
         lines.push({ label: "企業・案件 → スプシ", value: data.dealSyncError, failed: true });
       } else {
@@ -264,7 +280,7 @@ export default function Sidebar() {
           },
         );
       }
-      setSyncReport({ ok: !data.dealSyncError, lines });
+      setSyncReport({ ok: lines.every((l) => !l.failed), lines });
     } catch {
       setSyncReport({ ok: false, lines: [{ label: "同期", value: "通信に失敗しました", failed: true }] });
     } finally {
@@ -432,7 +448,7 @@ export default function Sidebar() {
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-lg font-bold text-[var(--color-text-dark)]">
-              {syncReport.ok ? "同期が完了しました" : "同期に失敗しました"}
+              {syncReport.ok ? "同期が完了しました" : "同期できなかった項目があります"}
             </p>
             <ul className="mt-4 divide-y divide-gray-100 text-sm">
               {syncReport.lines.map((line) => (

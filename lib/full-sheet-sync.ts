@@ -1,5 +1,5 @@
 /**
- * スプシへの全件同期 (候補者 + 企業マスタ + 案件)。
+ * スプシ・Drive への全件同期 (候補者 + 企業マスタ + 案件 + Drive フォルダ)。
  *
  * 呼び出し元:
  *   - 毎時の cron (/api/cron/sync-sheet)
@@ -19,6 +19,62 @@ import {
   upsertCompanyMaster,
 } from "@/lib/company-master-sync";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
+import {
+  buildPersonFolderName,
+  ensureCompanyDriveFolder,
+  ensurePersonDriveFolder,
+} from "@/lib/google-docs";
+
+export type DriveFolderSyncResult = { companies: number; persons: number; failed: string[] };
+
+/**
+ * Drive フォルダがまだ無い企業・候補者に、フォルダを紐づける (無ければ作る)。
+ * 候補者は登録時に作っているので、ここで拾うのは登録時に失敗した分だけ。
+ */
+async function syncDriveFolders(): Promise<DriveFolderSyncResult> {
+  const result: DriveFolderSyncResult = { companies: 0, persons: 0, failed: [] };
+  const noFolder = { OR: [{ driveFolderUrl: null }, { driveFolderUrl: "" }] };
+
+  const companies = await prisma.company.findMany({
+    where: noFolder,
+    select: { id: true, name: true, externalId: true },
+    orderBy: { id: "asc" },
+  });
+  for (const c of companies) {
+    try {
+      const folder = await ensureCompanyDriveFolder({ externalId: c.externalId, companyName: c.name });
+      if (!folder.folderUrl) throw new Error("フォルダ URL が空");
+      await prisma.company.update({ where: { id: c.id }, data: { driveFolderUrl: folder.folderUrl } });
+      result.companies++;
+    } catch (e) {
+      result.failed.push(`${c.name}: ${e instanceof Error ? e.message : "error"}`);
+    }
+  }
+
+  const persons = await prisma.person.findMany({
+    where: noFolder,
+    select: { id: true, name: true, onboarding: { select: { englishName: true } } },
+    orderBy: { id: "asc" },
+  });
+  for (const p of persons) {
+    try {
+      const folder = await ensurePersonDriveFolder({
+        personId: p.id,
+        personName: buildPersonFolderName({
+          id: p.id,
+          englishName: p.onboarding?.englishName ?? null,
+          name: p.name,
+        }),
+      });
+      if (!folder.folderUrl) throw new Error("フォルダ URL が空");
+      await prisma.person.update({ where: { id: p.id }, data: { driveFolderUrl: folder.folderUrl } });
+      result.persons++;
+    } catch (e) {
+      result.failed.push(`${p.name}: ${e instanceof Error ? e.message : "error"}`);
+    }
+  }
+  return result;
+}
 
 export async function runFullSheetSync(): Promise<Response> {
   const sheetUrl = process.env.SYNC_SHEET_URL?.trim();
@@ -49,6 +105,16 @@ export async function runFullSheetSync(): Promise<Response> {
     }
   } catch (e) {
     console.warn("企業マスタ同期に失敗 (候補者同期は継続):", e instanceof Error ? e.message : e);
+  }
+
+  // 候補者同期の前に Drive フォルダを揃える (スプシに載せるフォルダ URL が空にならないように)。
+  // 失敗しても以降の同期は続行する。
+  let drive: DriveFolderSyncResult | { error: string };
+  try {
+    drive = await syncDriveFolders();
+  } catch (e) {
+    drive = { error: e instanceof Error ? e.message : "error" };
+    console.warn("Drive フォルダの同期に失敗:", drive.error);
   }
 
   const rawPersons = await prisma.person.findMany({
@@ -117,6 +183,7 @@ export async function runFullSheetSync(): Promise<Response> {
       ok: true,
       result,
       companyMaster,
+      drive,
       companies,
       deals,
       dealSyncError,
