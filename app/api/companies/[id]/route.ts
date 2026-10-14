@@ -3,6 +3,7 @@ import { AuthError, requireApiAccount } from "@/lib/auth";
 import { after } from "next/server";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 import { COMPANY_EXTERNAL_ID_RE } from "@/lib/deal-stages";
+import { deleteCompanyEverywhere } from "@/lib/company-delete";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -116,8 +117,10 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   try {
     await requireApiAccount();
     const { id } = await params;
-    await prisma.company.delete({ where: { id: Number(id) } });
-    return Response.json({ ok: true });
+    // システム・スプシ (企業マスタ / 案件管理 / 条件マスタ)・空の Drive フォルダをまとめて消す。
+    // 片方だけ消すと、次の同期でもう片方から作り直されるため
+    const result = await deleteCompanyEverywhere(Number(id));
+    return Response.json({ ok: true, sheetRows: result.sheetRows.length, folderTrashed: result.folderTrashed });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "error" },

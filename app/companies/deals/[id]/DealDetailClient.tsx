@@ -71,21 +71,22 @@ export default function DealDetailClient({
     ownerId: deal.owner ? String(deal.owner.id) : "",
   });
 
-  const handleDeleteDeal = async () => {
+  // 1 企業 = 1 求人なので、削除は企業ごと消す (求人だけ消すと、開き直したときに空の求人が作られて復活して見えていた)
+  const handleDeleteCompany = async () => {
     const candidateCount = candidates.length;
     const warning =
-      candidateCount > 0
-        ? `この求人には ${candidateCount} 名の候補者が紐づいています。\n削除すると候補者との関連も全て解除されます (候補者本体は残ります)。\n本当に削除しますか?`
-        : "この求人を削除します。よろしいですか?";
+      `企業「${currentDeal.company.name}」を削除します。\n` +
+      "企業データベースのスプシ (企業マスタ・案件管理・条件マスタ) の行と、空の Drive フォルダも一緒に消えます。" +
+      (candidateCount > 0 ? `\nカンバンの候補者 ${candidateCount} 名の紐づけも外れます (候補者本体は残ります)。` : "") +
+      "\n元に戻せません。本当に削除しますか?";
     if (!confirm(warning)) return;
-    const response = await fetch(`/api/deals/${currentDeal.id}`, { method: "DELETE" });
-    const result = await response.json();
+    const response = await fetch(`/api/companies/${currentDeal.company.id}`, { method: "DELETE" });
+    const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) {
-      alert(result.error || "求人の削除に失敗しました");
+      alert(result.error || "企業の削除に失敗しました");
       return;
     }
-    alert("削除しました");
-    router.push(`/companies/${currentDeal.company.id}`);
+    router.push("/companies");
   };
 
   const startEdit = () => {
@@ -287,7 +288,7 @@ export default function DealDetailClient({
             {!editing ? (
               <button
                 type="button"
-                onClick={handleDeleteDeal}
+                onClick={() => void handleDeleteCompany()}
                 className="self-start rounded-lg border border-red-300 bg-white px-4 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
               >
                 削除
