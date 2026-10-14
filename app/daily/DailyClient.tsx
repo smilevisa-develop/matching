@@ -35,8 +35,11 @@ export default function DailyClient({
   deals,
   offerTarget,
   recommendTarget,
+  offersThisMonth,
 }: {
   deals: DailyDeal[];
+  /** 今月 (日本時間) に内定日がある内定者の数 */
+  offersThisMonth: number;
   offerTarget: number | null;
   recommendTarget: number | null;
 }) {
@@ -157,7 +160,7 @@ export default function DailyClient({
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="内定" value={sum("offerCount")} target={offerTarget} editable />
+        <Kpi label="今月の内定" value={offersThisMonth} target={offerTarget} editable />
         <Kpi label="推薦" value={sum("recommendedCount")} target={recommendTarget} editable />
         <Kpi label="面接" value={sum("interviewCount")} target={null} />
         <Kpi label="募集中の企業" value={counted.length} target={null} />

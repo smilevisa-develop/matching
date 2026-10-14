@@ -52,8 +52,15 @@ export async function ensureOnboardingCard(personId: number, baseDate: Date | nu
   return { created: true, placementId: placement.id };
 }
 
-/** ステージ変更時に呼ぶ。内定済みになったときだけカードを用意する */
+/**
+ * ステージ変更時に呼ぶ。内定済みになったときだけカードを用意する。
+ * カードが既にあっても内定日が空なら今日を入れる (進捗管理の「今月の内定」はこの日付で数える)。
+ */
 export async function onDealCandidateStageChanged(personId: number, stage: string) {
   if (stage !== OFFER_STAGE) return { created: false };
-  return ensureOnboardingCard(personId, new Date());
+  const result = await ensureOnboardingCard(personId, new Date());
+  if (!result.created) {
+    await prisma.personPlacement.updateMany({ where: { personId, offerAt: null }, data: { offerAt: new Date() } });
+  }
+  return result;
 }

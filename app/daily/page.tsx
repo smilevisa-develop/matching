@@ -3,6 +3,7 @@ import { requireCurrentAccount } from "@/lib/auth";
 import { getCoreSettings } from "@/lib/app-settings";
 import RefreshOnFocus from "@/app/components/RefreshOnFocus";
 import { normalizeDealStatus } from "@/lib/deal-stages";
+import { TEST_COMPANY_EXTERNAL_IDS } from "@/lib/test-companies";
 import DailyClient from "./DailyClient";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +67,18 @@ export default async function DailyPage() {
     .split("-");
   const target = settings.monthlyTargets.find((t) => t.month === `${year}-${monthNo}`);
 
+  // 今月の内定 = 内定日 (無ければ内定承諾日) が今月 (日本時間) の内定者。人数カウンターは累計なので使わない
+  const monthStart = new Date(Date.UTC(Number(year), Number(monthNo) - 1, 1) - 9 * 3600_000);
+  const nextMonthStart = new Date(Date.UTC(Number(year), Number(monthNo), 1) - 9 * 3600_000);
+  const inMonth = { gte: monthStart, lt: nextMonthStart };
+  const offersThisMonth = await prisma.personPlacement.count({
+    where: {
+      OR: [{ offerAt: inMonth }, { offerAt: null, offerAcceptedAt: inMonth }],
+      // テスト企業だけに紐づく人は数えない
+      person: { dealCandidates: { some: { deal: { company: { NOT: { externalId: { in: TEST_COMPANY_EXTERNAL_IDS } } } } } } },
+    },
+  });
+
   return (
     <div className="space-y-5 p-8">
       <RefreshOnFocus />
@@ -76,7 +89,8 @@ export default async function DailyPage() {
       <DailyClient
         offerTarget={target?.offer ?? settings.monthlyOfferTarget}
         recommendTarget={target?.recommendCount ?? null}
-        deals={companies.map((c) => {
+        offersThisMonth={offersThisMonth}
+        deals={[...companies].sort(byExternalId).map((c) => {
           // 求人がまだ無い企業 (追加してから一度も開いていない) も、企業の採用状況で並べる
           const d = c.deals[0];
           return {
@@ -109,4 +123,15 @@ export default async function DailyPage() {
       />
     </div>
   );
+}
+
+/** 企業ID順 (番号の小さい順。番号の無い ID は後ろ) */
+function byExternalId(a: { externalId: string | null }, b: { externalId: string | null }) {
+  const key = (id: string | null) => {
+    const m = (id ?? "").match(/^(\d+)(.*)$/);
+    return m ? [0, Number(m[1]), m[2]] as const : [1, 0, id ?? ""] as const;
+  };
+  const ka = key(a.externalId);
+  const kb = key(b.externalId);
+  return ka[0] - kb[0] || ka[1] - kb[1] || ka[2].localeCompare(kb[2]);
 }
