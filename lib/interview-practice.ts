@@ -19,6 +19,7 @@
 
 import { ThinkingLevel } from "@google/genai";
 import { generateContentRotating, getGeminiModel } from "./gemini-keys";
+import { removeJapaneseSpaces } from "./ja-text";
 import {
   ACKNOWLEDGEMENTS,
   CLOSING_LINE,
@@ -376,11 +377,11 @@ ${question?.text ?? ""}`;
   const raw = parseJson(response.text?.trim() ?? "");
   const issue = str(raw.audioIssue);
   return {
-    transcript: str(raw.transcript),
+    transcript: removeJapaneseSpaces(str(raw.transcript)),
     audioIssue: issue === "silent" || issue === "unintelligible" ? issue : "none",
     action: str(raw.action) === "followup" ? "followup" : "next",
-    followupQuestion: str(raw.followupQuestion),
-    acknowledgement: str(raw.acknowledgement),
+    followupQuestion: removeJapaneseSpaces(str(raw.followupQuestion)),
+    acknowledgement: removeJapaneseSpaces(str(raw.acknowledgement)),
   };
 }
 

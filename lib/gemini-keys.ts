@@ -11,7 +11,7 @@
  *   GEMINI_MODEL    = 使うモデル名 (任意。未設定なら DEFAULT_GEMINI_MODEL)
  *
  * モデル名が古い / 存在しないと Google は 404 (NOT_FOUND) を返す。
- * 設定ミスで AI 取込が丸ごと止まらないよう、404 のときは別のモデルで試す (quotaFallbackModels)。
+ * 設定ミスで AI 取込が丸ごと止まらないよう、404 のときは別のモデルで試す (modelOrder)。
  */
 
 import { GoogleGenAI } from "@google/genai";
@@ -80,21 +80,23 @@ type GenParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
 type GenResult = Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>;
 
 /**
- * 1 日の無料枠を使い切ったときに切り替えるモデル。
- * 無料枠は「プロジェクト × モデル」ごとに別枠なので、別モデルに逃がすとその日も使い続けられる。
- * そのキーで使えないモデル (404) は自動で飛ばす。GEMINI_QUOTA_FALLBACK_MODELS で上書きできる。
+ * 試すモデルの順番 (速いものから)。
+ * 無料枠は「プロジェクト × モデル」ごとに別枠なので、枠切れのときも別モデルで続けられる。
+ * そのキーで使えないモデル (404) は覚えておき、次からは飛ばす。
+ *
+ * 2026/10 の実測 (音声 9 秒の文字起こし):
+ *   gemini-2.5-flash  3.6 秒 (古いキーでしか使えない)
+ *   gemini-3.8-flash  123 秒 (混雑中。考える量を「低」にしても 1 分前後かかる)
+ * そのため 2.5-flash を先に試し、使えないときだけ 3.8-flash に回す。
+ * GEMINI_MODEL を設定したときはそれを最初に試す。GEMINI_QUOTA_FALLBACK_MODELS で順番を変えられる。
  */
-const DEFAULT_QUOTA_FALLBACK_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-3.8-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-];
+const DEFAULT_MODEL_ORDER = ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-2.5-flash-lite"];
 
-function quotaFallbackModels(first: string): string[] {
+function modelOrder(requested: string): string[] {
   const raw = process.env.GEMINI_QUOTA_FALLBACK_MODELS?.trim();
-  const list = raw ? raw.split(",").map((m) => m.trim()).filter(Boolean) : DEFAULT_QUOTA_FALLBACK_MODELS;
-  return [...new Set([first, ...list])];
+  const list = raw ? raw.split(",").map((m) => m.trim()).filter(Boolean) : DEFAULT_MODEL_ORDER;
+  const pinned = process.env.GEMINI_MODEL?.trim();
+  return [...new Set(pinned ? [pinned, ...list, requested] : [...list, requested])];
 }
 
 /**
@@ -172,7 +174,7 @@ export async function generateContentRotating(
     earliestRecovery = earliestRecovery === null ? until : Math.min(earliestRecovery, until);
   };
 
-  for (const model of quotaFallbackModels(String(params.model))) {
+  for (const model of modelOrder(String(params.model))) {
     for (let i = 0; i < keys.length; i++) {
       const until = blockedUntil.get(slot(keys[i], model));
       if (until && until > Date.now()) {
@@ -182,8 +184,7 @@ export async function generateContentRotating(
       try {
         const client = new GoogleGenAI({ apiKey: keys[i] });
         const result = await client.models.generateContent({ ...params, model });
-        if (model !== params.model) console.warn(`[gemini] 枠切れのため ${model} で処理しました。`);
-        return result;
+                return result;
       } catch (e) {
         lastErr = e;
         if (isQuotaError(e)) {

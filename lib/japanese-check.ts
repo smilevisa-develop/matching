@@ -25,6 +25,7 @@
  */
 
 import { generateContentRotating, getGeminiModel } from "./gemini-keys";
+import { removeJapaneseSpaces } from "./ja-text";
 import { JAPANESE_CHECK_QUESTIONS, findJapaneseCheckQuestion } from "./japanese-check-questions";
 
 export { JAPANESE_CHECK_QUESTIONS };
@@ -376,7 +377,7 @@ async function observeRecordings(
     if (!key) continue;
     map.set(key, {
       key,
-      transcript: typeof o.transcript === "string" ? o.transcript : "",
+      transcript: typeof o.transcript === "string" ? removeJapaneseSpaces(o.transcript) : "",
       audioIssue: toAudioIssue(o.audioIssue),
       intelligibility: toInt(o.intelligibility, 0, 100, 0),
       taskAchieved: toTaskAchieved(o.taskAchieved),
