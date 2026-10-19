@@ -24,6 +24,9 @@ export function proxy(request: NextRequest) {
     // 候補者向け公開フォーム (intake) は token 認証で動作するため未ログイン可
     pathname.startsWith("/intake/") ||
     pathname.startsWith("/api/intake/") ||
+    // 新規パートナー向け自己記入フォーム (全員共通リンクの token で動作。未ログイン可)
+    pathname.startsWith("/partner-intake/") ||
+    pathname.startsWith("/api/partner-intake/") ||
     // 日本語チェック (公開・専用 token 認証。入力フォームとは別リンク)
     pathname.startsWith("/japanese-check/") ||
     pathname.startsWith("/api/japanese-check/") ||

@@ -9,7 +9,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const isPortal = pathname.startsWith("/portal");
   const isAuth = pathname.startsWith("/login");
   // 候補者向け公開フォーム (intake) は token 認証で動作するためサイドバーも認証チェックも不要
-  const isIntake = pathname.startsWith("/intake");
+  const isIntake = pathname.startsWith("/intake") || pathname.startsWith("/partner-intake");
   // 法的文書ページ (Meta App Review 要件) は完全公開
   const isLegal = pathname.startsWith("/legal");
   // 母国語チェックリスト (公開・token 認証)
