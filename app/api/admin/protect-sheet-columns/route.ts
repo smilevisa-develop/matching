@@ -6,7 +6,9 @@
  *      青見出し (= 関数で自動入力される) の列に「保護された範囲」を付ける。
  *      columns を渡すとその列だけ (例 ["C","D","E"])。渡さなければ青見出しを自動判定。
  *
- * 保護はサービスアカウントが作るので、同期 (数式の補修など) はこれまでどおり書き込める。
+ * 編集できる人を「サービスアカウントだけ」に絞る (editors を指定しないと、
+ * 保護の枠はできても編集者全員が編集できたままになる = 制限が効かない)。
+ * 同期 (数式の補修など) はサービスアカウントなのでこれまでどおり書き込める。
  * スプレッドシートの所有者は Google の仕様上いつでも編集できる。それ以外の人はブロックされる。
  */
 
@@ -51,7 +53,7 @@ async function inspect(tab: string) {
     ranges: [`'${tab}'!A1:Z3`],
     includeGridData: true,
     fields:
-      "sheets(properties(sheetId,title,gridProperties(rowCount)),protectedRanges(protectedRangeId,description,range,warningOnly),data(rowData(values(formattedValue,userEnteredValue,effectiveFormat(backgroundColor)))))",
+      "sheets(properties(sheetId,title,gridProperties(rowCount)),protectedRanges(protectedRangeId,description,range,warningOnly,editors),data(rowData(values(formattedValue,userEnteredValue,effectiveFormat(backgroundColor)))))",
   });
   const sheet = res.data.sheets?.[0];
   if (!sheet?.properties?.sheetId && sheet?.properties?.sheetId !== 0) throw new Error(`タブが見つかりません: ${tab}`);
@@ -86,6 +88,9 @@ async function inspect(tab: string) {
       startCol: p.range?.startColumnIndex,
       endCol: p.range?.endColumnIndex,
       warningOnly: p.warningOnly,
+      /** 編集できる人。空なら「編集者全員」= 制限なし */
+      editors: p.editors?.users ?? [],
+      domainUsersCanEdit: p.editors?.domainUsersCanEdit ?? null,
     })),
   };
 }
@@ -125,6 +130,10 @@ export async function POST(req: Request) {
         requests.push({ deleteProtectedRange: { protectedRangeId: p.id } });
       }
     }
+    // 編集できるのはサービスアカウント (= 同期) だけにする。
+    // ここを指定しないと「編集者全員」が既定になり、保護しても消せてしまう。
+    const serviceAccount = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
+    if (!serviceAccount) throw new Error("GOOGLE_SERVICE_ACCOUNT_EMAIL が未設定です");
     for (const col of targets) {
       const idx = colIndex(col);
       const header = info.columns.find((c) => c.col === col)?.header ?? col;
@@ -140,6 +149,7 @@ export async function POST(req: Request) {
             },
             description: `自動入力列 (${col} ${header}) — 関数で入るため手で編集しない`,
             warningOnly: false,
+            editors: { users: [serviceAccount], domainUsersCanEdit: false },
           },
         },
       });
