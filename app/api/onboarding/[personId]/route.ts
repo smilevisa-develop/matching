@@ -123,6 +123,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
       rebuiltTasks = true;
     }
 
+    // 内定承諾日が入った/変わったら、未完了タスクの期限をその日起点で引き直す
+    // (基準日なしで取り込んだ人は期限が空のままになっているため)
+    const baseChanged =
+      data.offerAcceptedAt !== undefined &&
+      String(placement.offerAcceptedAt ?? "") !== String(updated.offerAcceptedAt ?? "");
+    if (!rebuiltTasks && baseChanged && updated.offerAcceptedAt) {
+      const base = updated.offerAcceptedAt;
+      const dueByTitle = new Map(
+        buildFlowTasks(updated.applicationType, base).map((t) => [t.title, t.dueAt]),
+      );
+      const pending = await prisma.placementTask.findMany({
+        where: { placementId: placement.id, doneAt: null },
+        select: { id: true, title: true },
+      });
+      for (const t of pending) {
+        const dueAt = dueByTitle.get(t.title);
+        if (dueAt) await prisma.placementTask.update({ where: { id: t.id }, data: { dueAt } });
+      }
+      rebuiltTasks = true;
+    }
+
     const tasks = rebuiltTasks
       ? await prisma.placementTask.findMany({
           where: { placementId: placement.id },

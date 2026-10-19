@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 /**
  * 内定者管理ボード (Trello の置き換え)。
  *
- * 使ってもらうことを優先し、カードは「誰・どこの企業・メモ」だけに絞っている。
- * チェックリスト / 問題記録 / 緊急度はデータと API を残したまま画面から外した
- * (必要になったら戻す)。
+ * カードは「誰・どこの企業・次にやること・今の工程の進み具合」だけ。
+ * カードを押すと、今いる工程のチェックリストだけが大きく出る
+ * (他の工程は畳んでおく。全部見せると何をすればいいか分からなくなるため)。
  */
 export default async function OnboardingPage() {
   await requireCurrentAccount();
@@ -31,11 +31,21 @@ export default async function OnboardingPage() {
             },
           },
         },
+        tasks: {
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, category: true, title: true, dueAt: true, doneAt: true, note: true },
+        },
+        issues: {
+          orderBy: { createdAt: "desc" },
+          select: { id: true, title: true, status: true, createdAt: true },
+        },
       },
       orderBy: { updatedAt: "desc" },
     }),
     prisma.staffAccount.findMany({ select: { id: true, name: true }, orderBy: { id: "asc" } }),
   ]);
+
+  const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
 
   const cards: OnboardingCard[] = placements.map((p) => ({
     personId: p.person.id,
@@ -46,7 +56,23 @@ export default async function OnboardingPage() {
     ownerName: p.followUpOwner?.name ?? null,
     stage: resolveStage(p),
     memo: p.currentAction ?? p.holdReason ?? "",
-    applicationAt: p.applicationAt ? p.applicationAt.toISOString().slice(0, 10) : "",
+    applicationAt: ymd(p.applicationAt),
+    offerAcceptedAt: ymd(p.offerAcceptedAt ?? p.offerAt),
+    applicationType: p.applicationType ?? "",
+    tasks: p.tasks.map((t) => ({
+      id: t.id,
+      category: t.category,
+      title: t.title,
+      dueAt: ymd(t.dueAt),
+      done: Boolean(t.doneAt),
+      note: t.note ?? "",
+    })),
+    issues: p.issues.map((i) => ({
+      id: i.id,
+      title: i.title,
+      open: i.status === "open",
+      createdAt: ymd(i.createdAt),
+    })),
   }));
 
   return (
