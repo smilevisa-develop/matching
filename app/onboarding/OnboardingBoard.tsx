@@ -14,7 +14,8 @@ import {
  * 内定者管理ボード。
  *
  * ボード: カードは「誰・どこ・次にやること・今の工程の進み具合」だけ。列はドラッグで移す。
- * 詳細:   今いる工程のチェックリストだけを大きく出す。他の工程は畳む。
+ * 詳細:   今いる工程のチェックリストだけを大きく出す。他の工程は進み具合だけ常に見せ、押すと中が開く。
+ * 保留:   列ではなくボードの下に横向きで置く (工程から外れている人を見落とさないため)。
  *         やることが無い (チェックリスト未作成) なら、申請種別のボタンを押すだけで作れる。
  *
  * 迷わせないための約束:
@@ -146,7 +147,7 @@ export default function OnboardingBoard({
   return (
     <>
       <div className="flex gap-3 overflow-x-auto pb-2">
-        {COLUMNS.map((col) => {
+        {COLUMNS.filter((c) => c.id !== HOLD_STAGE).map((col) => {
           const list = cards.filter((c) => c.stage === col.id);
           const dragging = cards.find((c) => c.personId === draggingId);
           const isTarget = Boolean(dragging) && overStage === col.id && dragging?.stage !== col.id;
@@ -168,7 +169,7 @@ export default function OnboardingBoard({
                 setDraggingId(null);
                 setOverStage(null);
               }}
-              className={`flex h-[calc(100vh-11rem)] w-[230px] shrink-0 flex-col rounded-2xl border transition-all duration-150 ${
+              className={`flex h-[calc(100vh-19rem)] w-[230px] shrink-0 flex-col rounded-2xl border transition-all duration-150 ${
                 isTarget
                   ? "scale-[1.02] border-[var(--color-primary)] bg-[var(--color-light)] shadow-lg ring-2 ring-[var(--color-primary)]"
                   : "border-gray-200 bg-gray-50"
@@ -199,6 +200,66 @@ export default function OnboardingBoard({
           );
         })}
       </div>
+
+      {/* 保留: 工程から外れている人を一目で拾えるよう、下に横向きで置く */}
+      {(() => {
+        const list = cards.filter((c) => c.stage === HOLD_STAGE);
+        const dragging = cards.find((c) => c.personId === draggingId);
+        const isTarget = Boolean(dragging) && overStage === HOLD_STAGE && dragging?.stage !== HOLD_STAGE;
+        return (
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setOverStage(HOLD_STAGE);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                setOverStage((s) => (s === HOLD_STAGE ? null : s));
+              }
+            }}
+            onDrop={() => {
+              const card = cards.find((c) => c.personId === draggingId);
+              if (card && card.stage !== HOLD_STAGE) void save(card.personId, { stage: HOLD_STAGE });
+              setDraggingId(null);
+              setOverStage(null);
+            }}
+            className={`mt-3 rounded-2xl border p-3 transition-all duration-150 ${
+              isTarget
+                ? "border-[var(--color-primary)] bg-[var(--color-light)] ring-2 ring-[var(--color-primary)]"
+                : "border-gray-200 bg-gray-50"
+            }`}
+          >
+            <p className="mb-2 text-sm font-semibold text-[var(--color-text-dark)]">
+              保留
+              {list.length > 0 ? <span className="ml-2 text-xs font-normal text-gray-500">{list.length}</span> : null}
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {isTarget ? (
+                <div className="flex w-[230px] shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-[var(--color-primary)] bg-white/70 text-xs font-semibold text-[var(--color-primary)]">
+                  ここに移動
+                </div>
+              ) : null}
+              {list.map((card) => (
+                <div key={card.personId} className="w-[230px] shrink-0">
+                  <BoardCard
+                    card={card}
+                    dragging={card.personId === draggingId}
+                    onDragStart={() => setDraggingId(card.personId)}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setOverStage(null);
+                    }}
+                    onClick={() => setOpenId(card.personId)}
+                  />
+                </div>
+              ))}
+              {list.length === 0 && !isTarget ? (
+                <p className="py-2 text-xs text-gray-400">保留中の人はいません（カードをここへドラッグすると保留になります）</p>
+              ) : null}
+            </div>
+          </div>
+        );
+      })()}
 
       {openCard ? (
         <CardDrawer
@@ -305,7 +366,6 @@ function CardDrawer({
 }) {
   const [memo, setMemo] = useState(card.memo);
   const [busy, setBusy] = useState(false);
-  const [showOthers, setShowOthers] = useState(false);
   const [showIssues, setShowIssues] = useState(card.issues.some((i) => i.open));
   const [issueText, setIssueText] = useState("");
   const [openNote, setOpenNote] = useState<number | null>(null);
@@ -538,18 +598,11 @@ function CardDrawer({
             )}
           </section>
 
-          {/* 他の工程 (畳んでおく) */}
+          {/* 他の工程 (常に見せる。各工程を押すと中のタスクが開く) */}
           {card.tasks.length > 0 ? (
             <section className="border-t border-gray-100 px-5 py-3">
-              <button
-                type="button"
-                onClick={() => setShowOthers((v) => !v)}
-                className="flex w-full items-center justify-between text-xs text-gray-500"
-              >
-                <span>他の工程</span>
-                <span>{showOthers ? "閉じる" : "開く"}</span>
-              </button>
-              {showOthers ? (
+              <p className="text-xs text-gray-500">他の工程</p>
+              {(
                 <div className="mt-2 space-y-1">
                   {ONBOARDING_STAGES.filter((s) => s.id !== HOLD_STAGE && s.id !== card.stage).map((s) => {
                     const items = tasksOfStage(card, s.id);
@@ -580,7 +633,7 @@ function CardDrawer({
                     );
                   })}
                 </div>
-              ) : null}
+              )}
             </section>
           ) : null}
 
