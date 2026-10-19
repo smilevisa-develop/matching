@@ -116,9 +116,12 @@ export async function syncKpiSheet(args: { month: string; apply: boolean }): Pro
   if (col < 0) return { ...base, skipped: `「${KPI_SHEET_TAB}」に ${month} の列がありません` };
 
   const labels = (labelRes.data.values ?? []).map((r) => String(r?.[0] ?? "").trim());
+  // 見出し行 (目標 / 実績 / 達成率 が並ぶ行) は月の行の次。B 列の「売上」はこの見出し行にもあるので、
+  // データ行はそれより下から探す
+  const headerRowIdx = monthRow + 1;
   const rowOf = (key: RowKey): number => {
     const def = ROW_LABELS.find((d) => d.key === key)!;
-    const idx = labels.findIndex((l) => l && def.match(l));
+    const idx = labels.findIndex((l, i) => i > headerRowIdx && l && def.match(l));
     return idx; // 0 始まり (= 行番号 - 1)
   };
 
@@ -143,6 +146,10 @@ export async function syncKpiSheet(args: { month: string; apply: boolean }): Pro
   put("内定数", actualCol, stats.offers, "内定数");
   put("入社人数", actualCol, stats.joined, "入社人数");
   put("求人数", actualCol, stats.newDeals, "求人数");
+  // 見出し行の「目標 / 実績」が消えていたら戻す (以前の版で売上目標を見出し行に書いてしまったことがある)
+  const header = headerRows[headerRowIdx] ?? [];
+  if (String(header[col] ?? "").trim() !== "目標") cells.push({ range: `${targetCol}${headerRowIdx + 1}`, label: "見出し (目標) の修復", value: "目標" });
+  if (String(header[col + 1] ?? "").trim() !== "実績") cells.push({ range: `${actualCol}${headerRowIdx + 1}`, label: "見出し (実績) の修復", value: "実績" });
 
   if (apply && cells.length > 0) {
     await sheets.spreadsheets.values.batchUpdate({
