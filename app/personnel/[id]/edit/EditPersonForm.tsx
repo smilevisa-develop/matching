@@ -415,12 +415,6 @@ export default function EditPersonForm({
       alert("カタカナ名を入力してください");
       return;
     }
-    // 連絡が取れないと全工程が止まるので、メールは必ず入れてもらう
-    if (!form.email.trim() || !/@/.test(form.email)) {
-      alert("メールアドレスを入力してください（必須）");
-      setActiveSection("basic");
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -652,19 +646,15 @@ export default function EditPersonForm({
           <div className="rounded-2xl border border-gray-200 bg-[var(--color-light)] p-5">
             <p className="text-sm font-semibold text-[var(--color-text-dark)]">連絡手段</p>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              {/* メールは必須。無いと保存できない */}
+              {/* メールは必須項目として一番上に置く (未入力でも保存は通す。警告も出さない) */}
               <Field label="メールアドレス *" className="md:col-span-2">
                 <input
-                  className={`${INPUT} ${!form.email.trim() ? "border-red-300" : ""}`}
+                  className={INPUT}
                   type="email"
-                  required
                   value={form.email}
                   onChange={(event) => setValue("email", event.target.value)}
                   placeholder="example@email.com"
                 />
-                {!form.email.trim() ? (
-                  <p className="mt-1 text-[11px] text-red-600">必須です。入力しないと保存できません</p>
-                ) : null}
               </Field>
             </div>
 
