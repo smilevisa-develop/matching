@@ -147,17 +147,9 @@ const NAV: NavItem[] = [
       { label: "推薦リスト", href: "/recommendations" },
     ],
   },
-  {
-    // 内定後にやること (内定者管理 + 請求) をまとめたグループ
-    label: "内定後",
-    href: "/onboarding",
-    icon: InvoiceIcon,
-    children: [
-      { label: "内定者管理", href: "/onboarding" },
-      { label: "企業への請求", href: "/invoices/companies" },
-      { label: "PAへの請求", href: "/invoices/partners" },
-    ],
-  },
+  // 請求 (企業への請求 / PAへの請求) は使っていないのでメニューから外している。
+  // 画面と API は残してあり、URL (/invoices/companies, /invoices/partners) を直接開けば使える。
+  { label: "内定者管理", href: "/onboarding", icon: InvoiceIcon },
   { label: "売上ダッシュボード", href: "/revenue", icon: BroadcastIcon },
   { label: "チャット", href: "/chat", icon: ChatIcon },
   { label: "設定", href: "/settings", icon: SettingsIcon },
