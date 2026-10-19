@@ -165,17 +165,15 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
     offers: 0,
     accepted: 0,
   };
-  const ymdJst = (d: Date) =>
-    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
   for (const c of companies) {
     if (isTestCompany(c.externalId)) continue;
     for (const d of c.deals) {
       for (const cand of d.candidates) {
+        // 日付が記録されている分だけ数える (2026/10/13 の一括取込より前の紐づけ日と、ボードの内定日は移行時に入れてある。
+        // それ以外は、この機能を入れてからカンバンで動かした分から記録される)
         const dates = readStageDates(cand.stageDates);
-        // 接続日が無い古いデータは、紐づけた日で代用する
-        const connectedAt = dates["接続済み"] ?? ymdJst(cand.createdAt);
         const inMonth = (ymd: string | undefined) => Boolean(ymd && ymd.startsWith(month));
-        if (inMonth(connectedAt)) stats.connected++;
+        if (inMonth(dates["接続済み"])) stats.connected++;
         if (inMonth(dates["事前面談済み"])) stats.preInterviewed++;
         if (inMonth(dates["推薦済み"])) stats.recommended++;
         if (inMonth(dates["面接済み"])) stats.interviewed++;
