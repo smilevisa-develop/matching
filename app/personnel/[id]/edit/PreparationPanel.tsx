@@ -7,7 +7,7 @@ import { PANEL_ACTION, usePanelActions } from "./PanelActions";
 
 /**
  * 事前面談の準備パネル。
- * 履歴書取込 → 日本語チェック → フォーム送信 → 本人の回答 → 求人票確認
+ * 履歴書取込 → フォーム送信 (リンク共有) → 本人の回答 → 日本語チェック → 求人票確認
  * の 5 ステップの進行状況を候補者詳細の最上部に常設表示する。
  *
  * 日本語チェックと入力フォームは別のリンクなので、ステップも別々に置く。
@@ -120,49 +120,21 @@ export default function PreparationPanel({
           pendingNote="クリックして履歴書を AI 取込み"
         />
 
-        {/* Step 2: 日本語チェック (専用リンク) */}
-        <StepCard
-          done={state.japaneseCheckRecorded}
-          active={state.resumeImported && !state.japaneseCheckRecorded}
-          title="2. 日本語チェック"
-          doneNote={`録音受信済み${state.japaneseCheckLevel ? ` ・ ${state.japaneseCheckLevel}` : ""}`}
-          extra={
-            state.japaneseCheckToken && !state.japaneseCheckRecorded ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void copyJapaneseCheckLink();
-                }}
-                className="mt-2 w-full rounded-lg border border-[var(--color-primary)] bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
-              >
-                {jcCopied ? "コピーしました" : "🔗 リンクをコピー"}
-              </button>
-            ) : null
-          }
-          onClick={() => panelActions?.trigger(PANEL_ACTION.japaneseCheck)}
-          pendingNote={
-            state.japaneseCheckIssued
-              ? "リンク発行済み（録音待ち）"
-              : "クリックしてリンクを発行"
-          }
-        />
-
-        {/* Step 3: フォーム送信 */}
+        {/* Step 2: フォーム送信 (候補者にリンクを共有し、足りない情報を本人に書いてもらう) */}
         <StepCard
           done={state.intakeIssued}
-          active={state.japaneseCheckRecorded && !state.intakeIssued}
-          title="3. フォーム送信"
+          active={state.resumeImported && !state.intakeIssued}
+          title="2. フォーム送信"
           doneNote={`URL 発行済み ・ 必須 ${state.mustTotal} 問`}
           onClick={() => panelActions?.trigger(PANEL_ACTION.intakeForm)}
           pendingNote="クリックしてフォーム URL を発行"
         />
 
-        {/* Step 4: 本人の回答 */}
+        {/* Step 3: 本人の回答 */}
         <StepCard
           done={step3Done}
           active={answering}
-          title="4. 本人の回答"
+          title="3. 本人の回答"
           doneNote="全問回答済み"
           onClick={() => panelActions?.trigger(PANEL_ACTION.intakeForm)}
           pendingNote={
@@ -186,10 +158,38 @@ export default function PreparationPanel({
           }
         />
 
+        {/* Step 4: 日本語チェック (専用リンク。本人の回答のあと、場合によって) */}
+        <StepCard
+          done={state.japaneseCheckRecorded}
+          active={step3Done && !state.japaneseCheckRecorded}
+          title="4. 日本語チェック"
+          doneNote={`録音受信済み${state.japaneseCheckLevel ? ` ・ ${state.japaneseCheckLevel}` : ""}`}
+          extra={
+            state.japaneseCheckToken && !state.japaneseCheckRecorded ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void copyJapaneseCheckLink();
+                }}
+                className="mt-2 w-full rounded-lg border border-[var(--color-primary)] bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+              >
+                {jcCopied ? "コピーしました" : "🔗 リンクをコピー"}
+              </button>
+            ) : null
+          }
+          onClick={() => panelActions?.trigger(PANEL_ACTION.japaneseCheck)}
+          pendingNote={
+            state.japaneseCheckIssued
+              ? "リンク発行済み（録音待ち）"
+              : "クリックしてリンクを発行"
+          }
+        />
+
         {/* Step 5: 求人票確認 (母国語チェックリスト) — クリックでポップアップ */}
         <StepCard
           done={state.checklistCompleted}
-          active={step3Done && !state.checklistCompleted}
+          active={state.japaneseCheckRecorded && !state.checklistCompleted}
           title="5. 求人票確認"
           doneNote="候補者が確認済み"
           onClick={checklistContent ? () => setChecklistOpen(true) : undefined}
@@ -214,9 +214,9 @@ export default function PreparationPanel({
                 ? state.checklistOpened
                   ? "送信済み・開封（確認待ち）"
                   : "送信済み（未開封）"
-                : step3Done
+                : state.japaneseCheckRecorded
                   ? "クリックして母国語チェックリストを送信"
-                  : "本人の回答の後に送信"
+                  : "日本語チェックの後に送信"
           }
         />
       </div>

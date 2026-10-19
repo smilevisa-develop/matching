@@ -112,6 +112,12 @@ export function parseLocationAnswer(value: string | null | undefined): Candidate
 /** 居住地を尋ねるゲート質問の key (分岐のドライバ) */
 export const LOCATION_QUESTION_KEY = "currentLocation";
 
+/**
+ * 候補者フォーム / 詳細情報 の質問。履歴書に必要な項目だけ (採用チームの整理 2026/10):
+ *   日本語 (資格・会話レベル) / 給料 (総額・基本給・手当・手取り・残業・夜勤・ボーナス)
+ *   / アパート (社宅か自分で借りるか・部屋タイプ・家賃・全部引いて残る額) / 希望 (エリア・手取り・退職時期・入社時期・一時帰国・住まい)
+ *   + 転職理由 (推薦リストにも出す)。それ以外は LEGACY_SECTIONS に移した。
+ */
 export const INTERVIEW_SECTIONS: InterviewSection[] = [
   {
     title: "はじめに",
@@ -124,26 +130,6 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         options: ["日本", "海外"],
         jsonKey: LOCATION_QUESTION_KEY,
         priority: "must",
-      },
-    ],
-  },
-  {
-    title: "日本に来た目的",
-    questions: [
-      {
-        key: "japanPurpose",
-        question: "日本に来た（来る）目的を教えてください。",
-        type: "textarea",
-        existingField: "japanPurpose",
-        priority: "must",
-        hint: "例：家族のためにお金を稼ぎたい。日本の技術を学びたい。",
-      },
-      {
-        key: "japanArrivalDate",
-        question: "いつ日本へ来ましたか。（海外の方は、いつ来る予定ですか。）",
-        type: "text",
-        jsonKey: "japanArrivalDate",
-        hint: "例：2023年4月 ／ 2026年8月ごろ予定",
       },
     ],
   },
@@ -169,7 +155,7 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
     ],
   },
   {
-    title: "分野の経験・仕事内容・今の給料",
+    title: "給料について（今または直近の仕事）",
     questions: [
       {
         key: "employmentStatus",
@@ -179,6 +165,210 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         jsonKey: "employmentStatus",
         priority: "must",
       },
+      {
+        key: "currentSalary",
+        question: "給料の総額（額面）はいくらですか。",
+        type: "text",
+        jsonKey: "currentSalary",
+        priority: "must",
+        hint: "例：月 22万円",
+      },
+      {
+        key: "currentBaseSalary",
+        question: "基本給はいくらですか。",
+        type: "text",
+        jsonKey: "currentBaseSalary",
+        priority: "must",
+        hint: "例：月 18万円",
+      },
+      {
+        key: "currentAllowances",
+        question: "手当はありますか。（種類と金額）",
+        type: "text",
+        jsonKey: "currentAllowances",
+        priority: "must",
+        hint: "例：住宅手当 2万円、通勤手当 1万円 ／ なし",
+      },
+      {
+        key: "currentTakeHome",
+        question: "手取りはいくらですか。",
+        type: "text",
+        jsonKey: "currentTakeHome",
+        priority: "must",
+        hint: "例：月 18万円くらい",
+      },
+      {
+        key: "currentOvertimeHours",
+        question: "毎月、どのくらい残業していますか。",
+        type: "text",
+        jsonKey: "currentOvertimeHours",
+        priority: "must",
+        hint: "例：月 20時間くらい",
+      },
+      {
+        key: "currentNightShift",
+        question: "夜勤はありますか。",
+        type: "select",
+        options: ["あり", "なし"],
+        jsonKey: "currentNightShift",
+        priority: "must",
+      },
+      {
+        key: "currentBonus",
+        question: "ボーナスはありますか。（ある場合は年にいくらですか）",
+        type: "text",
+        jsonKey: "currentBonus",
+        priority: "must",
+        hint: "例：年 2回 合計 30万円 ／ なし",
+      },
+    ],
+  },
+  {
+    title: "転職の理由",
+    questions: [
+      {
+        key: "retirementReason",
+        question: "お仕事を辞めた（辞めたい）理由を教えてください。",
+        type: "textarea",
+        existingField: "retirementReason",
+        priority: "must",
+        hint: "例：もっと専門的な仕事に挑戦したいからです。",
+      },
+    ],
+  },
+  {
+    title: "アパートについて",
+    questions: [
+      {
+        key: "housingType",
+        question: "今はどこに住んでいますか。",
+        type: "select",
+        options: ["会社の社宅・寮", "自分で借りている", "家族・知人の家", "その他"],
+        jsonKey: "housingType",
+        priority: "must",
+      },
+      {
+        key: "housingRoomType",
+        question: "部屋のタイプを教えてください。",
+        type: "select",
+        options: ["個室", "共同（ルームシェア）"],
+        jsonKey: "housingRoomType",
+        priority: "must",
+      },
+      {
+        key: "housingRent",
+        question: "家賃はいくらですか。（自分が払っている金額）",
+        type: "text",
+        jsonKey: "housingRent",
+        priority: "must",
+        hint: "例：月 3万円（会社が半分負担）",
+      },
+      {
+        key: "netAfterDeductions",
+        question: "家賃・水道光熱費・保険・税金を全部引いたあと、毎月いくら残りますか。",
+        type: "text",
+        jsonKey: "netAfterDeductions",
+        priority: "must",
+        hint: "例：月 13万円くらい",
+      },
+    ],
+  },
+  {
+    title: "希望について",
+    questions: [
+      {
+        key: "preferredLocation",
+        question: "希望する勤務地（エリア）を教えてください。",
+        type: "text",
+        jsonKey: "preferredLocation",
+        priority: "must",
+        hint: "例：東京・神奈川 ／ どこでも大丈夫です",
+      },
+      {
+        key: "desiredTakeHome",
+        question: "希望する給料（手取り）を教えてください。",
+        type: "text",
+        jsonKey: "desiredTakeHome",
+        priority: "must",
+        hint: "例：月 20万円以上",
+      },
+      {
+        key: "plannedResignation",
+        question: "今の会社は、いつ辞められますか。（退職時期）",
+        type: "text",
+        jsonKey: "plannedResignation",
+        priority: "must",
+        hint: "例：内定が出てから 1か月後 ／ もう辞めています",
+        showIf: { employmentStatusIn: ["在職中"] },
+      },
+      {
+        key: "availableStartDate",
+        question: "いつから入社できますか。",
+        type: "text",
+        jsonKey: "availableStartDate",
+        priority: "must",
+        hint: "例：2025年10月から ／ すぐに",
+      },
+      {
+        key: "homeVisitPlan",
+        question: "一時帰国の予定はありますか。",
+        type: "text",
+        jsonKey: "homeVisitPlan",
+        priority: "must",
+        hint: "例：2026年12月に 2週間 ／ 予定なし",
+      },
+      {
+        key: "desiredHousing",
+        question: "住まいの希望を教えてください。",
+        type: "text",
+        jsonKey: "desiredHousing",
+        priority: "must",
+        hint: "例：会社の寮がいい（個室希望）／ 自分で借りたい",
+      },
+    ],
+  },
+];
+
+/**
+ * 以前の質問 (履歴書に必要な項目に絞った 2026/10 以降は、候補者フォームでは聞かない)。
+ * 既に回答がある候補者では 詳細情報 タブに「以前の質問」として出す (回答は消さない)。
+ * 履歴書に載る existingField の質問 (志望動機・自己紹介・来日目的・現在の仕事) は 基本情報 タブに出る。
+ */
+export const LEGACY_SECTIONS: InterviewSection[] = [
+  {
+    title: "はじめに",
+    description: "最初に 1 つだけ教えてください。この回答で、あとの質問が少し変わります。",
+    questions: [
+    ],
+  },
+  {
+    title: "日本に来た目的",
+    questions: [
+      {
+        key: "japanPurpose",
+        question: "日本に来た（来る）目的を教えてください。",
+        type: "textarea",
+        existingField: "japanPurpose",
+        priority: "must",
+        hint: "例：家族のためにお金を稼ぎたい。日本の技術を学びたい。",
+      },
+      {
+        key: "japanArrivalDate",
+        question: "いつ日本へ来ましたか。（海外の方は、いつ来る予定ですか。）",
+        type: "text",
+        jsonKey: "japanArrivalDate",
+        hint: "例：2023年4月 ／ 2026年8月ごろ予定",
+      },
+    ],
+  },
+  {
+    title: "日本語について",
+    questions: [
+    ],
+  },
+  {
+    title: "分野の経験・仕事内容・今の給料",
+    questions: [
       {
         key: "currentJob",
         question: "今の（または直近の）お仕事の内容を教えてください。",
@@ -194,64 +384,6 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         jsonKey: "sameJobExperience",
         priority: "must",
         hint: "例：介護の仕事を3年しました。／ 経験はありません。",
-      },
-      {
-        key: "currentTakeHome",
-        question: "今の給料（手取り）はいくらですか。",
-        type: "text",
-        jsonKey: "currentTakeHome",
-        priority: "must",
-        hint: "例：月 18万円くらい",
-        // 在職中のときだけ聞く (退職済みなら表示しない)
-        showIf: { employmentStatusIn: ["在職中"] },
-      },
-      {
-        key: "currentSalary",
-        question: "今の給料（額面）はいくらですか。",
-        type: "text",
-        jsonKey: "currentSalary",
-        hint: "例：月 22万円",
-        showIf: { employmentStatusIn: ["在職中"] },
-      },
-      {
-        key: "currentBaseSalary",
-        question: "今の基本給はいくらですか。",
-        type: "text",
-        jsonKey: "currentBaseSalary",
-        hint: "例：月 18万円",
-        showIf: { employmentStatusIn: ["在職中"] },
-      },
-      {
-        key: "currentAllowances",
-        question: "手当はありますか。（種類と金額）",
-        type: "text",
-        jsonKey: "currentAllowances",
-        hint: "例：住宅手当 2万円、通勤手当 1万円 ／ なし",
-        showIf: { employmentStatusIn: ["在職中"] },
-      },
-      {
-        key: "currentOvertimeHours",
-        question: "毎月、どのくらい残業していますか。",
-        type: "text",
-        jsonKey: "currentOvertimeHours",
-        hint: "例：月 20時間くらい",
-        showIf: { employmentStatusIn: ["在職中"] },
-      },
-      {
-        key: "currentNightShift",
-        question: "夜勤はありますか。",
-        type: "select",
-        options: ["あり", "なし"],
-        jsonKey: "currentNightShift",
-        showIf: { employmentStatusIn: ["在職中"] },
-      },
-      {
-        key: "currentBonus",
-        question: "ボーナスはありますか。（ある場合は年にいくらですか）",
-        type: "text",
-        jsonKey: "currentBonus",
-        hint: "例：年 2回 合計 30万円 ／ なし",
-        showIf: { employmentStatusIn: ["在職中"] },
       },
       {
         key: "workChallenge",
@@ -286,47 +418,11 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
   {
     title: "転職の理由",
     questions: [
-      {
-        key: "retirementReason",
-        question: "お仕事を辞めた（辞めたい）理由を教えてください。",
-        type: "textarea",
-        existingField: "retirementReason",
-        priority: "must",
-        hint: "例：もっと専門的な仕事に挑戦したいからです。",
-      },
     ],
   },
   {
     title: "今の住まい（アパート）について",
     questions: [
-      {
-        key: "housingType",
-        question: "今はどこに住んでいますか。",
-        type: "select",
-        options: ["会社の社宅・寮", "自分で借りている", "家族・知人の家", "その他"],
-        jsonKey: "housingType",
-      },
-      {
-        key: "housingRoomType",
-        question: "部屋のタイプを教えてください。",
-        type: "select",
-        options: ["個室", "共同（ルームシェア）"],
-        jsonKey: "housingRoomType",
-      },
-      {
-        key: "housingRent",
-        question: "家賃はいくらですか。（自分が払っている金額）",
-        type: "text",
-        jsonKey: "housingRent",
-        hint: "例：月 3万円（会社が半分負担）",
-      },
-      {
-        key: "netAfterDeductions",
-        question: "家賃・水道光熱費・保険・税金を全部引いたあと、毎月いくら残りますか。",
-        type: "text",
-        jsonKey: "netAfterDeductions",
-        hint: "例：月 13万円くらい",
-      },
     ],
   },
   {
@@ -340,44 +436,6 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         priority: "must",
         hint: "例：寮があり、長く働けそうだと思ったからです。",
       },
-      {
-        key: "preferredLocation",
-        question: "希望する勤務地（エリア）を教えてください。",
-        type: "text",
-        jsonKey: "preferredLocation",
-        priority: "must",
-        hint: "例：東京・神奈川 ／ どこでも大丈夫です",
-      },
-      {
-        key: "desiredTakeHome",
-        question: "希望する給料（手取り）を教えてください。",
-        type: "text",
-        jsonKey: "desiredTakeHome",
-        priority: "must",
-        hint: "例：月 20万円以上",
-      },
-      {
-        key: "desiredHousing",
-        question: "住まいの希望を教えてください。",
-        type: "text",
-        jsonKey: "desiredHousing",
-        hint: "例：会社の寮がいい（個室希望）／ 自分で借りたい",
-      },
-      {
-        key: "plannedResignation",
-        question: "今の会社は、いつ辞められますか。（退職時期）",
-        type: "text",
-        jsonKey: "plannedResignation",
-        hint: "例：内定が出てから 1か月後 ／ もう辞めています",
-        showIf: { employmentStatusIn: ["在職中"] },
-      },
-      {
-        key: "homeVisitPlan",
-        question: "一時帰国の予定はありますか。",
-        type: "text",
-        jsonKey: "homeVisitPlan",
-        hint: "例：2026年12月に 2週間 ／ 予定なし",
-      },
     ],
   },
   {
@@ -390,14 +448,6 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         jsonKey: "interviewAvailability",
         priority: "must",
         hint: "例：平日の午後。土日も大丈夫です。",
-      },
-      {
-        key: "availableStartDate",
-        question: "いつから入社できますか。",
-        type: "text",
-        jsonKey: "availableStartDate",
-        priority: "must",
-        hint: "例：2025年10月から ／ すぐに",
       },
       {
         key: "inPersonInterview",
@@ -632,6 +682,9 @@ export function allInterviewQuestions(): InterviewQuestion[] {
  *   isExcluded … 担当者が intakeConfig で除外した質問
  *   isAnswered … すでに回答済み (履歴書 AI 抽出で埋まった等) の質問は出さない
  */
+/** 現行 + 以前の質問 (回答の表示や履歴書連携の項目を探すとき用) */
+export const ALL_INTERVIEW_SECTIONS: InterviewSection[] = [...INTERVIEW_SECTIONS, ...LEGACY_SECTIONS];
+
 export function buildInterviewSections(opts: {
   priority: QuestionPriority;
   ctx: QuestionContext;

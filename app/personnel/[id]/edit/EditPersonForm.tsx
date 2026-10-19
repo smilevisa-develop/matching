@@ -15,7 +15,7 @@ import {
   type EducationEntry,
   type WorkHistoryEntry,
 } from "@/lib/candidate-profile";
-import { INTERVIEW_SECTIONS } from "@/lib/interview-questions";
+import { ALL_INTERVIEW_SECTIONS, INTERVIEW_SECTIONS, LEGACY_SECTIONS } from "@/lib/interview-questions";
 import SearchableSelect from "@/app/components/SearchableSelect";
 import UnsavedChangesBar from "@/app/components/UnsavedChangesBar";
 
@@ -105,6 +105,12 @@ const SECTION_ITEMS = [
 ] as const;
 
 type OtherQualificationEntry = { name: string; expiryDate: string };
+
+/** 年月だけの入力欄 (<input type="month">) 用に "YYYY-MM-DD" → "YYYY-MM" に寄せる */
+function ym(value: string | null | undefined): string {
+  const m = (value ?? "").match(/^(\d{4})[-/](\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}` : "";
+}
 
 function normalizeInterviewAnswers(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== "object") return {};
@@ -229,20 +235,27 @@ export default function EditPersonForm({
   // 空になったセクションは 表示から除外。
   const resumeLinkedSections = useMemo(
     () =>
-      INTERVIEW_SECTIONS.map((s) => ({
+      ALL_INTERVIEW_SECTIONS.map((s) => ({
         ...s,
         questions: s.questions.filter((q) => !!q.existingField),
       })).filter((s) => s.questions.length > 0),
     []
   );
-  const interviewOnlySections = useMemo(
-    () =>
-      INTERVIEW_SECTIONS.map((s) => ({
-        ...s,
-        questions: s.questions.filter((q) => !q.existingField),
-      })).filter((s) => s.questions.length > 0),
-    []
-  );
+  // 詳細情報 = 履歴書に必要な項目 (INTERVIEW_SECTIONS)。以前の質問は回答があるものだけ最後にまとめて出す
+  const interviewOnlySections = useMemo(() => {
+    const current = INTERVIEW_SECTIONS.map((s) => ({
+      ...s,
+      questions: s.questions.filter((q) => !q.existingField),
+    })).filter((s) => s.questions.length > 0);
+    const answered = LEGACY_SECTIONS.flatMap((s) =>
+      s.questions.filter((q) => !q.existingField && (form.interviewAnswers[q.jsonKey ?? q.key] ?? "").trim()),
+    );
+    return answered.length > 0
+      ? [...current, { title: "以前の質問（回答があるものだけ）", description: "今のフォームでは聞いていない項目です。", questions: answered }]
+      : current;
+    // 回答の有無で出し分けるだけなので、初期値で決めてよい
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const visibleDocuments = useMemo(
     () => mergeDocumentsForStatus(form.documents, form.residenceStatus),
     [form.documents, form.residenceStatus]
@@ -762,13 +775,13 @@ export default function EditPersonForm({
                 <input className={INPUT} value={form.japaneseLevel} onChange={(event) => setValue("japaneseLevel", event.target.value)} placeholder="JLPT N3" />
               </Field>
               <Field label="取得日">
-                <input className={INPUT} type="date" value={form.japaneseLevelDate} onChange={(event) => setValue("japaneseLevelDate", event.target.value)} />
+                <input className={INPUT} type="month" value={ym(form.japaneseLevelDate)} onChange={(event) => setValue("japaneseLevelDate", event.target.value)} />
               </Field>
               <Field label="免許">
                 <input className={INPUT} value={form.licenseName} onChange={(event) => setValue("licenseName", event.target.value)} placeholder="普通自動車第一種免許" />
               </Field>
               <Field label="免許の有効期限">
-                <input className={INPUT} type="date" value={form.licenseExpiryDate} onChange={(event) => setValue("licenseExpiryDate", event.target.value)} />
+                <input className={INPUT} type="month" value={ym(form.licenseExpiryDate)} onChange={(event) => setValue("licenseExpiryDate", event.target.value)} />
               </Field>
               <Field label="実習経験" className="md:col-span-2">
                 <input
@@ -811,8 +824,8 @@ export default function EditPersonForm({
                     <Field label={index === 0 ? "取得日 (任意)" : ""}>
                       <input
                         className={INPUT}
-                        type="date"
-                        value={entry.expiryDate}
+                        type="month"
+                        value={ym(entry.expiryDate)}
                         onChange={(event) => updateOtherQualification(index, "expiryDate", event.target.value)}
                       />
                     </Field>
@@ -865,10 +878,10 @@ export default function EditPersonForm({
                       <input className={INPUT} value={form.highSchoolName} onChange={(event) => setValue("highSchoolName", event.target.value)} placeholder="◯◯高等学校" />
                     </Field>
                     <Field label="入学年月日">
-                      <input className={INPUT} type="date" value={form.highSchoolStartDate} onChange={(event) => setValue("highSchoolStartDate", event.target.value)} />
+                      <input className={INPUT} type="month" value={ym(form.highSchoolStartDate)} onChange={(event) => setValue("highSchoolStartDate", event.target.value)} />
                     </Field>
                     <Field label="卒業年月日">
-                      <input className={INPUT} type="date" value={form.highSchoolEndDate} onChange={(event) => setValue("highSchoolEndDate", event.target.value)} />
+                      <input className={INPUT} type="month" value={ym(form.highSchoolEndDate)} onChange={(event) => setValue("highSchoolEndDate", event.target.value)} />
                     </Field>
                   </div>
                 </div>
@@ -881,10 +894,10 @@ export default function EditPersonForm({
                       <input className={INPUT} value={form.universityName} onChange={(event) => setValue("universityName", event.target.value)} placeholder="◯◯大学" />
                     </Field>
                     <Field label="入学年月日">
-                      <input className={INPUT} type="date" value={form.universityStartDate} onChange={(event) => setValue("universityStartDate", event.target.value)} />
+                      <input className={INPUT} type="month" value={ym(form.universityStartDate)} onChange={(event) => setValue("universityStartDate", event.target.value)} />
                     </Field>
                     <Field label="卒業年月日">
-                      <input className={INPUT} type="date" value={form.universityEndDate} onChange={(event) => setValue("universityEndDate", event.target.value)} />
+                      <input className={INPUT} type="month" value={ym(form.universityEndDate)} onChange={(event) => setValue("universityEndDate", event.target.value)} />
                     </Field>
                   </div>
                 </div>
@@ -905,16 +918,16 @@ export default function EditPersonForm({
                       <Field label="入学年月日">
                         <input
                           className={INPUT}
-                          type="date"
-                          value={entry.startDate}
+                          type="month"
+                          value={ym(entry.startDate)}
                           onChange={(event) => updateEducation(index, "startDate", event.target.value)}
                         />
                       </Field>
                       <Field label="卒業年月日">
                         <input
                           className={INPUT}
-                          type="date"
-                          value={entry.endDate}
+                          type="month"
+                          value={ym(entry.endDate)}
                           onChange={(event) => updateEducation(index, "endDate", event.target.value)}
                         />
                       </Field>
@@ -953,10 +966,10 @@ export default function EditPersonForm({
                         <input className={INPUT} value={entry.companyName} onChange={(event) => updateWorkExperience(index, "companyName", event.target.value)} />
                       </Field>
                       <Field label="入社年月日">
-                        <input className={INPUT} type="date" value={entry.startDate} onChange={(event) => updateWorkExperience(index, "startDate", event.target.value)} />
+                        <input className={INPUT} type="month" value={ym(entry.startDate)} onChange={(event) => updateWorkExperience(index, "startDate", event.target.value)} />
                       </Field>
                       <Field label="退社年月日">
-                        <input className={INPUT} type="date" value={entry.endDate} onChange={(event) => updateWorkExperience(index, "endDate", event.target.value)} />
+                        <input className={INPUT} type="month" value={ym(entry.endDate)} onChange={(event) => updateWorkExperience(index, "endDate", event.target.value)} />
                       </Field>
                       <Field label="退社理由" className="md:col-span-2">
                         <textarea className={`${INPUT} min-h-24`} value={entry.reason} onChange={(event) => updateWorkExperience(index, "reason", event.target.value)} />

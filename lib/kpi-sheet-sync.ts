@@ -73,8 +73,9 @@ export type KpiSyncResult = {
 /** セルの生値 (日付シリアル or 文字列) → "YYYY-MM" */
 function cellToMonth(v: unknown): string | null {
   if (typeof v === "number") {
+    // serialToDateString は "YYYY/MM/DD" を返す
     const ymd = serialToDateString(v);
-    return ymd ? ymd.slice(0, 7) : null;
+    return ymd ? ymd.slice(0, 7).replace("/", "-") : null;
   }
   if (typeof v === "string") {
     const m = v.match(/^(\d{4})[/-](\d{1,2})/);
