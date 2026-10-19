@@ -14,7 +14,7 @@ import IntakeLinkButton from "./IntakeLinkButton";
 import JapaneseCheckLinkButton from "./JapaneseCheckLinkButton";
 import DocumentCheckPanel from "./DocumentCheckPanel";
 import { PanelActionsProvider } from "./PanelActions";
-import { IconActionDivider } from "./IconAction";
+import IconAction, { IconActionDivider } from "./IconAction";
 import PreparationPanel, { type PreparationState } from "./PreparationPanel";
 import { buildPersonLinkLabel } from "@/lib/person-link-label";
 import TestResetPanel from "./TestResetPanel";
@@ -384,6 +384,25 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                   }}
                 />
                 <IconActionDivider />
+                {/* 本人の連絡先へ飛ぶ。SNS の URL があればそれ、無ければメール */}
+                {(() => {
+                  const sns = person.contactUrl?.trim() || null;
+                  const mail = person.email?.trim() ? `mailto:${person.email.trim()}` : null;
+                  const href = sns ?? mail;
+                  const label = sns ? (person.channel === "未設定" ? "連絡先" : person.channel) : "メール";
+                  return (
+                    <IconAction
+                      label={label}
+                      href={href ?? undefined}
+                      disabled={!href}
+                      title={href ? `本人の連絡先を開く (${href})` : "連絡先が未登録です。下の「連絡手段」で入力してください"}
+                    >
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.6-.7L3 21l1.8-4.6A8.4 8.4 0 1 1 21 11.5z" />
+                      </svg>
+                    </IconAction>
+                  );
+                })()}
                 <DriveActionsPanel personId={person.id} initialDriveFolderUrl={person.driveFolderUrl ?? null} />
               </>
             }

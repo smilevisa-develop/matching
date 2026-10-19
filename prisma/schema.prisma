@@ -20,6 +20,9 @@ model Person {
   residenceStatus String
   partnerId       Int?
   channel         String
+  /// SNS の連絡先 URL (グループ LINE の招待リンク / Messenger / WhatsApp など)。
+  /// channel で選んだ手段の「飛び先」。候補者詳細の上部アイコンから開く
+  contactUrl      String?
   lineUserId      String?
   messengerPsid   String?
   email           String?

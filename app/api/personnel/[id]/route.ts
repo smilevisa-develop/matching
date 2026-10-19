@@ -127,6 +127,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         partnerId: body.partnerId ? Number(body.partnerId) : null,
         channel: body.channel,
         email: body.email || null,
+        contactUrl: typeof body.contactUrl === "string" && body.contactUrl.trim() ? body.contactUrl.trim() : null,
       },
     });
 

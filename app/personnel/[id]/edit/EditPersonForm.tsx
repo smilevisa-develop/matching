@@ -29,6 +29,8 @@ type Person = {
   residenceStatus: string;
   partnerId: number | null;
   channel: string;
+  /** SNS の連絡先 URL (グループ LINE / Messenger / WhatsApp) */
+  contactUrl?: string | null;
   email: string | null;
   onboarding: {
     englishName: string | null;
@@ -202,6 +204,7 @@ export default function EditPersonForm({
     // 実習経験と混ざるため分離した (移行はせず、実習経験として残す)
     visaSpecificNote: person.resumeProfile?.skillExamNote ?? "",
     email: person.email ?? "",
+    contactUrl: person.contactUrl ?? "",
     documents: buildInitialDocuments(person.documents, person.residenceStatus),
     interviewAnswers: normalizeInterviewAnswers(
       (person.resumeProfile as unknown as { interviewAnswers?: unknown } | null)?.interviewAnswers
@@ -410,6 +413,12 @@ export default function EditPersonForm({
     event.preventDefault();
     if (!form.name.trim()) {
       alert("カタカナ名を入力してください");
+      return;
+    }
+    // 連絡が取れないと全工程が止まるので、メールは必ず入れてもらう
+    if (!form.email.trim() || !/@/.test(form.email)) {
+      alert("メールアドレスを入力してください（必須）");
+      setActiveSection("basic");
       return;
     }
 
@@ -643,17 +652,53 @@ export default function EditPersonForm({
           <div className="rounded-2xl border border-gray-200 bg-[var(--color-light)] p-5">
             <p className="text-sm font-semibold text-[var(--color-text-dark)]">連絡手段</p>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <Field label="主な連絡手段">
+              {/* メールは必須。無いと保存できない */}
+              <Field label="メールアドレス *" className="md:col-span-2">
+                <input
+                  className={`${INPUT} ${!form.email.trim() ? "border-red-300" : ""}`}
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={(event) => setValue("email", event.target.value)}
+                  placeholder="example@email.com"
+                />
+                {!form.email.trim() ? (
+                  <p className="mt-1 text-[11px] text-red-600">必須です。入力しないと保存できません</p>
+                ) : null}
+              </Field>
+            </div>
+
+            {/* SNS: 手段を選んで、その飛び先 URL を入れる (上部の「連絡先」アイコンから開ける) */}
+            <p className="mt-5 text-sm font-semibold text-[var(--color-text-dark)]">SNS の連絡先</p>
+            <div className="mt-2 grid gap-4 md:grid-cols-[180px_1fr]">
+              <Field label="手段">
                 <select className={INPUT} value={form.channel} onChange={(event) => setValue("channel", event.target.value)}>
-                  {CHANNELS.map((channel) => (
+                  {/* メールは上で必須にしたので、ここには出さない (既存データが mail なら残す) */}
+                  {CHANNELS.filter((c) => c.value !== "mail" || form.channel === "mail").map((channel) => (
                     <option key={channel.value} value={channel.value}>
                       {channel.label}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="メールアドレス">
-                <input className={INPUT} type="email" value={form.email} onChange={(event) => setValue("email", event.target.value)} placeholder="example@email.com" />
+              <Field label={form.channel === "Messenger" ? "Messenger の URL" : form.channel === "WhatsApp" ? "WhatsApp のリンク" : "グループ LINE の招待 URL"}>
+                <input
+                  className={INPUT}
+                  type="url"
+                  value={form.contactUrl}
+                  onChange={(event) => setValue("contactUrl", event.target.value)}
+                  placeholder={
+                    form.channel === "Messenger"
+                      ? "https://m.me/..."
+                      : form.channel === "WhatsApp"
+                        ? "https://wa.me/81..."
+                        : "https://line.me/ti/g/..."
+                  }
+                  disabled={form.channel === "未設定" || form.channel === "mail"}
+                />
+                <p className="mt-1 text-[11px] text-gray-400">
+                  入れておくと、上の「連絡先」アイコンからすぐ開けます
+                </p>
               </Field>
             </div>
           </div>
