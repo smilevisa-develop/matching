@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
 import SharedPartnersClient from "./SharedPartnersClient";
+import PartnerIntakeLinkButton from "./PartnerIntakeLinkButton";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +25,15 @@ export default async function PartnersPage() {
             見出しをクリックすると並び替え、右上のボタンでアクティブ / 非アクティブを切り替えられます。
           </p>
         </div>
-        <Link
-          href="/partners/new"
-          className="shrink-0 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]"
-        >
-          + パートナーを追加
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <PartnerIntakeLinkButton />
+          <Link
+            href="/partners/new"
+            className="shrink-0 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]"
+          >
+            + パートナーを追加
+          </Link>
+        </div>
       </div>
       <SharedPartnersClient
         initialPartners={partners.map((p) => ({

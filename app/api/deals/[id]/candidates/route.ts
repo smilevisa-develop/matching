@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
+import { todayJst } from "@/lib/deal-stages";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -17,6 +18,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         dealId: Number(id),
         personId,
         stage: String(body.stage ?? "接続済み"),
+        // 入れた日 = 接続日 (進捗管理の月別集計で使う)
+        stageDates: { [String(body.stage ?? "接続済み")]: todayJst() },
         note: String(body.note ?? "").trim() || null,
       },
       include: {

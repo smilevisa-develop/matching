@@ -8,6 +8,7 @@
  * (パス名は send-person との対称のために "line" 配下だが、実際は LINE / Messenger 両方扱う)
  */
 import { prisma } from "@/lib/prisma";
+import { buildLineTextMessage } from "@/lib/line-message";
 import {
   expandTemplate,
   dealToBroadcast,
@@ -91,7 +92,8 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           to: lineSendTo,
-          messages: [{ type: "text", text: expandedMessage }],
+          // グループ宛てなら全員メンション (@All) 付き
+          messages: [buildLineTextMessage(lineSendTo, expandedMessage)],
         }),
       });
       if (!res.ok) {

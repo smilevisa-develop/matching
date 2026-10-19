@@ -1,22 +1,68 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
 import { getCoreSettings } from "@/lib/app-settings";
 import RefreshOnFocus from "@/app/components/RefreshOnFocus";
-import { normalizeDealStatus } from "@/lib/deal-stages";
+import { normalizeDealStatus, readStageDates } from "@/lib/deal-stages";
 import { TEST_COMPANY_EXTERNAL_IDS, isTestCompany } from "@/lib/test-companies";
 import { calcUrgency, resolveStage } from "@/lib/onboarding-flow";
-import DailyClient from "./DailyClient";
+import DailyClient, { type DailyDeal, type MonthStats } from "./DailyClient";
 
 export const dynamic = "force-dynamic";
 
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** 今月 (日本時間) を "YYYY-MM" で */
+function currentMonthJst(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit" }).format(new Date());
+}
+
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 /**
- * 進捗管理 (毎日の報告 Word の置き換え)。1 企業 1 行。
- * 1 企業 = 1 求人の運用なので、企業を開いたときと同じく最後に更新した Deal を使う。
+ * 進捗管理 (毎日の報告 Word の置き換え)。1 求人 1 行。
+ *
+ * 上の数字は「選んだ月」の実績だけを数える (2026/10 採用チームの依頼。それまでは過去分も混ざっていた)。
+ * 数え方: カンバンで候補者を動かしたときに入れた日付 (DealCandidate.stageDates) がその月なら 1。
+ *   接続 / 面談 / 推薦 / 面接 / 内定 / 内定承諾 … その月に その段階に入った人数
+ *   面接待ち … 今「推薦済み」にいる人数 (面接済みに動かすと外れる)
+ *   結果待ち … 今「面接済み」にいる人数 (内定済み / 不合格に動かすと外れる)
  * 並べる島 (至急募集 / 募集中) は企業一覧の採用状況と同じ判定 (lib/deal-stages.ts)。
- * 数字 (人数カウンター) と候補者の状態は企業詳細と同じデータで、入力は企業詳細で行う。
+ * 表の数字 (人数カウンター) は求人ごとの累計で、入力は企業詳細で行う。
  */
-export default async function DailyPage() {
+export default async function DailyPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   await requireCurrentAccount();
+  const { month: requested } = await searchParams;
+  const thisMonth = currentMonthJst();
+  const month = requested && MONTH_RE.test(requested) ? requested : thisMonth;
+
+  const candidateSelect = {
+    orderBy: { updatedAt: "desc" as const },
+    select: {
+      id: true,
+      stage: true,
+      stageDates: true,
+      note: true,
+      createdAt: true,
+      updatedAt: true,
+      person: {
+        select: {
+          id: true,
+          name: true,
+          nationality: true,
+          residenceStatus: true,
+          photoUrl: true,
+          partner: { select: { id: true, name: true } },
+          onboarding: { select: { englishName: true } },
+        },
+      },
+    },
+  };
+
   const [companies, settings] = await Promise.all([
     prisma.company.findMany({
       orderBy: { id: "asc" },
@@ -26,10 +72,10 @@ export default async function DailyPage() {
         externalId: true,
         hiringStatus: true,
         deals: {
-          orderBy: { updatedAt: "desc" },
-          take: 1,
+          orderBy: { createdAt: "asc" },
           select: {
             id: true,
+            title: true,
             status: true,
             requiredCount: true,
             recommendedCount: true,
@@ -39,26 +85,7 @@ export default async function DailyPage() {
             deadline: true,
             notes: true,
             owner: { select: { name: true } },
-            candidates: {
-              orderBy: { updatedAt: "desc" },
-              select: {
-                id: true,
-                stage: true,
-                note: true,
-                updatedAt: true,
-                person: {
-                  select: {
-                    id: true,
-                    name: true,
-                    nationality: true,
-                    residenceStatus: true,
-                    photoUrl: true,
-                    partner: { select: { id: true, name: true } },
-                    onboarding: { select: { englishName: true } },
-                  },
-                },
-              },
-            },
+            candidates: candidateSelect,
           },
         },
       },
@@ -125,80 +152,148 @@ export default async function DailyPage() {
       };
     });
 
-  // 月は日本時間で決める (サーバーは UTC で動いている)
-  const [year, monthNo] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit" })
-    .format(new Date())
-    .split("-");
-  const target = settings.monthlyTargets.find((t) => t.month === `${year}-${monthNo}`);
+  const target = settings.monthlyTargets.find((t) => t.month === month);
 
-  // 今月の内定 = 内定日 (無ければ内定承諾日) が今月 (日本時間) の内定者。人数カウンターは累計なので使わない
-  const monthStart = new Date(Date.UTC(Number(year), Number(monthNo) - 1, 1) - 9 * 3600_000);
-  const nextMonthStart = new Date(Date.UTC(Number(year), Number(monthNo), 1) - 9 * 3600_000);
+  // ── 選んだ月の実績 (テスト企業は数えない) ──
+  const stats: MonthStats = {
+    connected: 0,
+    preInterviewed: 0,
+    recommended: 0,
+    waitingInterview: 0,
+    interviewed: 0,
+    waitingResult: 0,
+    offers: 0,
+    accepted: 0,
+  };
+  const ymdJst = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+  for (const c of companies) {
+    if (isTestCompany(c.externalId)) continue;
+    for (const d of c.deals) {
+      for (const cand of d.candidates) {
+        const dates = readStageDates(cand.stageDates);
+        // 接続日が無い古いデータは、紐づけた日で代用する
+        const connectedAt = dates["接続済み"] ?? ymdJst(cand.createdAt);
+        const inMonth = (ymd: string | undefined) => Boolean(ymd && ymd.startsWith(month));
+        if (inMonth(connectedAt)) stats.connected++;
+        if (inMonth(dates["事前面談済み"])) stats.preInterviewed++;
+        if (inMonth(dates["推薦済み"])) stats.recommended++;
+        if (inMonth(dates["面接済み"])) stats.interviewed++;
+        if (inMonth(dates["内定済み"])) stats.offers++;
+        if (inMonth(dates["内定承諾"])) stats.accepted++;
+        if (cand.stage === "推薦済み") stats.waitingInterview++;
+        if (cand.stage === "面接済み") stats.waitingResult++;
+      }
+    }
+  }
+  // 内定者管理ボードに手入力した内定日も数える (カンバンに紐づいていない内定者の分)
+  const monthStart = new Date(`${month}-01T00:00:00+09:00`);
+  const nextMonthStart = new Date(`${shiftMonth(month, 1)}-01T00:00:00+09:00`);
   const inMonth = { gte: monthStart, lt: nextMonthStart };
-  const offersThisMonth = await prisma.personPlacement.count({
+  const boardOffers = await prisma.personPlacement.count({
     where: {
       OR: [{ offerAt: inMonth }, { offerAt: null, offerAcceptedAt: inMonth }],
-      // テスト企業だけに紐づく人は数えない
-      person: { dealCandidates: { some: { deal: { company: { NOT: { externalId: { in: TEST_COMPANY_EXTERNAL_IDS } } } } } } },
+      // カンバンで内定済みになっている人は上で数えているので除く / テスト企業だけに紐づく人は数えない
+      person: {
+        dealCandidates: {
+          none: { stage: { in: ["内定済み", "内定承諾"] } },
+        },
+        NOT: { dealCandidates: { some: { deal: { company: { externalId: { in: TEST_COMPANY_EXTERNAL_IDS } } } } } },
+      },
     },
   });
+  stats.offers += boardOffers;
+
+  const rows: DailyDeal[] = [];
+  for (const c of [...companies].sort(byExternalId)) {
+    const multi = c.deals.length > 1;
+    // 求人がまだ無い企業 (追加してから一度も開いていない) も、企業の採用状況で並べる
+    const dealsOrEmpty = c.deals.length > 0 ? c.deals : [null];
+    for (const d of dealsOrEmpty) {
+      rows.push({
+        rowKey: d ? `deal-${d.id}` : `company-${c.id}`,
+        companyId: c.id,
+        dealTitle: d && multi ? d.title : null,
+        href: d ? `/companies/deals/${d.id}` : `/companies/${c.id}`,
+        status: normalizeDealStatus(d?.status ?? c.hiringStatus),
+        requiredCount: d?.requiredCount ?? 0,
+        recommendedCount: d?.recommendedCount ?? 0,
+        interviewCount: d?.interviewCount ?? 0,
+        offerCount: d?.offerCount ?? 0,
+        companyExternalId: c.externalId,
+        companyName: c.name,
+        ownerName: d?.owner?.name ?? null,
+        // 最後に動いた日 = カンバンで候補者を最後に動かした日 (候補者がいなければ求人を作った日)。
+        // 求人の更新日はステータスや担当者の一括変更でも動くので使わない
+        lastActivityAt:
+          (d ? d.candidates.map((x) => x.updatedAt).reduce((a, b) => (a > b ? a : b), d.createdAt) : null)?.toISOString() ??
+          null,
+        deadline: d?.deadline?.toISOString() ?? null,
+        // スプシ同期の記録行 (流入: / 入社状況:) は除く。企業詳細の表示と同じ
+        memo:
+          (d?.notes ?? "")
+            .split("\n")
+            .map((l) => l.trim())
+            .find((l) => l && !/^(流入|入社状況)[:：]/.test(l)) ?? null,
+        isTest: isTestCompany(c.externalId),
+        candidates: (d?.candidates ?? []).map((cand) => ({
+          id: cand.id,
+          note: cand.note,
+          stage: cand.stage,
+          person: {
+            id: cand.person.id,
+            name: cand.person.name,
+            englishName: cand.person.onboarding?.englishName ?? null,
+            nationality: cand.person.nationality,
+            residenceStatus: cand.person.residenceStatus,
+            photoUrl: cand.person.photoUrl,
+            partner: cand.person.partner,
+          },
+        })),
+      });
+    }
+  }
+
+  const prev = shiftMonth(month, -1);
+  const next = shiftMonth(month, 1);
+  const monthLabel = (m: string) => (m.startsWith(thisMonth.slice(0, 4)) ? `${Number(m.slice(5))}月` : `${m.slice(0, 4)}年${Number(m.slice(5))}月`);
 
   return (
     <div className="space-y-5 p-8">
       <RefreshOnFocus />
-      <h1 className="flex items-baseline gap-3 text-2xl font-bold text-[var(--color-text-dark)]">
-        進捗管理
-        <span className="text-4xl text-[var(--color-primary)]">{Number(monthNo)}月</span>
-      </h1>
+      <div className="flex flex-wrap items-baseline gap-3">
+        <h1 className="flex items-baseline gap-3 text-2xl font-bold text-[var(--color-text-dark)]">
+          進捗管理
+          <span className="text-4xl text-[var(--color-primary)]">{monthLabel(month)}</span>
+        </h1>
+        {/* 月の切り替え (前月 ← → 翌月)。URL に ?month=YYYY-MM が付くので、そのまま共有できる */}
+        <nav className="flex items-center gap-1 text-sm">
+          <Link
+            href={`/daily?month=${prev}`}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-gray-600 hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+          >
+            ← {monthLabel(prev)}
+          </Link>
+          {month !== thisMonth ? (
+            <Link href="/daily" className="rounded-lg px-3 py-1 text-gray-500 underline decoration-dotted hover:text-[var(--color-primary)]">
+              今月
+            </Link>
+          ) : null}
+          <Link
+            href={`/daily?month=${next}`}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-gray-600 hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+          >
+            {monthLabel(next)} →
+          </Link>
+        </nav>
+      </div>
       <DailyClient
+        month={month}
+        stats={stats}
         offerTarget={target?.offer ?? settings.monthlyOfferTarget}
         recommendTarget={target?.recommendCount ?? null}
-        offersThisMonth={offersThisMonth}
         followUps={followUps}
-        deals={[...companies].sort(byExternalId).map((c) => {
-          // 求人がまだ無い企業 (追加してから一度も開いていない) も、企業の採用状況で並べる
-          const d = c.deals[0];
-          return {
-            companyId: c.id,
-            href: d ? `/companies/deals/${d.id}` : `/companies/${c.id}`,
-            status: normalizeDealStatus(d?.status ?? c.hiringStatus),
-            requiredCount: d?.requiredCount ?? 0,
-            recommendedCount: d?.recommendedCount ?? 0,
-            interviewCount: d?.interviewCount ?? 0,
-            offerCount: d?.offerCount ?? 0,
-            companyExternalId: c.externalId,
-            companyName: c.name,
-            ownerName: d?.owner?.name ?? null,
-            // 最後に動いた日 = カンバンで候補者を最後に動かした日 (候補者がいなければ求人を作った日)。
-            // 求人の更新日はステータスや担当者の一括変更でも動くので使わない
-            lastActivityAt: (d
-              ? d.candidates.map((x) => x.updatedAt).reduce((a, b) => (a > b ? a : b), d.createdAt)
-              : null
-            )?.toISOString() ?? null,
-            deadline: d?.deadline?.toISOString() ?? null,
-            // スプシ同期の記録行 (流入: / 入社状況:) は除く。企業詳細の表示と同じ
-            memo:
-              (d?.notes ?? "")
-                .split("\n")
-                .map((l) => l.trim())
-                .find((l) => l && !/^(流入|入社状況)[:：]/.test(l)) ?? null,
-            isTest: isTestCompany(c.externalId),
-            candidates: (d?.candidates ?? []).map((cand) => ({
-              id: cand.id,
-              note: cand.note,
-              stage: cand.stage,
-              person: {
-                id: cand.person.id,
-                name: cand.person.name,
-                englishName: cand.person.onboarding?.englishName ?? null,
-                nationality: cand.person.nationality,
-                residenceStatus: cand.person.residenceStatus,
-                photoUrl: cand.person.photoUrl,
-                partner: cand.person.partner,
-              },
-            })),
-          };
-        })}
+        deals={rows}
       />
     </div>
   );

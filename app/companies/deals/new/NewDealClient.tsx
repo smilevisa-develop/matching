@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { SSW_INDUSTRIES } from "@/lib/company-options";
+import { DEAL_STATUSES } from "@/lib/deal-stages";
 import SearchableSelect from "@/app/components/SearchableSelect";
 
 type Option = { id: number; name: string };
@@ -96,11 +97,9 @@ export default function NewDealClient({
         </Field>
         <Field label="求人ステップ">
           <select className={INPUT} value={form.status} onChange={(e) => setForm((current) => ({ ...current, status: e.target.value }))}>
-            <option value="至急募集">至急募集</option>
-            <option value="募集中">募集中</option>
-            <option value="面接中">面接中</option>
-            <option value="成約">成約</option>
-            <option value="クローズ">クローズ</option>
+            {DEAL_STATUSES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
           </select>
         </Field>
         <Field label="単価 (円)">

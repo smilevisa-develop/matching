@@ -189,7 +189,7 @@ export default function DealDetailClient({
     [persons, candidates]
   );
 
-  const moveCandidate = async (candidateId: number, nextStage: string) => {
+  const moveCandidate = async (candidateId: number, nextStage: string, date: string | null) => {
     const currentCandidate = candidates.find((candidate) => candidate.id === candidateId);
     if (!currentCandidate || currentCandidate.stage === nextStage) return;
 
@@ -202,7 +202,7 @@ export default function DealDetailClient({
     const response = await fetch(`/api/deal-candidates/${candidateId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stage: nextStage }),
+      body: JSON.stringify({ stage: nextStage, date }),
     });
     const result = await response.json();
     if (!response.ok || !result.ok) {
@@ -435,7 +435,7 @@ export default function DealDetailClient({
         <div className="mt-4">
           <CandidateKanban
             candidates={candidates}
-            onMove={(id, stage) => void moveCandidate(id, stage)}
+            onMove={(id, stage, date) => void moveCandidate(id, stage, date)}
             onRemove={(candidate) => void removeCandidate(candidate)}
           />
         </div>

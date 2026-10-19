@@ -531,6 +531,8 @@ model ResumeProfile {
   phoneHome                    String?
   visaType                     String?
   visaExpiryDate               String?
+  /// 特定技能として働き始めた日 (YYYY-MM-DD)。推薦リストの「特定技能通算期間」はここから計算する
+  sswStartDate                 String?
   workVisa                     String?
   remarks                      String?
   educations                   Json?
@@ -633,6 +635,8 @@ model CoreSettings {
   monthlyTargets            Json?
   // 推薦リスト用 Google Sheets テンプレ URL (列見出し + フォーマット込み)
   recommendationTemplateUrl String?
+  /// 新規パートナー向け自己記入フォーム (/partner-intake/[token]) の共有トークン
+  partnerIntakeToken        String?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 }
@@ -943,6 +947,10 @@ model DealCandidate {
   person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   stage     String   @default("new")
   note      String?
+  /// ステージごとの日付 (ステージ名 → "YYYY-MM-DD")。
+  /// カンバンで動かしたときに入力した日付。進捗管理の月別集計とスプシ反映に使う。
+  /// 例: { "接続済み": "2026-10-01", "推薦済み": "2026-10-05" }
+  stageDates Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

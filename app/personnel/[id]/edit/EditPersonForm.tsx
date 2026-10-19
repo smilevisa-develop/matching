@@ -44,6 +44,7 @@ type Person = {
     spouseStatus: string | null;
     childrenCount: string | null;
     visaExpiryDate: string | null;
+    sswStartDate?: string | null;
     motivation: string | null;
     selfIntroduction: string | null;
     japanPurpose: string | null;
@@ -177,6 +178,7 @@ export default function EditPersonForm({
     retirementReason: person.resumeProfile?.retirementReason ?? "",
     preferenceNote: person.resumeProfile?.preferenceNote ?? "",
     visaExpiryDate: person.resumeProfile?.visaExpiryDate ?? "",
+    sswStartDate: person.resumeProfile?.sswStartDate ?? "",
     japaneseLevel: person.resumeProfile?.japaneseLevel ?? "",
     japaneseLevelDate: person.resumeProfile?.japaneseLevelDate ?? "",
     licenseName: person.resumeProfile?.licenseName ?? "",
@@ -743,6 +745,12 @@ export default function EditPersonForm({
               <Field label="在留資格の有効期限">
                 <input className={INPUT} type="date" value={form.visaExpiryDate} onChange={(event) => setValue("visaExpiryDate", event.target.value)} />
               </Field>
+              {form.residenceStatus.includes("特定技能") ? (
+                <Field label="特定技能の開始日">
+                  <input className={INPUT} type="date" value={form.sswStartDate} onChange={(event) => setValue("sswStartDate", event.target.value)} />
+                  <p className="mt-1 text-[11px] text-gray-400">推薦リストの「特定技能通算期間」はここから計算します（1号は通算 5 年まで）。</p>
+                </Field>
+              ) : null}
               <Field label="日本語検定">
                 <input className={INPUT} value={form.japaneseLevel} onChange={(event) => setValue("japaneseLevel", event.target.value)} placeholder="JLPT N3" />
               </Field>
@@ -793,7 +801,7 @@ export default function EditPersonForm({
                         placeholder="介護初任者研修"
                       />
                     </Field>
-                    <Field label={index === 0 ? "有効期限 (任意)" : ""}>
+                    <Field label={index === 0 ? "取得日 (任意)" : ""}>
                       <input
                         className={INPUT}
                         type="date"

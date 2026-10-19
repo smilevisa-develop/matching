@@ -4,7 +4,9 @@
  * POST /api/personnel/[id]/recommended-company
  *   body: { companyId: number | null, removeCompanyId?: number | null }
  *     companyId       … この企業のカンバンに候補者を入れる (既にいれば何もしない。新規は「接続済み」)
- *     removeCompanyId … この企業のカンバンから候補者を外す (推薦先を変えた / 取り消したとき)
+ *     removeCompanyId … この企業のカンバンから候補者を外す (取り消したとき)
+ *
+ * 1 人の候補者は同時に最大 5 社まで (A 社で不採用でも別の企業に推薦できるように。2026/10)。
  *
  * 企業のカンバン (DealCandidate) と同じデータを直接動かすので、企業詳細・進捗管理にもそのまま反映される。
  * 外すときは、そのカードで数えた人数カウンター (推薦・面接・内定など) も戻す。
@@ -15,7 +17,10 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
-import { normalizeDealStatus, stageCounterDeltas, type CounterField } from "@/lib/deal-stages";
+import { normalizeDealStatus, stageCounterDeltas, todayJst, type CounterField } from "@/lib/deal-stages";
+
+/** 同時に入れておける推薦先の上限 (UI 側 RecommendedCompanySelect と同じ値) */
+const MAX_RECOMMENDED_COMPANIES = 5;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,11 +68,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
 
       if (companyId) {
+        const linkedCompanies = await tx.dealCandidate.findMany({
+          where: { personId },
+          select: { deal: { select: { companyId: true } } },
+        });
+        const distinct = new Set(linkedCompanies.map((l) => l.deal.companyId));
+        if (!distinct.has(companyId) && distinct.size >= MAX_RECOMMENDED_COMPANIES) {
+          throw new Error(`推薦先企業は最大 ${MAX_RECOMMENDED_COMPANIES} 社までです。先にどれかを外してください`);
+        }
         const company = await tx.company.findUniqueOrThrow({
           where: { id: companyId },
           select: { id: true, name: true, hiringStatus: true },
         });
-        // 1 企業 = 1 求人。企業を開いたときと同じく最後に更新した求人を使い、無ければ作る
+        // 企業を開いたときと同じく最後に更新した求人を使い、無ければ作る (求人が複数ある企業は企業詳細で入れ替えられる)
         const deal =
           (await tx.deal.findFirst({
             where: { companyId },
@@ -80,7 +93,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           }));
         await tx.dealCandidate.upsert({
           where: { dealId_personId: { dealId: deal.id, personId } },
-          create: { dealId: deal.id, personId, stage: "接続済み" },
+          create: { dealId: deal.id, personId, stage: "接続済み", stageDates: { 接続済み: todayJst() } },
           // 既に入っていたときも、今の推薦先として先頭に来るよう更新日時だけ進める
           update: { updatedAt: new Date() },
         });

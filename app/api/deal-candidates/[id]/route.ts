@@ -2,8 +2,15 @@ import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { onDealCandidateStageChanged } from "@/lib/onboarding-autolink";
 import { after } from "next/server";
-import { stageCounterDeltas, type CounterField } from "@/lib/deal-stages";
+import {
+  ACTIVE_CANDIDATE_STAGES,
+  readStageDates,
+  stageCounterDeltas,
+  todayJst,
+  type CounterField,
+} from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
+import { writeStageDateToSheet } from "@/lib/candidate-date-sheet";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -12,6 +19,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const body = await req.json();
     const stage = String(body.stage ?? "").trim();
     const note = body.note === undefined ? undefined : String(body.note ?? "").trim() || null;
+    // ステージに入れた日付 (カンバンで入力)。無ければ今日 (日本時間)
+    const dateInput = body.date === undefined || body.date === null ? "" : String(body.date).trim();
+    if (dateInput && !/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+      return Response.json({ ok: false, error: "日付は YYYY-MM-DD で指定してください" }, { status: 400 });
+    }
+    const date = dateInput || todayJst();
 
     if (!stage) {
       return Response.json({ ok: false, error: "候補者ステップを指定してください" }, { status: 400 });
@@ -19,15 +32,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     // ステージの移動に合わせて人数カウンターも動かす (カンバンと数字を常に揃えるため)。
     // 同時に動かされても二重に数えないよう、前のステージの読み取りから更新までを 1 つにまとめる。
-    const { candidate, counters } = await prisma.$transaction(async (tx) => {
+    const { candidate, counters, stageChanged } = await prisma.$transaction(async (tx) => {
       const before = await tx.dealCandidate.findUniqueOrThrow({
         where: { id: Number(id) },
-        select: { stage: true, dealId: true },
+        select: { stage: true, dealId: true, stageDates: true },
       });
+      // ステージごとの日付を記録する (同じステージに留まるときは触らない)。
+      // 途中を飛ばして進めたとき (事前面談済み → 内定済み など) は、飛ばした段階にも同じ日付を入れる
+      // (人数カウンターと同じく「通過した」扱い。月別集計で漏れないようにする)
+      const stageDates = readStageDates(before.stageDates);
+      if (before.stage !== stage) {
+        const from = ACTIVE_CANDIDATE_STAGES.indexOf(before.stage);
+        const to = ACTIVE_CANDIDATE_STAGES.indexOf(stage);
+        if (from >= 0 && to > from) {
+          for (let i = from + 1; i < to; i++) {
+            const skipped = ACTIVE_CANDIDATE_STAGES[i];
+            if (!stageDates[skipped]) stageDates[skipped] = date;
+          }
+        }
+        stageDates[stage] = date;
+      }
       const candidate = await tx.dealCandidate.update({
         where: { id: Number(id) },
         data: {
           stage,
+          stageDates,
           ...(note !== undefined ? { note } : {}),
         },
       });
@@ -43,24 +72,36 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         rejectCount: true,
       };
       const current = await tx.deal.findUniqueOrThrow({ where: { id: before.dealId }, select });
-      if (deltas.length === 0) return { candidate, counters: current };
+      if (deltas.length === 0) return { candidate, counters: current, stageChanged: before.stage !== stage };
       const counters = await tx.deal.update({
         where: { id: before.dealId },
         // 手で直した結果より多く戻されても 0 未満にはしない
         data: Object.fromEntries(deltas.map(([field, n]) => [field, Math.max(0, current[field] + n)])),
         select,
       });
-      return { candidate, counters };
+      return { candidate, counters, stageChanged: before.stage !== stage };
     });
 
-    // 内定済みになったら内定者管理ボードにカードを用意する (応答は待たせない)
+    // 内定済み / 内定承諾 になったら内定者管理ボードにカードを用意する (応答は待たせない)
     after(async () => {
       try {
-        await onDealCandidateStageChanged(candidate.personId, stage);
+        await onDealCandidateStageChanged(candidate.personId, stage, date);
       } catch (e) {
         console.warn("内定者ボードの自動作成に失敗:", e instanceof Error ? e.message : e);
       }
     });
+
+    // 入力した日付を企業データベース (請求管理 / 内定者管理) に反映する (応答は待たせない)
+    if (stageChanged) {
+      after(async () => {
+        try {
+          const r = await writeStageDateToSheet({ personId: candidate.personId, stage, date });
+          if (!r.ok) console.info("ステージ日付のスプシ反映をスキップ:", r.skipped);
+        } catch (e) {
+          console.warn("ステージ日付のスプシ反映に失敗:", e instanceof Error ? e.message : e);
+        }
+      });
+    }
 
     // 数字が変わったら企業データベース(スプシ)へも反映する (応答は待たせない)
     after(() => requestCompanyDatabaseSync());

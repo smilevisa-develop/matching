@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { buildLineTextMessage } from "@/lib/line-message";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import {
   expandTemplate,
@@ -435,7 +436,8 @@ export async function POST(req: Request) {
       // 本文が空なら text メッセージ自体を送らない (画像だけ送るケースに対応)。
       const trimmedText = (text ?? "").trim();
       if (trimmedText) {
-        messages.push({ type: "text", text });
+        // グループ宛てなら全員メンション (@All) 付き (lib/line-message.ts)
+        messages.push(buildLineTextMessage(to, text));
       }
       for (const img of images.slice(0, 4)) {
         messages.push({

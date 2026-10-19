@@ -40,7 +40,7 @@ export function normalizeSswIndustry(value: string | null | undefined): string |
 }
 
 // 企業追加時の採用状況。企業詳細の求人ステータスと同じ選択肢 (lib/deal-stages.ts)
-export const HIRING_STATUSES = ["募集中", "至急募集", "面接中", "成約", "一時中断", "ストップ"] as const;
+export const HIRING_STATUSES = ["募集中", "至急募集", "常時募集", "面接中", "成約", "一時中断", "ストップ"] as const;
 
 export type SswIndustry = (typeof SSW_INDUSTRIES)[number];
 export type HiringStatus = (typeof HIRING_STATUSES)[number];

@@ -27,6 +27,7 @@ export type RecommendationColumnKey =
   | "japaneseLevelDate"
   | "licenseName"
   | "preferenceNote"
+  | "retirementReason"
   | "phoneNumber"
   | "email"
   | "partner"
@@ -50,12 +51,13 @@ export const RECOMMENDATION_COLUMN_OPTIONS: RecommendationColumnOption[] = [
   { key: "address", label: "現住所" },
   { key: "birthDate", label: "生年月日" },
   { key: "visaExpiryDate", label: "ビザ期限" },
-  { key: "sswYears", label: "特定技能経過年数" },
+  { key: "sswYears", label: "特定技能通算期間" },
   { key: "traineeExperience", label: "実習経験有無" },
   { key: "japaneseLevel", label: "日本語レベル" },
   { key: "japaneseLevelDate", label: "日本語検定取得日" },
   { key: "licenseName", label: "免許" },
   { key: "preferenceNote", label: "本人希望/希望手取り" },
+  { key: "retirementReason", label: "転職理由" },
   { key: "phoneNumber", label: "携帯番号" },
   { key: "email", label: "メール" },
   { key: "partner", label: "紹介パートナー" },
@@ -65,7 +67,8 @@ export const RECOMMENDATION_COLUMN_OPTIONS: RecommendationColumnOption[] = [
 
 /**
  * デフォルトの推薦リスト出力列。
- * 「本人希望/希望手取り」「特定技能経過年数」は実運用で使われないので除外済 (2026-06-17)。
+ * 「本人希望/希望手取り」は実運用で使われないので除外済 (2026-06-17)。
+ * 「特定技能通算期間」「転職理由」は採用チームの依頼で追加 (2026-10)。
  */
 export const DEFAULT_RECOMMENDATION_COLUMNS: RecommendationColumnKey[] = [
   "addedAt",
@@ -79,8 +82,10 @@ export const DEFAULT_RECOMMENDATION_COLUMNS: RecommendationColumnKey[] = [
   "address",
   "birthDate",
   "visaExpiryDate",
+  "sswYears",
   "traineeExperience",
   "japaneseLevel",
+  "retirementReason",
   "resumeUrl",
   "driveFolderUrl",
 ];

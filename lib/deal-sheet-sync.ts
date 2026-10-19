@@ -173,6 +173,8 @@ function isSheetJobLabel(v: string): boolean {
 const STATUS_TO_SHEET: Record<string, string> = {
   クローズ: "ストップ",
   至急募集: "！至急募集！",
+  // スプシのプルダウンに「常時募集」は無いので「募集中」で書く
+  常時募集: "募集中",
 };
 
 export function toSheetStatus(status: string | null | undefined): string {

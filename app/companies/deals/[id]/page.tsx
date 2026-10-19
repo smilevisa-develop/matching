@@ -8,13 +8,14 @@ import JobPostingsPanel from "./JobPostingsPanel";
 import ConditionsPanel, { type ConditionsRecord } from "./ConditionsPanel";
 import CompanyDocumentsPanel from "./CompanyDocumentsPanel";
 import RefreshOnFocus from "@/app/components/RefreshOnFocus";
+import { normalizeDealStatus } from "@/lib/deal-stages";
 
 export const dynamic = "force-dynamic";
 
 export default async function DealDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireCurrentAccount();
   const { id } = await params;
-  const [deal, persons, jobPostings, jobPostingTemplates, staffOptions] = await Promise.all([
+  const [deal, persons, jobPostings, jobPostingTemplates, staffOptions, siblingDeals] = await Promise.all([
     prisma.deal.findUnique({
       where: { id: Number(id) },
       include: {
@@ -59,6 +60,18 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
     }),
     // 求人情報の「担当者」の選択肢
     prisma.staffAccount.findMany({ orderBy: { id: "asc" }, select: { id: true, name: true } }),
+    // 同じ企業の求人 (1 社で複数の案件を募集していることがある。2026/10 採用チームの依頼)
+    prisma.deal
+      .findUnique({ where: { id: Number(id) }, select: { companyId: true } })
+      .then((d) =>
+        d
+          ? prisma.deal.findMany({
+              where: { companyId: d.companyId },
+              orderBy: { createdAt: "asc" },
+              select: { id: true, title: true, status: true, _count: { select: { candidates: true } } },
+            })
+          : [],
+      ),
   ]);
 
   if (!deal) notFound();
@@ -77,6 +90,32 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
         </Link>
         <h1 className="mt-1 text-2xl font-bold text-[var(--color-text-dark)]">{deal.company.name}</h1>
         <p className="mt-1 text-sm text-gray-500">この企業の求人条件・求人票・候補者をまとめて管理します。</p>
+        {/* この企業の案件一覧。複数あれば切り替え、「+ 案件を追加」で同じ企業に別の求人を作る */}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {siblingDeals.map((d) => (
+            <Link
+              key={d.id}
+              href={`/companies/deals/${d.id}`}
+              aria-current={d.id === deal.id ? "page" : undefined}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${
+                d.id === deal.id
+                  ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
+                  : "border-gray-200 bg-white text-gray-600 hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+              }`}
+            >
+              <span className="max-w-[16rem] truncate">{d.title}</span>
+              <span className={`text-[10px] ${d.id === deal.id ? "text-white/80" : "text-gray-400"}`}>
+                {normalizeDealStatus(d.status)}・{d._count.candidates}名
+              </span>
+            </Link>
+          ))}
+          <Link
+            href={`/companies/deals/new?companyId=${deal.company.id}`}
+            className="rounded-full border border-dashed border-gray-300 px-3 py-1 text-xs text-gray-500 hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+          >
+            + 案件を追加
+          </Link>
+        </div>
       </div>
 
       <DealTabs

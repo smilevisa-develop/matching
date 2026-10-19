@@ -37,6 +37,9 @@ type CandidateInput = {
       gender: string | null;
       visaExpiryDate: string | null;
       visaType: string | null;
+      /** 特定技能として働き始めた日 (YYYY-MM-DD)。通算期間の計算に使う */
+      sswStartDate?: string | null;
+      retirementReason?: string | null;
       traineeExperience: string | null;
       japaneseLevel: string | null;
       japaneseLevelDate: string | null;
@@ -49,14 +52,22 @@ type CandidateInput = {
   };
 };
 
-function calcYearsSince(startDate: string | null | undefined): string {
+/**
+ * 特定技能の通算期間 (開始日から今日まで) を「N年Mか月」で返す。
+ * 特定技能1号は通算 5 年までなので、企業は残り期間を知りたい。開始日が未入力なら空欄。
+ */
+export function formatSswDuration(startDate: string | null | undefined, now: Date = new Date()): string {
   if (!startDate) return "";
-  const start = new Date(startDate);
-  if (Number.isNaN(start.getTime())) return "";
-  const diffMs = Date.now() - start.getTime();
-  const years = diffMs / (1000 * 60 * 60 * 24 * 365.25);
-  if (years < 0) return "";
-  return years.toFixed(1);
+  const m = startDate.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  if (!m) return "";
+  const start = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3] ?? "1"));
+  if (Number.isNaN(start.getTime()) || start > now) return "";
+  let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+  if (now.getDate() < start.getDate()) months -= 1;
+  if (months < 0) return "";
+  const y = Math.floor(months / 12);
+  const mo = months % 12;
+  return `${y ? `${y}年` : ""}${mo || !y ? `${mo}か月` : ""}`;
 }
 
 /**
@@ -112,9 +123,10 @@ export function buildRecommendationCellValue(
     case "visaExpiryDate":
       return safeDateOut(resume?.visaExpiryDate ?? null);
     case "sswYears":
-      return p.residenceStatus?.includes("特定技能")
-        ? calcYearsSince(resume?.visaType ? resume?.visaExpiryDate : null) || ""
-        : "";
+      // 開始日 (候補者詳細 → 在留資格・免許 → 特定技能の開始日) から計算。未入力なら空欄
+      return formatSswDuration(resume?.sswStartDate);
+    case "retirementReason":
+      return resume?.retirementReason ?? "";
     case "traineeExperience":
       return toTraineeYesNo(resume?.traineeExperience);
     case "japaneseLevel":

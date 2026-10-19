@@ -13,7 +13,11 @@ import { isTestCompany } from "@/lib/test-companies";
 import { buildDailyReport, type ReportFollowUp } from "@/lib/daily-report";
 
 export type DailyDeal = {
+  /** 行のキー (求人があれば deal-ID、無ければ company-ID) */
+  rowKey: string;
   companyId: number;
+  /** 同じ企業に求人が複数あるときだけ、求人名を企業名の下に出す */
+  dealTitle: string | null;
   /** 企業詳細へのリンク */
   href: string;
   status: string;
@@ -31,6 +35,26 @@ export type DailyDeal = {
   candidates: CandidateCard[];
 };
 
+/** 選んだ月の実績 (page.tsx で数える) */
+export type MonthStats = {
+  /** その月に接続 (カンバンに入れた) 人数 */
+  connected: number;
+  /** その月に事前面談済みにした人数 */
+  preInterviewed: number;
+  /** その月に推薦済みにした人数 */
+  recommended: number;
+  /** 今「推薦済み」にいる人数 (月に関係なく今の状態) */
+  waitingInterview: number;
+  /** その月に面接済みにした人数 */
+  interviewed: number;
+  /** 今「面接済み」にいる人数 (月に関係なく今の状態) */
+  waitingResult: number;
+  /** その月に内定済みにした人数 */
+  offers: number;
+  /** その月に内定承諾にした人数 */
+  accepted: number;
+};
+
 type CountKey = "requiredCount" | "recommendedCount" | "interviewCount" | "offerCount";
 
 const COUNTS: { key: CountKey; label: string }[] = [
@@ -43,21 +67,24 @@ const COUNTS: { key: CountKey; label: string }[] = [
 
 export default function DailyClient({
   deals,
+  month,
+  stats,
   offerTarget,
   recommendTarget,
-  offersThisMonth,
   followUps,
 }: {
   deals: DailyDeal[];
+  /** 表示している月 (YYYY-MM) */
+  month: string;
+  /** その月の実績 */
+  stats: MonthStats;
   /** 内定者フォローの状態 (要対応の判定つき) */
   followUps: ReportFollowUp[];
-  /** 今月 (日本時間) に内定日がある内定者の数 */
-  offersThisMonth: number;
   offerTarget: number | null;
   recommendTarget: number | null;
 }) {
   const router = useRouter();
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   // ドラッグ直後の見た目用。サーバーの内容 (from) が変わった時点で使われなくなる
   const [moved, setMoved] = useState<Record<number, { from: string; to: string }>>({});
   const stageOf = (c: CandidateCard) => (moved[c.id]?.from === c.stage ? moved[c.id].to : c.stage);
@@ -67,17 +94,16 @@ export default function DailyClient({
   const active = [...urgent, ...open];
   // テスト企業は一覧には出すが、上部の数字には含めない
   const counted = active.filter((d) => !isTestCompany(d.companyExternalId));
-  const sum = (key: CountKey) => counted.reduce((n, d) => n + d[key], 0);
 
   // 企業詳細のカンバンと同じ API。人数カウンターもサーバー側で連動する
-  const moveCandidate = async (candidateId: number, stage: string) => {
+  const moveCandidate = async (candidateId: number, stage: string, date: string | null) => {
     const from = deals.flatMap((d) => d.candidates).find((c) => c.id === candidateId)?.stage;
     if (from === undefined || from === stage) return;
     setMoved((cur) => ({ ...cur, [candidateId]: { from, to: stage } }));
     const res = await fetch(`/api/deal-candidates/${candidateId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stage }),
+      body: JSON.stringify({ stage, date }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
@@ -121,17 +147,20 @@ export default function DailyClient({
           </thead>
           <tbody>
             {rows.map((d) => (
-              <Fragment key={d.companyId}>
+              <Fragment key={d.rowKey}>
                 <tr
-                  onClick={() => setOpenId((cur) => (cur === d.companyId ? null : d.companyId))}
+                  onClick={() => setOpenId((cur) => (cur === d.rowKey ? null : d.rowKey))}
                   className={`cursor-pointer border-t border-gray-100 hover:bg-gray-50 ${
-                    openId === d.companyId ? "bg-gray-50" : ""
+                    openId === d.rowKey ? "bg-gray-50" : ""
                   }`}
                 >
                   <td className="px-4 py-3 font-mono text-[13px] text-[var(--color-primary)]">
                     {d.companyExternalId ?? "-"}
                   </td>
-                  <td className="px-4 py-3 font-medium text-[var(--color-text-dark)]">{d.companyName}</td>
+                  <td className="px-4 py-3 font-medium text-[var(--color-text-dark)]">
+                    {d.companyName}
+                    {d.dealTitle ? <span className="mt-0.5 block text-xs font-normal text-gray-500">{d.dealTitle}</span> : null}
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{d.ownerName ?? "-"}</td>
                   {COUNTS.map((c) => (
                     <td
@@ -154,7 +183,7 @@ export default function DailyClient({
                     </Link>
                   </td>
                 </tr>
-                {openId === d.companyId ? (
+                {openId === d.rowKey ? (
                   <tr className="border-t border-gray-100 bg-gray-50">
                     <td colSpan={COUNTS.length + 4} className="px-4 py-3">
                       {/* 表のセルは中身に合わせて広がるので、幅 0 + 最小幅 100% にして表の幅を押し広げないようにする */}
@@ -163,7 +192,7 @@ export default function DailyClient({
                         candidates={d.candidates
                           .filter((c) => !removed.has(c.id))
                           .map((c) => ({ ...c, stage: stageOf(c) }))}
-                        onMove={(id, stage) => void moveCandidate(id, stage)}
+                        onMove={(id, stage, date) => void moveCandidate(id, stage, date)}
                         onRemove={(candidate) => void removeCandidate(candidate)}
                       />
                       </div>
@@ -190,11 +219,11 @@ export default function DailyClient({
   const copyReport = async () => {
     const text = buildDailyReport({
       date: new Date(),
-      offersThisMonth,
+      offersThisMonth: stats.offers,
       offerTarget,
       companies: deals,
       followUps,
-      url: `${window.location.origin}/daily`,
+      url: `${window.location.origin}/daily?month=${month}`,
     });
     try {
       await navigator.clipboard.writeText(text);
@@ -216,11 +245,17 @@ export default function DailyClient({
           {copied ? "コピーしました ✓" : "Slack 用にコピー"}
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="今月の内定" value={offersThisMonth} target={offerTarget} editable />
-        <Kpi label="推薦" value={sum("recommendedCount")} target={recommendTarget} editable />
-        <Kpi label="面接" value={sum("interviewCount")} target={null} />
-        <Kpi label="募集中の企業" value={counted.length} target={null} />
+      {/* 選んだ月の実績。目標は 設定 → 月次目標 (推薦・内定)。面接待ち / 結果待ちだけは「今の状態」 */}
+      <div className="grid grid-cols-3 gap-2 md:grid-cols-5 xl:grid-cols-9">
+        <Kpi label="接続" value={stats.connected} target={null} />
+        <Kpi label="面談" value={stats.preInterviewed} target={null} />
+        <Kpi label="推薦" value={stats.recommended} target={recommendTarget} editable />
+        <Kpi label="面接待ち" value={stats.waitingInterview} target={null} hint="今 推薦済み" />
+        <Kpi label="面接" value={stats.interviewed} target={null} />
+        <Kpi label="結果待ち" value={stats.waitingResult} target={null} hint="今 面接済み" />
+        <Kpi label="内定" value={stats.offers} target={offerTarget} editable />
+        <Kpi label="内定承諾" value={stats.accepted} target={null} />
+        <Kpi label="募集中" value={counted.length} target={null} hint="社" />
       </div>
       {island("至急募集", urgent)}
       {island("募集中", open)}
@@ -234,19 +269,22 @@ function Kpi({
   value,
   target,
   editable = false,
+  hint,
 }: {
   label: string;
   value: number;
   target: number | null;
   editable?: boolean;
+  /** 数字の横に小さく出す補足 (例: 今 推薦済み) */
+  hint?: string;
 }) {
   const rate = target && target > 0 ? Math.round((value / target) * 100) : null;
   const barColor = rate === null ? "" : rate >= 100 ? "bg-emerald-500" : rate >= 50 ? "bg-[var(--color-primary)]" : "bg-amber-500";
   const targetText = rate !== null ? `/ ${target}` : editable ? "/ 目標を設定" : null;
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
+    <div className="rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs text-gray-500">{label}</p>
+        <p className="truncate text-xs text-gray-500">{label}</p>
         {rate !== null ? (
           <p className="text-sm font-bold tabular-nums text-[var(--color-text-dark)]">{rate}%</p>
         ) : null}
@@ -262,6 +300,8 @@ function Kpi({
           </Link>
         ) : targetText ? (
           <span className="ml-1 text-sm font-medium text-gray-400">{targetText}</span>
+        ) : hint ? (
+          <span className="ml-1 text-[11px] font-medium text-gray-400">{hint}</span>
         ) : null}
       </p>
       {rate !== null ? (

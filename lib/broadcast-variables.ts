@@ -53,7 +53,7 @@ export const BROADCAST_VARIABLES: BroadcastVariable[] = [
 ];
 
 /** {{募集中案件一覧}} に含めるステージ */
-export const OPEN_DEAL_STATUSES = ["募集中", "至急募集"] as const;
+export const OPEN_DEAL_STATUSES = ["募集中", "至急募集", "常時募集"] as const;
 /** {{急ぎ案件一覧}} に含めるステージ */
 export const URGENT_DEAL_STATUSES = ["至急募集"] as const;
 
