@@ -1,5 +1,6 @@
 "use client";
 
+import { buildIntakeMessage, type IntakeLang } from "@/lib/intake-i18n";
 import { useState } from "react";
 
 import { PANEL_ACTION, usePanelActions } from "./PanelActions";
@@ -44,10 +45,13 @@ export type PreparationState = {
 export default function PreparationPanel({
   personName,
   linkLabel,
+  lang = "ja",
   state,
   checklistContent,
 }: {
   personName: string;
+  /** フォーム案内の言語 (国籍から決める。lib/intake-i18n.ts) */
+  lang?: IntakeLang;
   /** リンクの取り違え防止ラベル (例: "ID 0012_NGUYEN VAN A")。コピー時に URL の前に付ける */
   linkLabel: string;
   state: PreparationState;
@@ -90,11 +94,8 @@ export default function PreparationPanel({
   const copyRemind = async () => {
     if (!state.intakeToken) return;
     const url = `${window.location.origin}/intake/${state.intakeToken}`;
-    const text =
-      `【${linkLabel}】\n` +
-      `${personName} さん、こんにちは。SMILEVISA です。\n` +
-      `面談の前に、こちらのフォームへのご回答をお願いします (5分くらいで終わります)。\n` +
-      `Please answer this form before the interview (about 5 minutes).\n${url}`;
+    // 本人の母国語で案内する (下に日本語も付く)。フォーム自体も同じ言語で表示される
+    const text = `【${linkLabel}】\n${buildIntakeMessage(lang, personName, url)}`;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);

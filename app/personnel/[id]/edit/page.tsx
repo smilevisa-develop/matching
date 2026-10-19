@@ -22,6 +22,7 @@ import RecommendedCompanySelect from "./RecommendedCompanySelect";
 import ChecklistPanel from "./ChecklistPanel";
 import { companyLabel } from "@/lib/company-label";
 import { hasEnoughJobInfo, nationalityToLanguage } from "@/lib/job-checklist";
+import { intakeLang } from "@/lib/intake-i18n";
 import JapaneseCheckPanel, {
   type JapaneseCheckView,
   type JapaneseCheckRecordingView,
@@ -411,6 +412,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
           <PreparationPanel
             personName={person.name}
             linkLabel={linkLabel}
+            lang={intakeLang(person.nationality)}
             state={preparationState}
             checklistContent={
               <ChecklistPanel

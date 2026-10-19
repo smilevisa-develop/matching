@@ -638,6 +638,13 @@ export default function EditPersonForm({
                           value={value}
                           onChange={(e) => onChange(e.target.value)}                        />
                       )}
+                      {/* 本人が母国語で書いた回答に、フォーム送信後に付いた日本語訳 */}
+                      {form.interviewAnswers[`${q.jsonKey ?? q.key}__ja`] ? (
+                        <p className="mt-1 rounded-md bg-[var(--color-light)] px-2 py-1 text-[11px] text-gray-600">
+                          <span className="font-semibold text-gray-500">日本語訳: </span>
+                          {form.interviewAnswers[`${q.jsonKey ?? q.key}__ja`]}
+                        </p>
+                      ) : null}
                     </Field>
                   );
                 })}
@@ -1112,6 +1119,13 @@ export default function EditPersonForm({
                           value={value}
                           onChange={(e) => onChange(e.target.value)}                        />
                       )}
+                      {/* 本人が母国語で書いた回答に、フォーム送信後に付いた日本語訳 */}
+                      {form.interviewAnswers[`${q.jsonKey ?? q.key}__ja`] ? (
+                        <p className="mt-1 rounded-md bg-[var(--color-light)] px-2 py-1 text-[11px] text-gray-600">
+                          <span className="font-semibold text-gray-500">日本語訳: </span>
+                          {form.interviewAnswers[`${q.jsonKey ?? q.key}__ja`]}
+                        </p>
+                      ) : null}
                     </Field>
                   );
                 })}

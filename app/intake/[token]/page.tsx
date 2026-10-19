@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import IntakeClient from "./IntakeClient";
+import IntakeClient, { type WorkRow } from "./IntakeClient";
+import { intakeLang } from "@/lib/intake-i18n";
+import { normalizeWorkHistories } from "@/lib/candidate-profile";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +19,15 @@ export default async function IntakePage({
     select: {
       id: true,
       name: true,
+      nationality: true,
+      email: true,
       residenceStatus: true,
       intakeConfig: true,
-      onboarding: { select: { englishName: true, birthDate: true, address: true } },
+      onboarding: { select: { englishName: true, birthDate: true, address: true, phoneNumber: true } },
       resumeProfile: {
         select: {
+          gender: true,
+          workExperiences: true,
           motivation: true,
           selfIntroduction: true,
           japanPurpose: true,
@@ -54,6 +60,7 @@ export default async function IntakePage({
   return (
     <IntakeClient
       token={token}
+      lang={intakeLang(person.nationality)}
       personName={person.name}
       englishName={person.onboarding?.englishName ?? null}
       residenceStatus={person.residenceStatus ?? null}
@@ -62,8 +69,14 @@ export default async function IntakePage({
       basic={{
         englishName: person.onboarding?.englishName ?? "",
         birthDate: person.onboarding?.birthDate ?? "",
+        gender: person.resumeProfile?.gender ?? "",
+        phoneNumber: person.onboarding?.phoneNumber ?? "",
+        email: person.email ?? "",
         address: person.onboarding?.address ?? "",
       }}
+      initialWork={normalizeWorkHistories(person.resumeProfile?.workExperiences).map(
+        (w): WorkRow => ({ companyName: w.companyName, startDate: w.startDate, endDate: w.endDate, reason: w.reason }),
+      )}
       initial={{
         motivation: person.resumeProfile?.motivation ?? "",
         selfIntroduction: person.resumeProfile?.selfIntroduction ?? "",

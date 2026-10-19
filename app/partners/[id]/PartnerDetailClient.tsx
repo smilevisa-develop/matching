@@ -37,6 +37,8 @@ export type PartnerDetailData = {
   relationshipStatus: string | null;
   email: string | null;
   snsContact: string | null;
+  /** LINE QR 画像の URL (自己記入フォームでアップロードされたもの) */
+  lineQrUrl: string | null;
   features: string | null;
   introducibleNationalities: string | null;
   introducibleScope: string | null;
@@ -455,6 +457,13 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
           </Field>
           <Field label="SNS 連絡先" className="md:col-span-2">
             <input className={INPUT} value={form.snsContact} onChange={(e) => set("snsContact", e.target.value)} placeholder="LINE / Facebook URL など" />
+            {initial.lineQrUrl ? (
+              <a href={initial.lineQrUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-2 text-xs text-[var(--color-primary)] hover:underline">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={initial.lineQrUrl} alt="LINE QR" className="h-24 w-24 rounded border border-gray-200 object-contain" />
+                LINE の QR コード (自己記入フォームでアップロード)
+              </a>
+            ) : null}
           </Field>
 
           {/* 連絡手段の複数選択 */}

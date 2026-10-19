@@ -219,6 +219,8 @@ model Partner {
   email              String?
   /// SNS 連絡先 (URL or ID)
   snsContact         String?
+  /// LINE の QR コード画像 (自己記入フォームでアップロード。/api/files/{id} の URL)
+  lineQrUrl          String?
   /// 特徴・強み (備考列)
   features           String?
 

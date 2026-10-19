@@ -7,6 +7,23 @@ import {
   parseLocationAnswer,
   type InterviewQuestion,
 } from "@/lib/interview-questions";
+import {
+  tOption,
+  tQuestion,
+  tSection,
+  tSectionDesc,
+  tUi,
+  tUiJa,
+  type IntakeLang,
+} from "@/lib/intake-i18n";
+
+/**
+ * 候補者向け入力フォーム (ログイン不要。URL のトークンで本人を判定)。
+ *
+ * 国籍に合わせた母国語で質問を出し、下に日本語を小さく添える (lib/intake-i18n.ts)。
+ * ページ構成: 基本情報 → 職歴 → 面談前に必要な質問 (must) → 担当者の個別質問。
+ * 回答は本人の言葉のまま保存する (日本語訳は送信後にサーバー側で付ける)。
+ */
 
 type ExistingFields = "motivation" | "selfIntroduction" | "japanPurpose" | "currentJob" | "retirementReason";
 
@@ -21,47 +38,73 @@ type CustomQuestion = {
   type: "text" | "textarea" | "file";
 };
 
-type BasicInfo = { englishName: string; birthDate: string; address: string };
+type BasicInfo = {
+  englishName: string;
+  birthDate: string;
+  gender: string;
+  phoneNumber: string;
+  email: string;
+  address: string;
+};
+
+export type WorkRow = { companyName: string; startDate: string; endDate: string; reason: string };
 
 type PageBlock = {
   title: string;
   description?: string;
-  /** 基本情報 (氏名・生年月日・住所) ページなら true */
+  /** 基本情報ページ */
   basicInfo?: boolean;
+  /** 職歴ページ */
+  work?: boolean;
   questions: (
     | { kind: "interview"; q: InterviewQuestion }
     | { kind: "custom"; q: CustomQuestion }
   )[];
 };
 
+const GENDER_OPTIONS = ["男性", "女性", "その他"];
+const EMPTY_WORK: WorkRow = { companyName: "", startDate: "", endDate: "", reason: "" };
+
+const INPUT =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20";
+
 export default function IntakeClient({
   token,
+  lang,
   personName,
   englishName,
   residenceStatus,
   excludedKeys,
   customQuestions,
   basic,
+  initialWork,
   initial,
 }: {
   token: string;
+  /** 表示言語 (国籍から決める) */
+  lang: IntakeLang;
   personName: string;
   englishName: string | null;
   residenceStatus: string | null;
   excludedKeys: string[];
   customQuestions: CustomQuestion[];
-  basic?: BasicInfo;
+  basic?: Partial<BasicInfo>;
+  initialWork?: WorkRow[];
   initial: InitialAnswers;
 }) {
+  const t = (key: string) => tUi(lang, key);
+  const ja = (key: string) => tUiJa(lang, key);
+
   const [form, setForm] = useState<InitialAnswers>(initial);
   const [basicForm, setBasicForm] = useState<BasicInfo>(() => {
-    const b = basic ?? { englishName: "", birthDate: "", address: "" };
+    const b = { englishName: "", birthDate: "", gender: "", phoneNumber: "", email: "", address: "", ...(basic ?? {}) };
     // <input type=date> 用に YYYY-MM-DD へ寄せる ("1998/05/10" → "1998-05-10")
-    const bd = /^\d{4}\D\d{2}\D\d{2}$/.test(b.birthDate)
-      ? b.birthDate.replace(/\D/g, "-")
-      : b.birthDate;
+    const bd = /^\d{4}\D\d{2}\D\d{2}$/.test(b.birthDate) ? b.birthDate.replace(/\D/g, "-") : b.birthDate;
     return { ...b, birthDate: bd };
   });
+  const [work, setWork] = useState<WorkRow[]>(() =>
+    initialWork && initialWork.length > 0 ? initialWork : [{ ...EMPTY_WORK }],
+  );
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,34 +131,31 @@ export default function IntakeClient({
   // 面談前に最低限必要な質問 (must) + 担当者の個別質問だけを出す。
   // 任意 (optional) の質問はフォームには含めない (面談で聞く)。
   const pages = useMemo<PageBlock[]>(() => {
-    // 先頭に「基本情報」ページ (氏名・年齢・住所)
     const blocks: PageBlock[] = [
-      {
-        title: "基本情報 / Basic info",
-        description: "はじめに、あなたのことを教えてください。 / Please tell us about yourself.",
-        basicInfo: true,
-        questions: [],
-      },
+      { title: t("basicTitle"), description: t("basicDesc"), basicInfo: true, questions: [] },
+      { title: t("workTitle"), description: t("workDesc"), work: true, questions: [] },
     ];
-    blocks.push(...buildInterviewSections({
-      priority: "must",
-      ctx: { residenceStatus, location, employmentStatus },
-      isExcluded: (q) => excludedKeys.includes(q.key),
-      isAnswered,
-    }).map((s) => ({
-      title: s.title,
-      description: s.description,
-      questions: s.questions.map((q) => ({ kind: "interview" as const, q })),
-    })));
+    blocks.push(
+      ...buildInterviewSections({
+        priority: "must",
+        ctx: { residenceStatus, location, employmentStatus },
+        isExcluded: (q) => excludedKeys.includes(q.key),
+        isAnswered,
+      }).map((s) => ({
+        title: tSection(lang, s.title),
+        description: tSectionDesc(lang, s.description),
+        questions: s.questions.map((q) => ({ kind: "interview" as const, q })),
+      })),
+    );
     if (customQuestions.length > 0) {
       blocks.push({
-        title: "担当者からの個別質問",
+        title: t("customTitle"),
         questions: customQuestions.map((q) => ({ kind: "custom" as const, q })),
       });
     }
     return blocks;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [residenceStatus, location, employmentStatus, excludedKeys, customQuestions, isAnswered]);
+  }, [lang, residenceStatus, location, employmentStatus, excludedKeys, customQuestions, isAnswered]);
 
   const totalPages = pages.length;
   // 居住地の回答で分岐が変わりページ数が減ることがあるので、必ず範囲内に丸める
@@ -130,6 +170,9 @@ export default function IntakeClient({
   const setAnswer = (key: string, value: string) => {
     setForm((c) => ({ ...c, interviewAnswers: { ...c.interviewAnswers, [key]: value } }));
   };
+  const setBasic = (key: keyof BasicInfo, value: string) => setBasicForm((b) => ({ ...b, [key]: value }));
+  const setWorkRow = (i: number, key: keyof WorkRow, value: string) =>
+    setWork((rows) => rows.map((r, idx) => (idx === i ? { ...r, [key]: value } : r)));
 
   // 必須の未充足チェック (現ページ分)
   const currentPageInvalid = useMemo(() => {
@@ -147,23 +190,25 @@ export default function IntakeClient({
     return false;
   }, [currentPage, form, customFiles]);
 
+  const scrollTop = () => {
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   const next = () => {
     if (currentPageInvalid) {
-      alert("必須の質問に回答してください / Please answer required fields.");
+      alert(`${t("required")}${ja("required") ? ` / ${ja("required")}` : ""}`);
       return;
     }
     setPageIdx((i) => Math.min(i + 1, totalPages - 1));
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollTop();
   };
-
   const prev = () => {
     setPageIdx((i) => Math.max(i - 1, 0));
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollTop();
   };
 
   const submit = async () => {
     if (currentPageInvalid) {
-      alert("必須の質問に回答してください / Please answer required fields.");
+      alert(`${t("required")}${ja("required") ? ` / ${ja("required")}` : ""}`);
       return;
     }
     setSubmitting(true);
@@ -174,7 +219,7 @@ export default function IntakeClient({
       let mergedForm = form;
       const fileEntries = Object.entries(customFiles);
       if (fileEntries.length > 0) {
-        setUploadNote("ファイルを送信しています… / Uploading files…");
+        setUploadNote(t("uploading"));
         const urls: Record<string, string> = {};
         for (const [key, f] of fileEntries) {
           const up = await fetch(`/api/intake/${token}/custom-file`, {
@@ -185,28 +230,28 @@ export default function IntakeClient({
           const upData = await up.json().catch(() => ({}));
           if (!up.ok || !upData.ok || !upData.url) {
             setUploadNote(null);
-            setError(
-              "ファイルの送信に失敗しました。通信環境の良い場所で、もう一度お試しください。 / Failed to upload file.",
-            );
+            setError(t("uploadFailed"));
             return;
           }
           urls[key] = upData.url as string;
         }
         setUploadNote(null);
-        mergedForm = {
-          ...form,
-          interviewAnswers: { ...form.interviewAnswers, ...urls },
-        };
+        mergedForm = { ...form, interviewAnswers: { ...form.interviewAnswers, ...urls } };
       }
 
       const res = await fetch(`/api/intake/${token}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...mergedForm, basic: basicForm }),
+        body: JSON.stringify({
+          ...mergedForm,
+          basic: basicForm,
+          workExperiences: work.filter((r) => r.companyName || r.startDate || r.endDate || r.reason),
+          lang,
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        setError(data.error ?? "送信に失敗しました");
+        setError(data.error ?? t("uploadFailed"));
         return;
       }
       setSubmitted(true);
@@ -226,17 +271,25 @@ export default function IntakeClient({
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-[var(--color-text-dark)]">送信完了 / Thank you!</h1>
+          <h1 className="text-xl font-bold text-[var(--color-text-dark)]">{t("thanksTitle")}</h1>
           <p className="text-sm text-gray-600">
-            ご回答ありがとうございました。<br />
-            Your answers have been submitted.
+            {t("thanksBody")}
+            {ja("thanksBody") ? (
+              <>
+                <br />
+                <span className="text-xs text-gray-400">{ja("thanksBody")}</span>
+              </>
+            ) : null}
           </p>
           <button
             type="button"
-            onClick={() => { setSubmitted(false); setPageIdx(0); }}
+            onClick={() => {
+              setSubmitted(false);
+              setPageIdx(0);
+            }}
             className="text-xs text-[var(--color-primary)] hover:underline"
           >
-            続けて編集する / Edit again
+            {t("editAgain")}
           </button>
         </div>
       </div>
@@ -247,13 +300,8 @@ export default function IntakeClient({
     return (
       <div className="min-h-screen bg-[var(--color-light)] flex items-center justify-center p-6">
         <div className="max-w-md w-full rounded-2xl bg-white p-8 shadow-md text-center space-y-3">
-          <h1 className="text-base font-semibold text-[var(--color-text-dark)]">
-            質問はありません / No questions
-          </h1>
-          <p className="text-sm text-gray-500">
-            担当者へご連絡ください。<br />
-            Please contact the recruiter.
-          </p>
+          <h1 className="text-base font-semibold text-[var(--color-text-dark)]">{t("noQuestions")}</h1>
+          <p className="text-sm text-gray-500">{t("contactRecruiter")}</p>
         </div>
       </div>
     );
@@ -266,22 +314,22 @@ export default function IntakeClient({
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm px-6 text-center">
           <div className="h-16 w-16 animate-spin rounded-full border-4 border-[var(--color-primary)]/20 border-t-[var(--color-primary)]" />
           <p className="mt-6 text-lg font-bold text-[var(--color-text-dark)]">
-            送信しています
+            {t("sending")}
             <span className="inline-flex w-6 justify-start">
               <span className="animate-pulse">…</span>
             </span>
           </p>
-          <p className="mt-1 text-sm text-gray-500">Submitting your answers…</p>
           <p className="mt-4 max-w-xs text-xs leading-relaxed text-gray-500">
-            {uploadNote ?? "ファイルの送信に少し時間がかかることがあります。"}
+            {uploadNote ?? ""}
             <br />
-            <span className="font-medium text-[var(--color-primary)]">
-              この画面を閉じずにお待ちください。
-            </span>
-            <br />
-            Please keep this screen open.
+            <span className="font-medium text-[var(--color-primary)]">{t("keepOpen")}</span>
+            {ja("keepOpen") ? (
+              <>
+                <br />
+                {ja("keepOpen")}
+              </>
+            ) : null}
           </p>
-          {/* 動きのあるドット */}
           <div className="mt-5 flex gap-1.5" aria-hidden>
             <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-[var(--color-primary)] [animation-delay:-0.3s]" />
             <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-[var(--color-primary)] [animation-delay:-0.15s]" />
@@ -296,9 +344,8 @@ export default function IntakeClient({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold tracking-[0.16em] text-[var(--color-primary)]">SMILE MATCHING</p>
-              <h1 className="mt-1 text-lg font-bold text-[var(--color-text-dark)]">
-                事前質問フォーム / Pre-Interview
-              </h1>
+              <h1 className="mt-1 text-lg font-bold text-[var(--color-text-dark)]">{t("formTitle")}</h1>
+              {ja("formTitle") ? <p className="text-xs text-gray-400">{ja("formTitle")}</p> : null}
               <p className="mt-1 text-xs text-gray-500 truncate">
                 {personName}
                 {englishName ? ` / ${englishName}` : ""}
@@ -310,84 +357,113 @@ export default function IntakeClient({
               </p>
             </div>
           </div>
-          {/* プログレスバー */}
           <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
-            <div
-              className="h-full bg-[var(--color-primary)] transition-all"
-              style={{ width: `${progressPct}%` }}
-            />
+            <div className="h-full bg-[var(--color-primary)] transition-all" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
 
         {/* 現在のページ */}
         <section className="rounded-2xl bg-white p-6 shadow-md">
           <h2 className="text-base font-bold text-[var(--color-text-dark)]">{currentPage.title}</h2>
-          {currentPage.description ? (
-            <p className="mt-1 text-xs text-gray-500">{currentPage.description}</p>
-          ) : null}
+          {currentPage.description ? <p className="mt-1 text-xs text-gray-500">{currentPage.description}</p> : null}
+
           {currentPage.basicInfo ? (
             <div className="mt-5 space-y-5">
-              <QuestionField
-                label="お名前（ローマ字） / Full name (Roman letters)"
-                type="text"
-                hint="例：NGUYEN THI HUONG"
-                value={basicForm.englishName}
-                onChange={(v) => setBasicForm((b) => ({ ...b, englishName: v }))}
-              />
+              <QuestionField label={t("englishName")} sub={ja("englishName")} type="text" hint={t("englishNameHint")} value={basicForm.englishName} onChange={(v) => setBasic("englishName", v)} />
               <div>
-                <label className="block text-sm font-medium text-[var(--color-text-dark)] mb-1.5">
-                  生年月日 / Date of birth
-                </label>
-                <input
-                  type="date"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
-                  value={basicForm.birthDate}
-                  onChange={(e) => setBasicForm((b) => ({ ...b, birthDate: e.target.value }))}
-                />
+                <FieldLabel label={t("birthDate")} sub={ja("birthDate")} />
+                <input type="date" className={INPUT} value={basicForm.birthDate} onChange={(e) => setBasic("birthDate", e.target.value)} />
               </div>
               <QuestionField
-                label="現在のお住まい（住所） / Current address"
-                type="textarea"
-                hint="例：東京都新宿区○○1-2-3 ○○マンション101"
-                value={basicForm.address}
-                onChange={(v) => setBasicForm((b) => ({ ...b, address: v }))}
+                label={t("gender")}
+                sub={ja("gender")}
+                type="select"
+                options={GENDER_OPTIONS}
+                optionLabel={(o) => tOption(lang, o)}
+                unselected={t("unselected")}
+                value={basicForm.gender}
+                onChange={(v) => setBasic("gender", v)}
               />
+              <QuestionField label={t("phone")} sub={ja("phone")} type="text" hint="090-1234-5678" value={basicForm.phoneNumber} onChange={(v) => setBasic("phoneNumber", v)} />
+              <QuestionField label={t("email")} sub={ja("email")} type="text" hint="example@gmail.com" value={basicForm.email} onChange={(v) => setBasic("email", v)} />
+              <QuestionField label={t("address")} sub={ja("address")} type="textarea" hint={t("addressHint")} value={basicForm.address} onChange={(v) => setBasic("address", v)} />
+            </div>
+          ) : currentPage.work ? (
+            <div className="mt-5 space-y-4">
+              {work.map((row, i) => (
+                <div key={i} className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-500">#{i + 1}</p>
+                    {work.length > 1 ? (
+                      <button type="button" onClick={() => setWork((rows) => rows.filter((_, idx) => idx !== i))} className="text-xs text-gray-500 underline">
+                        {t("remove")}
+                      </button>
+                    ) : null}
+                  </div>
+                  <QuestionField label={t("companyName")} sub={ja("companyName")} type="text" hint={t("companyHint")} value={row.companyName} onChange={(v) => setWorkRow(i, "companyName", v)} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <FieldLabel label={t("startDate")} sub={ja("startDate")} />
+                      <input type="month" className={INPUT} value={toMonthInput(row.startDate)} onChange={(e) => setWorkRow(i, "startDate", e.target.value)} />
+                    </div>
+                    <div>
+                      <FieldLabel label={t("endDate")} sub={ja("endDate")} />
+                      <input type="month" className={INPUT} value={toMonthInput(row.endDate)} onChange={(e) => setWorkRow(i, "endDate", e.target.value)} />
+                    </div>
+                  </div>
+                  <QuestionField label={t("workContent")} sub={ja("workContent")} type="textarea" hint={t("workContentHint")} value={row.reason} onChange={(v) => setWorkRow(i, "reason", v)} />
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setWork((rows) => [...rows, { ...EMPTY_WORK }])}
+                className="w-full rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                {t("addRow")}
+              </button>
             </div>
           ) : (
             <div className="mt-5 space-y-5">
-              {currentPage.questions.map((item) =>
-                item.kind === "interview" ? (
-                  <QuestionField
-                    key={`i_${item.q.key}`}
-                    label={item.q.question}
-                    hint={item.q.hint}
-                    type={item.q.type === "textarea" ? "textarea" : item.q.type === "select" ? "select" : "text"}
-                    options={item.q.options}
-                    value={
-                      item.q.existingField
-                        ? form[item.q.existingField]
-                        : form.interviewAnswers[item.q.jsonKey ?? item.q.key] ?? ""
-                    }
-                    onChange={(v) => {
-                      if (item.q.existingField) setExisting(item.q.existingField, v);
-                      else setAnswer(item.q.jsonKey ?? item.q.key, v);
-                    }}
-                  />
-                ) : item.q.type === "file" ? (
-                  <CustomFileField
-                    key={`c_${item.q.key}`}
-                    label={item.q.label + (item.q.required ? " *" : "")}
-                    file={customFiles[item.q.key] ?? null}
-                    onPick={(f) =>
-                      setCustomFiles((prev) => {
-                        const next = { ...prev };
-                        if (f) next[item.q.key] = f;
-                        else delete next[item.q.key];
-                        return next;
-                      })
-                    }
-                  />
-                ) : (
+              {currentPage.questions.map((item) => {
+                if (item.kind === "interview") {
+                  const tr = tQuestion(lang, item.q.key, item.q.question, item.q.hint);
+                  return (
+                    <QuestionField
+                      key={`i_${item.q.key}`}
+                      label={tr.q}
+                      sub={lang !== "ja" && tr.q !== item.q.question ? item.q.question : ""}
+                      hint={tr.hint}
+                      type={item.q.type === "textarea" ? "textarea" : item.q.type === "select" ? "select" : "text"}
+                      options={item.q.options}
+                      optionLabel={(o) => tOption(lang, o)}
+                      unselected={t("unselected")}
+                      value={item.q.existingField ? form[item.q.existingField] : form.interviewAnswers[item.q.jsonKey ?? item.q.key] ?? ""}
+                      onChange={(v) => {
+                        if (item.q.existingField) setExisting(item.q.existingField, v);
+                        else setAnswer(item.q.jsonKey ?? item.q.key, v);
+                      }}
+                    />
+                  );
+                }
+                if (item.q.type === "file") {
+                  return (
+                    <CustomFileField
+                      key={`c_${item.q.key}`}
+                      label={item.q.label + (item.q.required ? " *" : "")}
+                      texts={{ choose: t("chooseFile"), change: t("change"), tooLarge: t("fileTooLarge"), readError: t("fileReadError") }}
+                      file={customFiles[item.q.key] ?? null}
+                      onPick={(f) =>
+                        setCustomFiles((prev) => {
+                          const nextFiles = { ...prev };
+                          if (f) nextFiles[item.q.key] = f;
+                          else delete nextFiles[item.q.key];
+                          return nextFiles;
+                        })
+                      }
+                    />
+                  );
+                }
+                return (
                   <QuestionField
                     key={`c_${item.q.key}`}
                     label={item.q.label + (item.q.required ? " *" : "")}
@@ -395,17 +471,13 @@ export default function IntakeClient({
                     value={form.interviewAnswers[item.q.key] ?? ""}
                     onChange={(v) => setAnswer(item.q.key, v)}
                   />
-                )
-              )}
+                );
+              })}
             </div>
           )}
         </section>
 
-        {error ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        ) : null}
+        {error ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
 
         {/* ナビゲーション (sticky 下部) */}
         <div className="sticky bottom-3 z-10 rounded-2xl bg-white px-4 py-3 shadow-xl">
@@ -416,7 +488,7 @@ export default function IntakeClient({
               disabled={safeIdx === 0}
               className="rounded-full border border-gray-300 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-30"
             >
-              ← 戻る / Back
+              {t("back")}
             </button>
             {isLastPage ? (
               <button
@@ -425,7 +497,7 @@ export default function IntakeClient({
                 disabled={submitting || currentPageInvalid}
                 className="rounded-full bg-[var(--color-primary)] px-6 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {submitting ? "送信中..." : "送信する / Submit"}
+                {submitting ? t("submitting") : t("submit")}
               </button>
             ) : (
               <button
@@ -433,7 +505,7 @@ export default function IntakeClient({
                 onClick={next}
                 className="rounded-full bg-[var(--color-primary)] px-6 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)]"
               >
-                次へ / Next →
+                {t("next")}
               </button>
             )}
           </div>
@@ -443,51 +515,60 @@ export default function IntakeClient({
   );
 }
 
+/** "2024-05-10" / "2024/05" → <input type=month> 用の "2024-05" */
+function toMonthInput(v: string): string {
+  const m = (v ?? "").match(/^(\d{4})\D(\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}` : "";
+}
+
+/** 見出し: 母国語 + その下に日本語 (小さく) */
+function FieldLabel({ label, sub }: { label: string; sub?: string }) {
+  return (
+    <label className="block mb-1.5">
+      <span className="block text-sm font-medium text-[var(--color-text-dark)]">{label}</span>
+      {sub ? <span className="block text-[11px] text-gray-400">{sub}</span> : null}
+    </label>
+  );
+}
+
 function QuestionField({
   label,
+  sub,
   hint,
   type,
   options,
+  optionLabel,
+  unselected,
   value,
   onChange,
 }: {
   label: string;
+  sub?: string;
   hint?: string;
   type: "text" | "textarea" | "select";
   options?: readonly string[];
+  /** 選択肢の表示 (値は日本語のまま保存する) */
+  optionLabel?: (ja: string) => string;
+  unselected?: string;
   value: string;
   onChange: (v: string) => void;
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-[var(--color-text-dark)] mb-1.5">{label}</label>
+      <FieldLabel label={label} sub={sub} />
       {type === "textarea" ? (
-        <textarea
-          className="w-full min-h-[96px] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={hint}
-        />
+        <textarea className={`${INPUT} min-h-[96px]`} value={value} onChange={(e) => onChange(e.target.value)} placeholder={hint} />
       ) : type === "select" && options ? (
-        <select
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">未選択</option>
+        <select className={`${INPUT} bg-white`} value={value} onChange={(e) => onChange(e.target.value)}>
+          <option value="">{unselected ?? "未選択"}</option>
           {options.map((opt) => (
             <option key={opt} value={opt}>
-              {opt}
+              {optionLabel ? optionLabel(opt) : opt}
             </option>
           ))}
         </select>
       ) : (
-        <input
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={hint}
-        />
+        <input className={INPUT} value={value} onChange={(e) => onChange(e.target.value)} placeholder={hint} />
       )}
     </div>
   );
@@ -496,10 +577,12 @@ function QuestionField({
 /** ファイル型の個別質問。選択したファイルを dataURL で親に渡す */
 function CustomFileField({
   label,
+  texts,
   file,
   onPick,
 }: {
   label: string;
+  texts: { choose: string; change: string; tooLarge: string; readError: string };
   file: { dataUrl: string; fileName: string } | null;
   onPick: (f: { dataUrl: string; fileName: string } | null) => void;
 }) {
@@ -509,9 +592,9 @@ function CustomFileField({
   const handle = (input: HTMLInputElement) => {
     const f = input.files?.[0];
     if (!f) return;
-    // 上限 20MB (Apps Script / Drive 経由の実用上限を考慮)
+    // 上限 20MB (Drive 経由の実用上限を考慮)
     if (f.size > 20 * 1024 * 1024) {
-      setErr("ファイルが大きすぎます（20MBまで）。/ File too large (max 20MB).");
+      setErr(texts.tooLarge);
       input.value = "";
       return;
     }
@@ -524,28 +607,24 @@ function CustomFileField({
     };
     reader.onerror = () => {
       setReading(false);
-      setErr("ファイルの読み込みに失敗しました。/ Failed to read file.");
+      setErr(texts.readError);
     };
     reader.readAsDataURL(f);
   };
 
   return (
     <div>
-      <label className="block text-sm font-medium text-[var(--color-text-dark)] mb-1.5">{label}</label>
+      <FieldLabel label={label} />
       {file ? (
         <div className="flex items-center justify-between gap-2 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-3 py-2">
           <span className="truncate text-sm text-[#166534]">📎 {file.fileName}</span>
-          <button
-            type="button"
-            onClick={() => onPick(null)}
-            className="shrink-0 text-xs font-medium text-gray-500 underline"
-          >
-            変更 / Change
+          <button type="button" onClick={() => onPick(null)} className="shrink-0 text-xs font-medium text-gray-500 underline">
+            {texts.change}
           </button>
         </div>
       ) : (
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-white px-3 py-3 text-sm text-gray-500 hover:bg-gray-50">
-          <span>{reading ? "読み込み中…" : "ファイルを選ぶ / Choose file"}</span>
+          <span>{reading ? "…" : texts.choose}</span>
           <input type="file" className="hidden" onChange={(e) => handle(e.currentTarget)} />
         </label>
       )}

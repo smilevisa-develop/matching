@@ -14,6 +14,7 @@
  */
 
 import { runFullSheetSync } from "@/lib/full-sheet-sync";
+import { requestKpiSheetSync } from "@/lib/kpi-sheet-sync";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,5 +50,8 @@ export async function GET(req: Request) {
     return Response.json({ ok: false, error: auth.reason ?? "unauthorized" }, { status: 401 });
   }
 
-  return runFullSheetSync();
+  const res = await runFullSheetSync();
+  // 人材紹介KPI シート (自動転記タブ) の今月の数字も、取りこぼしの保険として毎時書く
+  await requestKpiSheetSync();
+  return res;
 }

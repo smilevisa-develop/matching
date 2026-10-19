@@ -11,6 +11,7 @@ import CandidateKanban, {
 import { dealGroup } from "@/lib/deal-stages";
 import { isTestCompany } from "@/lib/test-companies";
 import { buildDailyReport, type ReportFollowUp } from "@/lib/daily-report";
+import type { MonthStats } from "@/lib/month-stats";
 
 export type DailyDeal = {
   /** 行のキー (求人があれば deal-ID、無ければ company-ID) */
@@ -33,26 +34,6 @@ export type DailyDeal = {
   memo: string | null;
   isTest: boolean;
   candidates: CandidateCard[];
-};
-
-/** 選んだ月の実績 (page.tsx で数える) */
-export type MonthStats = {
-  /** その月に接続 (カンバンに入れた) 人数 */
-  connected: number;
-  /** その月に事前面談済みにした人数 */
-  preInterviewed: number;
-  /** その月に推薦済みにした人数 */
-  recommended: number;
-  /** 今「推薦済み」にいる人数 (月に関係なく今の状態) */
-  waitingInterview: number;
-  /** その月に面接済みにした人数 */
-  interviewed: number;
-  /** 今「面接済み」にいる人数 (月に関係なく今の状態) */
-  waitingResult: number;
-  /** その月に内定済みにした人数 */
-  offers: number;
-  /** その月に内定承諾にした人数 */
-  accepted: number;
 };
 
 type CountKey = "requiredCount" | "recommendedCount" | "interviewCount" | "offerCount";

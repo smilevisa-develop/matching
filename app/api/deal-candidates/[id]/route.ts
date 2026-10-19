@@ -11,6 +11,7 @@ import {
 } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 import { writeStageDateToSheet } from "@/lib/candidate-date-sheet";
+import { requestKpiSheetSync } from "@/lib/kpi-sheet-sync";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -105,6 +106,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     // 数字が変わったら企業データベース(スプシ)へも反映する (応答は待たせない)
     after(() => requestCompanyDatabaseSync());
+    // 人材紹介KPI シート (自動転記タブ) の今月の数字も更新する
+    if (stageChanged) after(() => requestKpiSheetSync());
 
     return Response.json({ ok: true, candidate, counters });
   } catch (error) {

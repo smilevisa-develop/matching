@@ -18,6 +18,24 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+const QR_MAX_BYTES = 5 * 1024 * 1024;
+const QR_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/** LINE QR の画像 (dataURL) を保存して配信 URL を返す。画像でない / 大きすぎるときは null */
+async function saveQrImage(dataUrl: unknown): Promise<string | null> {
+  if (typeof dataUrl !== "string") return null;
+  const m = dataUrl.match(/^data:([^;,]+)(?:;[^,]*)?;base64,(.+)$/);
+  if (!m || !QR_MIME.has(m[1])) return null;
+  const buf = Buffer.from(m[2], "base64");
+  if (buf.length === 0 || buf.length > QR_MAX_BYTES) return null;
+  const saved = await prisma.uploadedFile.create({
+    data: { filename: "line-qr", mimeType: m[1], sizeBytes: buf.length, data: buf, expiresAt: null },
+    select: { id: true },
+  });
+  return `/api/files/${saved.id}`;
+}
 
 const str = (v: unknown, max = 500): string | null => {
   if (typeof v !== "string") return null;
@@ -40,8 +58,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     if (!name) return Response.json({ ok: false, error: "社名 / 団体名を入力してください" }, { status: 400 });
     const email = str(body.email, 200);
     const contactName = str(body.contactName, 200);
-    if (!email && !str(body.lineContact)) {
-      return Response.json({ ok: false, error: "メールか LINE のどちらかを入力してください" }, { status: 400 });
+    if (!email && !str(body.lineContact) && typeof body.lineQrDataUrl !== "string") {
+      return Response.json({ ok: false, error: "メールか LINE (ID または QR 画像) のどちらかを入力してください" }, { status: 400 });
     }
 
     const exists = await prisma.partner.findFirst({ where: { name: { equals: name, mode: "insensitive" } }, select: { id: true } });
@@ -51,6 +69,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
 
     const role = str(body.role);
     const scope = str(body.introducibleScope);
+    const lineQrUrl = await saveQrImage(body.lineQrDataUrl);
     const partner = await prisma.partner.create({
       data: {
         name,
@@ -59,6 +78,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
         country: str(body.country, 100),
         email,
         snsContact: str(body.lineContact, 500),
+        lineQrUrl,
         introducibleScope: scope && (INTRODUCIBLE_SCOPES as readonly string[]).includes(scope) ? scope : null,
         introducibleNationalities: toCsv(pick(body.introducibleNationalities, INTRODUCIBLE_NATIONALITIES)),
         introducibleFields: toCsv(pick(body.introducibleFields, INTRODUCIBLE_FIELDS)),

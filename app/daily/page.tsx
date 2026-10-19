@@ -3,25 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
 import { getCoreSettings } from "@/lib/app-settings";
 import RefreshOnFocus from "@/app/components/RefreshOnFocus";
-import { normalizeDealStatus, readStageDates } from "@/lib/deal-stages";
-import { TEST_COMPANY_EXTERNAL_IDS, isTestCompany } from "@/lib/test-companies";
+import { normalizeDealStatus } from "@/lib/deal-stages";
+import { isTestCompany } from "@/lib/test-companies";
 import { calcUrgency, resolveStage } from "@/lib/onboarding-flow";
-import DailyClient, { type DailyDeal, type MonthStats } from "./DailyClient";
+import { computeMonthStats, currentMonthJst, isMonthKey, shiftMonth } from "@/lib/month-stats";
+import DailyClient, { type DailyDeal } from "./DailyClient";
 
 export const dynamic = "force-dynamic";
-
-const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-
-/** 今月 (日本時間) を "YYYY-MM" で */
-function currentMonthJst(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit" }).format(new Date());
-}
-
-function shiftMonth(month: string, delta: number): string {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
 
 /**
  * 進捗管理 (毎日の報告 Word の置き換え)。1 求人 1 行。
@@ -38,7 +26,7 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
   await requireCurrentAccount();
   const { month: requested } = await searchParams;
   const thisMonth = currentMonthJst();
-  const month = requested && MONTH_RE.test(requested) ? requested : thisMonth;
+  const month = isMonthKey(requested) ? requested : thisMonth;
 
   const candidateSelect = {
     orderBy: { updatedAt: "desc" as const },
@@ -154,53 +142,8 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
 
   const target = settings.monthlyTargets.find((t) => t.month === month);
 
-  // ── 選んだ月の実績 (テスト企業は数えない) ──
-  const stats: MonthStats = {
-    connected: 0,
-    preInterviewed: 0,
-    recommended: 0,
-    waitingInterview: 0,
-    interviewed: 0,
-    waitingResult: 0,
-    offers: 0,
-    accepted: 0,
-  };
-  for (const c of companies) {
-    if (isTestCompany(c.externalId)) continue;
-    for (const d of c.deals) {
-      for (const cand of d.candidates) {
-        // 日付が記録されている分だけ数える (2026/10/13 の一括取込より前の紐づけ日と、ボードの内定日は移行時に入れてある。
-        // それ以外は、この機能を入れてからカンバンで動かした分から記録される)
-        const dates = readStageDates(cand.stageDates);
-        const inMonth = (ymd: string | undefined) => Boolean(ymd && ymd.startsWith(month));
-        if (inMonth(dates["接続済み"])) stats.connected++;
-        if (inMonth(dates["事前面談済み"])) stats.preInterviewed++;
-        if (inMonth(dates["推薦済み"])) stats.recommended++;
-        if (inMonth(dates["面接済み"])) stats.interviewed++;
-        if (inMonth(dates["内定済み"])) stats.offers++;
-        if (inMonth(dates["内定承諾"])) stats.accepted++;
-        if (cand.stage === "推薦済み") stats.waitingInterview++;
-        if (cand.stage === "面接済み") stats.waitingResult++;
-      }
-    }
-  }
-  // 内定者管理ボードに手入力した内定日も数える (カンバンに紐づいていない内定者の分)
-  const monthStart = new Date(`${month}-01T00:00:00+09:00`);
-  const nextMonthStart = new Date(`${shiftMonth(month, 1)}-01T00:00:00+09:00`);
-  const inMonth = { gte: monthStart, lt: nextMonthStart };
-  const boardOffers = await prisma.personPlacement.count({
-    where: {
-      OR: [{ offerAt: inMonth }, { offerAt: null, offerAcceptedAt: inMonth }],
-      // カンバンで内定済みになっている人は上で数えているので除く / テスト企業だけに紐づく人は数えない
-      person: {
-        dealCandidates: {
-          none: { stage: { in: ["内定済み", "内定承諾"] } },
-        },
-        NOT: { dealCandidates: { some: { deal: { company: { externalId: { in: TEST_COMPANY_EXTERNAL_IDS } } } } } },
-      },
-    },
-  });
-  stats.offers += boardOffers;
+  // ── 選んだ月の実績 (lib/month-stats.ts。KPI シートへの転記と同じ数え方) ──
+  const stats = await computeMonthStats(month);
 
   const rows: DailyDeal[] = [];
   for (const c of [...companies].sort(byExternalId)) {

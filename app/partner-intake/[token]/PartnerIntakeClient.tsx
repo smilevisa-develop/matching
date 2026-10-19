@@ -29,6 +29,9 @@ export default function PartnerIntakeClient({ token }: { token: string }) {
     feeAmount: "",
     minFeeAmount: "",
   });
+  // LINE の QR コード画像 (dataURL で送る)
+  const [qr, setQr] = useState<{ dataUrl: string; name: string } | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,8 +51,8 @@ export default function PartnerIntakeClient({ token }: { token: string }) {
       setError("社名 / 団体名を入力してください");
       return;
     }
-    if (!form.email.trim() && !form.lineContact.trim()) {
-      setError("メールか LINE のどちらかを入力してください");
+    if (!form.email.trim() && !form.lineContact.trim() && !qr) {
+      setError("メールか LINE (ID または QR 画像) のどちらかを入力してください / Email or LINE is required");
       return;
     }
     setSending(true);
@@ -57,7 +60,7 @@ export default function PartnerIntakeClient({ token }: { token: string }) {
       const res = await fetch(`/api/partner-intake/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, lineQrDataUrl: qr?.dataUrl ?? null }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
@@ -117,8 +120,44 @@ export default function PartnerIntakeClient({ token }: { token: string }) {
           </Field>
           <Field label="LINE ID または 招待リンク (LINE ID / invite link)">
             <input className={INPUT} value={form.lineContact} onChange={(e) => set("lineContact", e.target.value)} placeholder="例: @abc123 / https://line.me/ti/g/..." />
-            <p className="mt-1 text-[11px] text-gray-400">QR コードの画像は、担当者とのやり取りの中でお送りください。</p>
           </Field>
+          <div>
+            <span className="mb-1 block text-xs font-medium text-gray-600">LINE の QR コード画像 (LINE QR code image)</span>
+            {qr ? (
+              <div className="flex items-center gap-3 rounded-lg border border-gray-200 p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qr.dataUrl} alt="LINE QR" className="h-20 w-20 rounded object-contain" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs text-gray-600">{qr.name}</p>
+                  <button type="button" onClick={() => setQr(null)} className="mt-1 text-xs text-gray-500 underline">
+                    変更 / Change
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white px-3 py-3 text-sm text-gray-500 hover:bg-gray-50">
+                画像を選ぶ / Choose image (JPG / PNG, 5MB まで)
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.currentTarget.files?.[0];
+                    if (!f) return;
+                    if (f.size > 5 * 1024 * 1024) {
+                      setQrError("画像が大きすぎます (5MB まで) / Image too large (max 5MB)");
+                      return;
+                    }
+                    setQrError(null);
+                    const reader = new FileReader();
+                    reader.onload = () => setQr({ dataUrl: String(reader.result ?? ""), name: f.name });
+                    reader.readAsDataURL(f);
+                  }}
+                />
+              </label>
+            )}
+            {qrError ? <p className="mt-1 text-[11px] text-red-600">{qrError}</p> : null}
+          </div>
         </Section>
 
         <Section title="紹介できる人材 / Candidates you can introduce">

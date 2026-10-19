@@ -90,6 +90,7 @@ export default async function PartnerDetailPage({
     relationshipStatus: partner.relationshipStatus,
     email: partner.email,
     snsContact: partner.snsContact,
+    lineQrUrl: partner.lineQrUrl,
     features: partner.features,
     introducibleNationalities: partner.introducibleNationalities,
     introducibleScope: partner.introducibleScope,
