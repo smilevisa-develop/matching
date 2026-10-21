@@ -83,19 +83,25 @@ export async function computeKpiDashboard(period: KpiPeriod) {
   const joined = placements.filter((p) => p.joinAt && inPeriod(ymdJst(p.joinAt))).length;
 
   // ── 転換率 (期間) ──
-  // 分母と分子を同じ記録 (カンバンの日付) だけで数える。内定者管理の内定日を混ぜると、
-  // 面接の記録が無い内定が増えて 300% のようなおかしな値になるため
-  const kc: Record<string, number> = Object.fromEntries(STAGES.map(([, label]) => [label, 0]));
-  for (const c of real) {
-    const d = readStageDates(c.stageDates);
-    for (const [stage, label] of STAGES) if (inPeriod(d[stage])) kc[label]++;
-  }
+  // 「期間内にその段階に入った人のうち、次の段階まで進んだ人」の割合 (同じ人どうしで比べるので 100% を超えない)。
+  // 件数どうしの割り算にすると、記録の時期のずれで 300% のような値になるため
   const rate = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : null);
+  const cohort = (from: string, to: string, label: string) => {
+    let base = 0;
+    let reached = 0;
+    for (const c of real) {
+      const d = readStageDates(c.stageDates);
+      if (!inPeriod(d[from])) continue;
+      base++;
+      if (d[to]) reached++;
+    }
+    return { label, value: rate(reached, base), base: `${reached} / ${base}名` };
+  };
   const conversions = [
-    { label: "推薦 → 面接", value: rate(kc["面接"], kc["推薦"]), base: `${kc["面接"]} / ${kc["推薦"]}` },
-    { label: "面接 → 内定", value: rate(kc["内定"], kc["面接"]), base: `${kc["内定"]} / ${kc["面接"]}` },
-    { label: "内定 → 内定承諾", value: rate(kc["内定承諾"], kc["内定"]), base: `${kc["内定承諾"]} / ${kc["内定"]}` },
-    { label: "内定辞退 / 内定", value: rate(kc["内定辞退"], kc["内定"]), base: `${kc["内定辞退"]} / ${kc["内定"]}` },
+    cohort("推薦済み", "面接済み", "推薦 → 面接"),
+    cohort("面接済み", "内定済み", "面接 → 内定"),
+    cohort("内定済み", "内定承諾", "内定 → 内定承諾"),
+    cohort("内定済み", "内定辞退", "内定 → 内定辞退"),
   ];
 
   // ── かかった日数 (後ろの段階の日付が期間内のもの) ──

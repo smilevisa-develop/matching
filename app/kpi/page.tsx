@@ -64,7 +64,7 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card title="転換率">
+        <Card title="転換率（期間内にその段階に入った人のうち、次へ進んだ人）">
           <ul className="divide-y divide-gray-100 text-sm">
             {k.conversions.map((c) => (
               <li key={c.label} className="flex items-center justify-between py-2">
@@ -161,7 +161,7 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
       </div>
 
       <p className="text-xs text-gray-400">
-        ※ 推薦・面接などの件数と日数は、カンバンで候補者を動かしたときに入れた日付で数えます。転換率はカンバンの記録どうしで計算しています。
+        ※ 推薦・面接などの件数と日数は、カンバンで候補者を動かしたときに入れた日付で数えます。転換率は「期間内にその段階に入った人のうち、次の段階まで進んだ人」の割合です。
         段階を飛ばして進めた分 (接続済み → 内定承諾 など) は件数には入れ、日数には入れていません。2026/10/19 より前の動きは日付の記録が無いため、
         それ以前の月は少なく出ます（内定・内定承諾は内定者管理の日付も使っています）。累計は案件ごとの人数の合計で、過去分も含みます。テスト企業は除いています。
       </p>
