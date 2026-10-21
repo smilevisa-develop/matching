@@ -45,8 +45,17 @@ export async function POST(req: Request, { params }: { params: Params }) {
     await requireApiAccount();
     const { id } = await params;
     const personId = Number(id);
-    const body = await req.json();
-    const files: IncomingFile[] = Array.isArray(body?.files) ? body.files : [];
+    let body: { files?: unknown };
+    try {
+      body = await req.json();
+    } catch {
+      // 送られてきたファイルが大きすぎて途中で切れたとき
+      return Response.json(
+        { ok: false, error: "ファイルが大きすぎて受け取れませんでした。枚数を減らすか、2 回に分けて取り込んでください。" },
+        { status: 413 },
+      );
+    }
+    const files: IncomingFile[] = Array.isArray(body?.files) ? (body.files as IncomingFile[]) : [];
 
     if (files.length === 0) {
       return Response.json({ ok: false, error: "ファイルを1つ以上アップロードしてください" }, { status: 400 });

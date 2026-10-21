@@ -189,7 +189,10 @@ function ExtractModal({
         alert(`${file.name} は 20MB を超えるためスキップしました`);
         continue;
       }
-      const dataUrl = await readAsDataUrl(file);
+      // スマホの写真は 1 枚 5〜10MB あるので、読み取りに困らない大きさ (長辺 2200px) に縮めてから送る
+      const dataUrl = file.type.startsWith("image/") && file.size > 1.5 * 1024 * 1024
+        ? await shrinkImage(file).catch(() => readAsDataUrl(file))
+        : await readAsDataUrl(file);
       next.push({
         id: `${Date.now()}-${file.name}`,
         fileName: file.name,
@@ -206,6 +209,12 @@ function ExtractModal({
   const runExtract = async () => {
     if (files.length === 0) {
       alert("ファイルを1つ以上アップロードしてください");
+      return;
+    }
+    // 送る量の上限 (base64 で 45MB)。超えるとサーバーで受け取れない
+    const totalBytes = files.reduce((n, f) => n + f.dataUrl.length, 0);
+    if (totalBytes > 45 * 1024 * 1024) {
+      alert("ファイルの合計が大きすぎます。枚数を減らすか、2 回に分けて取り込んでください。");
       return;
     }
     setStage("extracting");
@@ -713,6 +722,27 @@ function FieldComparisonRow({
       </div>
     </div>
   );
+}
+
+/** 画像を長辺 2200px までの JPEG に縮める (文字が読める大きさは保つ) */
+async function shrinkImage(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = url;
+    });
+    const scale = Math.min(1, 2200 / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function readAsDataUrl(file: File): Promise<string> {

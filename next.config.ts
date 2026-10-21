@@ -11,6 +11,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
+  experimental: {
+    // AI取込 (履歴書・在留カードの写真や PDF を base64 で送る) は 10MB を超えることがある。
+    // 既定の 10MB だと途中で切れて 500 になっていた (2026/10/21 候補者 429)
+    proxyClientMaxBodySize: "60mb",
+  },
 };
 
 export default nextConfig;
