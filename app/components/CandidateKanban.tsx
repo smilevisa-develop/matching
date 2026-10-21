@@ -45,7 +45,7 @@ const STAGE_DOT: Record<string, string> = {
   書類NG: "bg-[#FB923C]",
   面談NG: "bg-[#EC4899]",
   選考NG: "bg-[#F97316]",
-  不合格: "bg-[#EF4444]",
+  内定取り消し: "bg-[#B91C1C]",
 };
 
 /** 候補者カード見出し用: 「001 DAO VAN HOANG」形式 (英語名がなければカナ名) */
@@ -85,8 +85,8 @@ export default function CandidateKanban({
   candidates: CandidateCard[];
   /**
    * 列の並べ方。
-   *   split   … 2 段組。上の段に進行中の列、下の段に辞退・NG・不合格 (企業詳細)
-   *   compact … 進行中の列を広くとり、辞退・NG・不合格は右側に 2 段に重ねる (進捗管理の表の中)
+   *   split   … 2 段組。上の段に進行中の列、下の段に辞退・取り消し・NG (企業詳細)
+   *   compact … 進行中の列を広くとり、辞退・取り消し・NGは右側に 2 段に重ねる (進捗管理の表の中)
    */
   layout?: "split" | "compact";
   /** 企業の区分。人材紹介会社なら 内定 → 入社待ち → 入社済み の列になる */
@@ -254,7 +254,7 @@ export default function CandidateKanban({
       );
       };
       return layout === "compact" ? (
-        // 進捗管理: 進行中の列を広く、辞退・NG・不合格は右側に 2 段 (3 列 × 2 段) に重ねる
+        // 進捗管理: 進行中の列を広く、辞退・取り消し・NGは右側に 2 段 (3 列 × 2 段) に重ねる
         <div className="flex gap-1.5 pb-1">
           <div className="flex min-w-0 flex-[2] gap-1.5">
             {activeColumns.map((c) => renderColumn(c, "max-h-[calc(100vh-18rem)] flex-1 basis-0"))}
@@ -264,7 +264,7 @@ export default function CandidateKanban({
           </div>
         </div>
       ) : (
-        // 企業詳細: 2 段組。上の段に進行中の列 (広く)、下の段に辞退・NG・不合格
+        // 企業詳細: 2 段組。上の段に進行中の列 (広く)、下の段に辞退・取り消し・NG
         <div className="space-y-1.5 pb-1">
           <div className="flex gap-1.5">{activeColumns.map((c) => renderColumn(c, "max-h-[calc(100vh-24rem)] min-h-[10rem] flex-1 basis-0"))}</div>
           <div className="flex gap-1.5">{exitColumns.map((c) => renderColumn(c, "max-h-[14rem] min-h-[6rem] flex-1 basis-0"))}</div>

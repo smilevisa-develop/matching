@@ -58,7 +58,7 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
           <Stat label="入社" value={k.joined} />
         </div>
         <p className="mt-3 text-xs text-gray-500">
-          接続 {k.counts["接続"]} ・ 事前面談 {k.counts["事前面談"]} ・ 応募辞退 {k.counts["応募辞退"]} ・ 不合格 {k.counts["不合格"]} ・ 書類NG {k.counts["書類NG"]} ・ 面談NG{" "}
+          接続 {k.counts["接続"]} ・ 事前面談 {k.counts["事前面談"]} ・ 応募辞退 {k.counts["応募辞退"]} ・ 内定取り消し {k.counts["内定取り消し"]} ・ 書類NG {k.counts["書類NG"]} ・ 面談NG{" "}
           {k.counts["面談NG"]} ・ 選考NG {k.counts["選考NG"]}
         </p>
       </Card>
@@ -103,7 +103,7 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
           <thead>
             <tr className="text-left text-xs text-gray-500">
               <th className="py-2">月</th>
-              {["新規候補者", "推薦", "面接", "内定", "内定辞退", "不合格"].map((h) => (
+              {["新規候補者", "推薦", "面接", "内定", "内定辞退", "選考NG"].map((h) => (
                 <th key={h} className="py-2 text-right">
                   {h}
                 </th>
@@ -153,7 +153,7 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
             <Stat label="面接" value={k.totals.interview} />
             <Stat label="内定" value={k.totals.offer} strong />
             <Stat label="内定辞退" value={k.totals.decline} />
-            <Stat label="不合格" value={k.totals.reject} />
+            <Stat label="選考NG" value={k.totals.reject} />
             <Stat label="入社" value={k.totals.joined} />
             <Stat label="求人" value={k.totals.deals} />
           </div>
