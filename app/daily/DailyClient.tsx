@@ -128,7 +128,7 @@ export default function DailyClient({
           </thead>
           <tbody>
             {rows.map((d, idx) => {
-              // 同じ企業の 2 行目以降 (案件が複数ある企業)。各行に企業名を出すが、注記は 1 行目だけ
+              // 同じ企業の 2 行目以降 (案件が複数ある企業) は区切り線を点線にして、同じ企業と分かるようにする
               const continued = idx > 0 && rows[idx - 1].companyId === d.companyId;
               return (
               <Fragment key={d.rowKey}>
@@ -143,13 +143,8 @@ export default function DailyClient({
                   </td>
                   <td className="px-4 py-3 font-medium text-[var(--color-text-dark)]">
                     {d.companyName}
-                    {/* 案件が複数ある企業は、各行に企業名 + 案件名を出す (1 件しか無いように見えないように) */}
-                    {d.dealTitle ? (
-                      <span className="mt-0.5 block text-xs font-normal text-gray-500">
-                        案件: {d.dealTitle}
-                        {continued ? null : <span className="ml-1 text-gray-400">(複数の案件あり)</span>}
-                      </span>
-                    ) : null}
+                    {/* 案件が複数ある企業は 1 案件 1 行で、各行とも企業名の下に案件名を 2 段目で出す */}
+                    {d.dealTitle ? <span className="mt-0.5 block text-xs font-normal text-gray-500">{d.dealTitle}</span> : null}
                   </td>
                   <td className="px-4 py-3 text-gray-600">{d.ownerName ?? "-"}</td>
                   {COUNTS.map((c) => (
