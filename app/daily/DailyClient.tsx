@@ -202,6 +202,7 @@ export default function DailyClient({
                         return (
                           <>
                             <CandidateKanban
+                              layout="compact"
                               companyKind={d.companyKind}
                               candidates={shown}
                               onMove={(id, stage, date) => void moveCandidate(id, stage, date)}

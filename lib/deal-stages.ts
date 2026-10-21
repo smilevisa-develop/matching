@@ -21,6 +21,8 @@ export const CANDIDATE_STAGES = [
   // 人材紹介会社 (WILLOF・ADECCO など) の企業だけで使う。内定のあとは 入社待ち → 入社済み で終わる
   "入社待ち",
   "入社済み",
+  // 外れた人 (選考から外れた列)。カンバンでは下の段 / 右側にまとめて置く
+  "応募辞退",
   "内定辞退",
   "書類NG",
   "面談NG",
@@ -29,6 +31,9 @@ export const CANDIDATE_STAGES = [
 ] as const;
 
 export type CandidateStage = (typeof CANDIDATE_STAGES)[number];
+
+/** 選考から外れた列 (辞退・NG・不合格)。カンバンでは進行中の列と分けて置く */
+export const EXIT_STAGES: readonly string[] = ["応募辞退", "内定辞退", "書類NG", "面談NG", "選考NG", "不合格"];
 
 /** 企業の区分 (Company.companyKind) */
 export const COMPANY_KINDS = ["通常", "人材紹介会社"] as const;
@@ -67,6 +72,7 @@ export const STAGE_DATE_LABELS: Record<string, string> = {
   内定承諾: "内定承諾日",
   入社待ち: "入社予定日",
   入社済み: "入社日",
+  応募辞退: "辞退の連絡日",
   内定辞退: "辞退日",
   不合格: "不合格の連絡日",
 };

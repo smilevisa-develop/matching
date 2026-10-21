@@ -58,7 +58,7 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
           <Stat label="入社" value={k.joined} />
         </div>
         <p className="mt-3 text-xs text-gray-500">
-          接続 {k.counts["接続"]} ・ 事前面談 {k.counts["事前面談"]} ・ 不合格 {k.counts["不合格"]} ・ 書類NG {k.counts["書類NG"]} ・ 面談NG{" "}
+          接続 {k.counts["接続"]} ・ 事前面談 {k.counts["事前面談"]} ・ 応募辞退 {k.counts["応募辞退"]} ・ 不合格 {k.counts["不合格"]} ・ 書類NG {k.counts["書類NG"]} ・ 面談NG{" "}
           {k.counts["面談NG"]} ・ 選考NG {k.counts["選考NG"]}
         </p>
       </Card>
