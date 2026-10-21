@@ -127,20 +127,34 @@ export default function DailyClient({
             </tr>
           </thead>
           <tbody>
-            {rows.map((d) => (
+            {rows.map((d, idx) => {
+              // 同じ企業の 2 行目以降 (案件が複数ある企業) は企業名を繰り返さず、案件名だけを字下げして出す
+              const continued = idx > 0 && rows[idx - 1].companyId === d.companyId;
+              return (
               <Fragment key={d.rowKey}>
                 <tr
                   onClick={() => setOpenId((cur) => (cur === d.rowKey ? null : d.rowKey))}
-                  className={`cursor-pointer border-t border-gray-100 hover:bg-gray-50 ${
+                  className={`cursor-pointer hover:bg-gray-50 ${continued ? "border-t border-dashed border-gray-100" : "border-t border-gray-100"} ${
                     openId === d.rowKey ? "bg-gray-50" : ""
                   }`}
                 >
                   <td className="px-4 py-3 font-mono text-[13px] text-[var(--color-primary)]">
-                    {d.companyExternalId ?? "-"}
+                    {continued ? "" : d.companyExternalId ?? "-"}
                   </td>
                   <td className="px-4 py-3 font-medium text-[var(--color-text-dark)]">
-                    {d.companyName}
-                    {d.dealTitle ? <span className="mt-0.5 block text-xs font-normal text-gray-500">{d.dealTitle}</span> : null}
+                    {continued ? (
+                      <span className="block pl-4 text-sm font-normal text-gray-600">└ {d.dealTitle}</span>
+                    ) : (
+                      <>
+                        {d.companyName}
+                        {d.dealTitle ? (
+                          <span className="mt-0.5 block text-xs font-normal text-gray-500">
+                            {d.dealTitle}
+                            <span className="ml-1 text-gray-400">(案件が複数)</span>
+                          </span>
+                        ) : null}
+                      </>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-600">{d.ownerName ?? "-"}</td>
                   {COUNTS.map((c) => (
@@ -181,7 +195,8 @@ export default function DailyClient({
                   </tr>
                 ) : null}
               </Fragment>
-            ))}
+              );
+            })}
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={COUNTS.length + 4} className="px-4 py-8 text-center text-gray-400">
