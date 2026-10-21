@@ -90,6 +90,8 @@ export async function computeMonthStats(month: string): Promise<MonthStats> {
     if (inMonth(dates["面接済み"])) stats.interviewed++;
     if (inMonth(dates["内定済み"])) stats.offers++;
     if (inMonth(dates["内定承諾"])) stats.accepted++;
+    // 人材紹介会社の候補者は内定者管理に載らないので、入社はカンバンの「入社済み」で数える
+    if (inMonth(dates["入社済み"])) stats.joined++;
     // 待ちの人数は、まだ募集している企業の人だけ (止めた企業に残ったままの人は待っていないため)
     const stillOpen = dealGroup(normalizeDealStatus(cand.deal.status)) !== "stopped";
     if (stillOpen && cand.stage === "推薦済み") stats.waitingInterview++;
@@ -123,7 +125,7 @@ export async function computeMonthStats(month: string): Promise<MonthStats> {
   ]);
   stats.offers += boardOffers;
   stats.leads = leads;
-  stats.joined = joined;
+  stats.joined += joined;
   stats.newDeals = newDeals;
   return stats;
 }

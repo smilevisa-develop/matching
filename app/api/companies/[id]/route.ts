@@ -43,8 +43,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const body = await req.json();
     const supportType =
       body.supportType === "自社支援" || body.supportType === "委託管理" ? (body.supportType as string) : undefined;
-    if (body.externalId === undefined && supportType) {
-      const company = await prisma.company.update({ where: { id: Number(id) }, data: { supportType } });
+    const companyKind =
+      body.companyKind === "通常" || body.companyKind === "人材紹介会社" ? (body.companyKind as string) : undefined;
+    if (body.externalId === undefined && (supportType || companyKind)) {
+      const company = await prisma.company.update({
+        where: { id: Number(id) },
+        data: { ...(supportType ? { supportType } : {}), ...(companyKind ? { companyKind } : {}) },
+      });
       return Response.json({ ok: true, company });
     }
     const externalId = String(body.externalId ?? "").trim().toLowerCase();
@@ -63,7 +68,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     const company = await prisma.company.update({
       where: { id: Number(id) },
-      data: { externalId, ...(supportType ? { supportType } : {}) },
+      data: { externalId, ...(supportType ? { supportType } : {}), ...(companyKind ? { companyKind } : {}) },
     });
     after(() => requestCompanyDatabaseSync());
     return Response.json({ ok: true, company });

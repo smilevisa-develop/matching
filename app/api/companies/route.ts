@@ -3,9 +3,16 @@ import { requireApiAccount, AuthError } from "@/lib/auth";
 import { after } from "next/server";
 import { nextCompanyExternalId, requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 
-export async function GET() {
+/** 次に使える企業ID (?nextId=人材紹介会社 / 通常) を返す */
+async function nextIdResponse(kind: string) {
+  return Response.json({ ok: true, externalId: await nextCompanyExternalId(kind) });
+}
+
+export async function GET(req: Request) {
   try {
     await requireApiAccount();
+    const nextId = new URL(req.url).searchParams.get("nextId");
+    if (nextId) return nextIdResponse(nextId);
     const companies = await prisma.company.findMany({
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
     });
@@ -30,8 +37,9 @@ export async function POST(req: Request) {
 
     // 企業IDが空欄だとスプシの企業マスタに載せられず、案件も反映できない。
     // 空欄なら次の空き番号 (例: 70sv) を自動で付ける。
+    const companyKind = body.companyKind === "人材紹介会社" ? "人材紹介会社" : "通常";
     const externalId =
-      String(body.externalId ?? "").trim().toLowerCase() || (await nextCompanyExternalId());
+      String(body.externalId ?? "").trim().toLowerCase() || (await nextCompanyExternalId(companyKind));
     if (externalId) {
       const duplicate = await prisma.company.findUnique({ where: { externalId } });
       if (duplicate) {
@@ -45,6 +53,9 @@ export async function POST(req: Request) {
         industry: String(body.industry ?? "").trim() || null,
         location: String(body.location ?? "").trim() || null,
         hiringStatus: String(body.hiringStatus ?? "").trim() || "募集中",
+        companyKind,
+        // 人材紹介会社の内定者は内定者管理ボードに出さない (支援もしない)
+        ...(companyKind === "人材紹介会社" ? { supportType: "委託管理" } : {}),
         driveFolderUrl: String(body.driveFolderUrl ?? "").trim() || null,
         notes: String(body.notes ?? "").trim() || null,
       },

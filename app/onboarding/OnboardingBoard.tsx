@@ -221,7 +221,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
               onClick={() => setShowOutsourced((v) => !v)}
               className="text-xs text-gray-500 underline decoration-dotted hover:text-[var(--color-primary)]"
             >
-              {showOutsourced ? `委託管理 ${outsourcedCount} 名を隠す` : `委託管理 ${outsourcedCount} 名は非表示`}
+              {showOutsourced ? `委託管理・人材紹介会社 ${outsourcedCount} 名を隠す` : `委託管理・人材紹介会社 ${outsourcedCount} 名は非表示`}
             </button>
           ) : null}
           <button

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import PersonAvatar from "@/app/components/PersonAvatar";
-import { CANDIDATE_STAGES, STAGE_DATE_LABELS, todayJst } from "@/lib/deal-stages";
+import { STAGE_DATE_LABELS, stagesForKind, todayJst } from "@/lib/deal-stages";
 
 /**
  * 候補者のカンバン。企業詳細と進捗管理 (行を開いたとき) の両方で同じものを使う。
@@ -38,6 +38,8 @@ const STAGE_DOT: Record<string, string> = {
   面接済み: "bg-[#22D3EE]",
   内定済み: "bg-[#22C55E]",
   内定承諾: "bg-[#15803D]",
+  入社待ち: "bg-[#0EA5E9]",
+  入社済み: "bg-[#0F766E]",
   内定辞退: "bg-[#9CA3AF]",
   書類NG: "bg-[#FB923C]",
   面談NG: "bg-[#EC4899]",
@@ -76,8 +78,11 @@ export default function CandidateKanban({
   candidates,
   onMove,
   onRemove,
+  companyKind = "通常",
 }: {
   candidates: CandidateCard[];
+  /** 企業の区分。人材紹介会社なら 内定 → 入社待ち → 入社済み の列になる */
+  companyKind?: string;
   /** 列をまたいで動かしたとき。date は入力した日付 (YYYY-MM-DD)。日付を聞かない列なら null */
   onMove: (candidateId: number, stage: string, date: string | null) => void;
   /** カードの × を押したとき (このカンバンから外す。確認と保存は呼び出し側) */
@@ -109,7 +114,7 @@ export default function CandidateKanban({
     <>
     {/* 全部の列を 1 画面に収める (横スクロールしない)。列数が多いぶん 1 列は細い */}
     <div className="flex gap-1.5 pb-1">
-    {CANDIDATE_STAGES.map((column) => {
+    {stagesForKind(companyKind).map((column) => {
       const columnCandidates = candidates.filter((candidate) => candidate.stage === column);
       const isTarget = dragging !== null && overColumn === column && dragging.stage !== column;
       return (

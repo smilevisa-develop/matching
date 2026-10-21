@@ -135,7 +135,7 @@ export function requestCompanyDatabaseSync(): Promise<CompanyDbSyncResult> {
  * 企業IDが空欄のまま作られた企業に付ける ID を決める ("NNsv" の次の空き番号)。
  * 企業IDが無い企業はスプシの企業マスタに載せられず、案件も反映できないため。
  */
-export async function nextCompanyExternalId(): Promise<string> {
+export async function nextCompanyExternalId(kind: string = "通常"): Promise<string> {
   const rows = await prisma.company.findMany({
     where: { externalId: { not: null } },
     select: { externalId: true },
@@ -145,5 +145,6 @@ export async function nextCompanyExternalId(): Promise<string> {
     const m = String(r.externalId).match(/^(\d{1,3})[a-z]{1,3}$/i);
     if (m) max = Math.max(max, Number(m[1]));
   }
-  return `${String(max + 1).padStart(2, "0")}sv`;
+  // 人材紹介会社は末尾を ag にして、通常の企業 (sv) と見分けられるようにする。番号は共通の通し番号
+  return `${String(max + 1).padStart(2, "0")}${kind === "人材紹介会社" ? "ag" : "sv"}`;
 }

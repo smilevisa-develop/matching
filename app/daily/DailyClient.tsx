@@ -28,6 +28,8 @@ export type DailyDeal = {
   offerCount: number;
   companyExternalId: string | null;
   companyName: string;
+  /** 通常 / 人材紹介会社 (人材紹介会社はカンバンが 入社待ち・入社済み になる) */
+  companyKind: string;
   ownerName: string | null;
   lastActivityAt: string | null;
   deadline: string | null;
@@ -42,7 +44,7 @@ export type DailyDeal = {
  * それ以外 (内定・内定承諾・辞退・NG・不合格 = 終わった人) は、そのステージに入った日が選んだ月の人だけ出す。
  * 日付の記録が無い終わった人 (2026/10/19 より前の動き) は過去の人として隠す。
  */
-const IN_PROGRESS_STAGES = new Set(["接続済み", "事前面談済み", "推薦済み", "面接済み"]);
+const IN_PROGRESS_STAGES = new Set(["接続済み", "事前面談済み", "推薦済み", "面接済み", "入社待ち"]);
 
 type CountKey = "requiredCount" | "recommendedCount" | "interviewCount" | "offerCount";
 
@@ -200,6 +202,7 @@ export default function DailyClient({
                         return (
                           <>
                             <CandidateKanban
+                              companyKind={d.companyKind}
                               candidates={shown}
                               onMove={(id, stage, date) => void moveCandidate(id, stage, date)}
                               onRemove={(candidate) => void removeCandidate(candidate)}

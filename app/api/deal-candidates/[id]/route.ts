@@ -4,7 +4,8 @@ import { AuthError, requireApiAccount } from "@/lib/auth";
 import { onDealCandidateStageChanged } from "@/lib/onboarding-autolink";
 import { after } from "next/server";
 import {
-  ACTIVE_CANDIDATE_STAGES,
+  isAgencyKind,
+  progressStagesForKind,
   readFilledStages,
   readStageDates,
   stageCounterDeltas,
@@ -35,22 +36,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     // ステージの移動に合わせて人数カウンターも動かす (カンバンと数字を常に揃えるため)。
     // 同時に動かされても二重に数えないよう、前のステージの読み取りから更新までを 1 つにまとめる。
-    const { candidate, counters, stageChanged } = await prisma.$transaction(async (tx) => {
+    const { candidate, counters, stageChanged, agency } = await prisma.$transaction(async (tx) => {
       const before = await tx.dealCandidate.findUniqueOrThrow({
         where: { id: Number(id) },
-        select: { stage: true, dealId: true, stageDates: true },
+        select: { stage: true, dealId: true, stageDates: true, deal: { select: { company: { select: { companyKind: true } } } } },
       });
+      const kind = before.deal.company.companyKind;
+      const progress = progressStagesForKind(kind);
       // ステージごとの日付を記録する (同じステージに留まるときは触らない)。
       // 途中を飛ばして進めたとき (事前面談済み → 内定済み など) は、飛ばした段階にも同じ日付を入れる
       // (人数カウンターと同じく「通過した」扱い。月別集計で漏れないようにする)
       const stageDates: Record<string, unknown> = readStageDates(before.stageDates);
       const filled = readFilledStages(before.stageDates);
       if (before.stage !== stage) {
-        const from = ACTIVE_CANDIDATE_STAGES.indexOf(before.stage);
-        const to = ACTIVE_CANDIDATE_STAGES.indexOf(stage);
+        const from = progress.indexOf(before.stage);
+        const to = progress.indexOf(stage);
         if (from >= 0 && to > from) {
           for (let i = from + 1; i < to; i++) {
-            const skipped = ACTIVE_CANDIDATE_STAGES[i];
+            const skipped = progress[i];
             if (!stageDates[skipped]) {
               stageDates[skipped] = date;
               filled.add(skipped);
@@ -82,18 +85,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         rejectCount: true,
       };
       const current = await tx.deal.findUniqueOrThrow({ where: { id: before.dealId }, select });
-      if (deltas.length === 0) return { candidate, counters: current, stageChanged: before.stage !== stage };
+      if (deltas.length === 0) return { candidate, counters: current, stageChanged: before.stage !== stage, agency: isAgencyKind(kind) };
       const counters = await tx.deal.update({
         where: { id: before.dealId },
         // 手で直した結果より多く戻されても 0 未満にはしない
         data: Object.fromEntries(deltas.map(([field, n]) => [field, Math.max(0, current[field] + n)])),
         select,
       });
-      return { candidate, counters, stageChanged: before.stage !== stage };
+      return { candidate, counters, stageChanged: before.stage !== stage, agency: isAgencyKind(kind) };
     });
 
-    // 内定済み / 内定承諾 になったら内定者管理ボードにカードを用意する (応答は待たせない)
-    after(async () => {
+    // 内定済み / 内定承諾 になったら内定者管理ボードにカードを用意する (応答は待たせない)。
+    // 人材紹介会社 (WILLOF・ADECCO など) の候補者は内定者管理に出さない
+    if (!agency) after(async () => {
       try {
         await onDealCandidateStageChanged(candidate.personId, stage, date);
       } catch (e) {

@@ -18,6 +18,9 @@ export const CANDIDATE_STAGES = [
   "面接済み",
   "内定済み",
   "内定承諾",
+  // 人材紹介会社 (WILLOF・ADECCO など) の企業だけで使う。内定のあとは 入社待ち → 入社済み で終わる
+  "入社待ち",
+  "入社済み",
   "内定辞退",
   "書類NG",
   "面談NG",
@@ -27,15 +30,29 @@ export const CANDIDATE_STAGES = [
 
 export type CandidateStage = (typeof CANDIDATE_STAGES)[number];
 
-/** 選考が進む列 (左から順)。それ以外は「外れた」列 */
-export const ACTIVE_CANDIDATE_STAGES: readonly string[] = [
-  "接続済み",
-  "事前面談済み",
-  "推薦済み",
-  "面接済み",
-  "内定済み",
-  "内定承諾",
-];
+/** 企業の区分 (Company.companyKind) */
+export const COMPANY_KINDS = ["通常", "人材紹介会社"] as const;
+export const AGENCY_KIND = "人材紹介会社";
+export const isAgencyKind = (kind: string | null | undefined) => kind === AGENCY_KIND;
+
+const AGENCY_ONLY_STAGES = new Set(["入社待ち", "入社済み"]);
+
+/** 企業の区分ごとのカンバンの列。通常の企業は 内定承諾 まで (その後は内定者管理)、人材紹介会社は 入社待ち・入社済み */
+export function stagesForKind(kind: string | null | undefined): readonly string[] {
+  return isAgencyKind(kind)
+    ? CANDIDATE_STAGES.filter((s) => s !== "内定承諾")
+    : CANDIDATE_STAGES.filter((s) => !AGENCY_ONLY_STAGES.has(s));
+}
+
+/** 選考が進む列 (左から順)。段階を飛ばして進めたときの日付埋めに使う */
+export function progressStagesForKind(kind: string | null | undefined): readonly string[] {
+  return isAgencyKind(kind)
+    ? ["接続済み", "事前面談済み", "推薦済み", "面接済み", "内定済み", "入社待ち", "入社済み"]
+    : ["接続済み", "事前面談済み", "推薦済み", "面接済み", "内定済み", "内定承諾"];
+}
+
+/** 通常の企業の、選考が進む列 */
+export const ACTIVE_CANDIDATE_STAGES: readonly string[] = progressStagesForKind("通常");
 
 /**
  * ステージに入れたときに聞く日付の名前 (カンバンで動かすと日付入力が出る)。
@@ -48,6 +65,8 @@ export const STAGE_DATE_LABELS: Record<string, string> = {
   面接済み: "企業面接日",
   内定済み: "内定日",
   内定承諾: "内定承諾日",
+  入社待ち: "入社予定日",
+  入社済み: "入社日",
   内定辞退: "辞退日",
   不合格: "不合格の連絡日",
 };
@@ -91,8 +110,10 @@ const PIPELINE: { stage: string; counter: CounterField | null }[] = [
   { stage: "推薦済み", counter: "recommendedCount" },
   { stage: "面接済み", counter: "interviewCount" },
   { stage: "内定済み", counter: "offerCount" },
-  // 内定承諾は内定の中の状態なので、人数カウンターは増やさない
+  // 内定承諾 / 入社待ち / 入社済み は内定のあとの状態なので、人数カウンターは増やさない
   { stage: "内定承諾", counter: null },
+  { stage: "入社待ち", counter: null },
+  { stage: "入社済み", counter: null },
 ];
 
 // 選考の流れから外れる列。入ったときに 1 増やし、戻したら 1 減らす

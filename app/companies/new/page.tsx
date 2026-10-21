@@ -8,6 +8,7 @@ export default function NewCompanyPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
+    companyKind: "通常",
     externalId: "",
     name: "",
     industry: SSW_INDUSTRIES[0] as string,
@@ -54,7 +55,38 @@ export default function NewCompanyPage() {
         </div>
 
         <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <Field label="企業ID * (スタッフで手動設定 / 例: 14sv, ABC-001)">
+          <Field label="区分">
+            <div className="flex gap-2">
+              {[
+                { v: "通常", label: "通常の企業" },
+                { v: "人材紹介会社", label: "人材紹介会社 (WILLOF・ADECCO など)" },
+              ].map((o) => (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={async () => {
+                    setForm((current) => ({ ...current, companyKind: o.v }));
+                    // 区分に合わせて次の企業ID (通常 NNsv / 人材紹介会社 NNag) を入れる (手で直してもよい)
+                    const res = await fetch(`/api/companies?nextId=${encodeURIComponent(o.v)}`).then((r) => r.json()).catch(() => null);
+                    if (res?.ok) setForm((current) => ({ ...current, externalId: res.externalId }));
+                  }}
+                  className={`rounded-lg border px-3 py-2 text-sm ${
+                    form.companyKind === o.v
+                      ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
+                      : "border-gray-300 bg-white text-gray-700"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            {form.companyKind === "人材紹介会社" ? (
+              <p className="mt-1 text-xs text-gray-500">
+                候補者は 内定 → 入社待ち → 入社済み で終わります。内定者管理には出ません。企業IDは末尾が ag になります。
+              </p>
+            ) : null}
+          </Field>
+          <Field label="企業ID * (例: 14sv / 人材紹介会社は 79ag)">
             <input
               className={INPUT}
               value={form.externalId}
@@ -62,7 +94,7 @@ export default function NewCompanyPage() {
               placeholder="14sv"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Drive の企業フォルダ名と推薦リストの保存先検索に使用します。自動生成はされません。
+              Drive の企業フォルダ名と推薦リストの保存先検索に使用します。区分を押すと次の番号が入ります。
             </p>
           </Field>
           <Field label="企業名 *">

@@ -19,7 +19,7 @@ type DealDetail = {
   id: number;
   title: string;
   field: string | null;
-  company: { id: number; name: string; externalId: string | null; supportType: string };
+  company: { id: number; name: string; externalId: string | null; supportType: string; companyKind: string };
   owner: { id: number; name: string } | null;
   status: string;
   unitPrice: string | null;
@@ -68,6 +68,7 @@ export default function DealDetailClient({
     status: normalizeDealStatus(deal.status),
     companyExternalId: deal.company.externalId ?? "",
     supportType: deal.company.supportType ?? "自社支援",
+    companyKind: deal.company.companyKind ?? "通常",
     unitPrice: deal.unitPrice ?? "",
     deadline: deal.deadline ? deal.deadline.slice(0, 10) : "",
     acceptedAt: deal.acceptedAt ? deal.acceptedAt.slice(0, 10) : "",
@@ -101,6 +102,7 @@ export default function DealDetailClient({
       status: normalizeDealStatus(currentDeal.status),
       companyExternalId: currentDeal.company.externalId ?? "",
       supportType: currentDeal.company.supportType ?? "自社支援",
+      companyKind: currentDeal.company.companyKind ?? "通常",
       unitPrice: currentDeal.unitPrice ?? "",
       deadline: currentDeal.deadline ? currentDeal.deadline.slice(0, 10) : "",
       acceptedAt: currentDeal.acceptedAt ? currentDeal.acceptedAt.slice(0, 10) : "",
@@ -139,11 +141,16 @@ export default function DealDetailClient({
       // 企業IDや支援の形を変えたときは先に企業側を直す (重複や形式の誤りはここで止める)
       const nextExternalId = editForm.companyExternalId.trim().toLowerCase();
       const nextSupportType = editForm.supportType;
-      if (nextExternalId !== (currentDeal.company.externalId ?? "") || nextSupportType !== currentDeal.company.supportType) {
+      const nextKind = editForm.companyKind;
+      if (
+        nextExternalId !== (currentDeal.company.externalId ?? "") ||
+        nextSupportType !== currentDeal.company.supportType ||
+        nextKind !== currentDeal.company.companyKind
+      ) {
         const res = await fetch(`/api/companies/${currentDeal.company.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ externalId: nextExternalId, supportType: nextSupportType }),
+          body: JSON.stringify({ externalId: nextExternalId, supportType: nextSupportType, companyKind: nextKind }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
@@ -151,9 +158,10 @@ export default function DealDetailClient({
           return;
         }
       }
-      const { companyExternalId: _companyExternalId, supportType: _supportType, ...dealForm } = editForm;
+      const { companyExternalId: _companyExternalId, supportType: _supportType, companyKind: _companyKind, ...dealForm } = editForm;
       void _companyExternalId;
       void _supportType;
+      void _companyKind;
       const response = await fetch(`/api/deals/${currentDeal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -169,7 +177,7 @@ export default function DealDetailClient({
       }
       setCurrentDeal((prev) => ({
         ...prev,
-        company: { ...prev.company, externalId: nextExternalId || null, supportType: nextSupportType },
+        company: { ...prev.company, externalId: nextExternalId || null, supportType: nextSupportType, companyKind: nextKind },
         title: editForm.title,
         field: editForm.field || null,
         status: editForm.status,
@@ -280,6 +288,7 @@ export default function DealDetailClient({
                 <InfoRow label="期限" value={currentDeal.deadline ? new Date(currentDeal.deadline).toLocaleDateString("ja-JP") : "未設定"} />
                 <InfoRow label="分野" value={normalizeSswIndustry(currentDeal.field) ?? "未設定"} />
                 <InfoRow label="支援" value={currentDeal.company.supportType ?? "自社支援"} />
+                <InfoRow label="区分" value={currentDeal.company.companyKind ?? "通常"} />
               </div>
             ) : null}
           </div>
@@ -332,6 +341,12 @@ export default function DealDetailClient({
             </EditField>
             <EditField label="求人名 *">
               <input className={EDIT_INPUT} value={editForm.title} onChange={(e) => setEditForm((c) => ({ ...c, title: e.target.value }))} />
+            </EditField>
+            <EditField label="区分 (企業の設定)">
+              <select className={EDIT_INPUT} value={editForm.companyKind} onChange={(e) => setEditForm((c) => ({ ...c, companyKind: e.target.value }))}>
+                <option value="通常">通常の企業</option>
+                <option value="人材紹介会社">人材紹介会社 (内定 → 入社待ち → 入社済み。内定者管理に出さない)</option>
+              </select>
             </EditField>
             <EditField label="支援 (企業の設定)">
               <select className={EDIT_INPUT} value={editForm.supportType} onChange={(e) => setEditForm((c) => ({ ...c, supportType: e.target.value }))}>
@@ -445,6 +460,7 @@ export default function DealDetailClient({
 
         <div className="mt-4">
           <CandidateKanban
+            companyKind={currentDeal.company.companyKind}
             candidates={candidates}
             onMove={(id, stage, date) => void moveCandidate(id, stage, date)}
             onRemove={(candidate) => void removeCandidate(candidate)}

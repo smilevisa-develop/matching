@@ -59,6 +59,7 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
         name: true,
         externalId: true,
         hiringStatus: true,
+        companyKind: true,
         deals: {
           orderBy: { createdAt: "asc" },
           select: {
@@ -165,6 +166,7 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
         offerCount: d?.offerCount ?? 0,
         companyExternalId: c.externalId,
         companyName: c.name,
+        companyKind: c.companyKind,
         ownerName: d?.owner?.name ?? null,
         // 最後に動いた日 = カンバンで候補者を最後に動かした日 (候補者がいなければ求人を作った日)。
         // 求人の更新日はステータスや担当者の一括変更でも動くので使わない

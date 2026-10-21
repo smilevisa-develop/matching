@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * 内定者管理ボード (Trello の置き換え)。
  *
  * - 候補者から来た内定者 (内定承諾で自動で載る) と、候補者とは別に追加した内定者 (書類作成のみ) の両方を出す
- * - 委託管理の企業の内定者は出さない (企業情報の「支援」が 委託管理 のもの)。件数だけ出して切り替えられる
+ * - 委託管理の企業・人材紹介会社 (WILLOF・ADECCO など) の内定者は出さない。件数だけ出して切り替えられる
  * - カードは「誰・どこの企業・次にやること・今の工程の進み具合」だけ。期限は出さない
  */
 export default async function OnboardingPage() {
@@ -27,7 +27,7 @@ export default async function OnboardingPage() {
             dealCandidates: {
               orderBy: { updatedAt: "desc" },
               take: 1,
-              select: { deal: { select: { company: { select: { name: true, supportType: true } } } } },
+              select: { deal: { select: { company: { select: { name: true, supportType: true, companyKind: true } } } } },
             },
           },
         },
@@ -57,8 +57,8 @@ export default async function OnboardingPage() {
       residenceStatus: p.person?.residenceStatus ?? p.externalResidenceStatus ?? "",
       companyName: company?.name ?? p.externalCompanyName ?? null,
       external: !p.person,
-      // 委託管理の企業の内定者はボードに出さない
-      outsourced: company?.supportType === "委託管理",
+      // 委託管理の企業と人材紹介会社の内定者はボードに出さない
+      outsourced: company?.supportType === "委託管理" || company?.companyKind === "人材紹介会社",
       ownerId: p.followUpOwnerId,
       ownerName: p.followUpOwner?.name ?? null,
       stage,

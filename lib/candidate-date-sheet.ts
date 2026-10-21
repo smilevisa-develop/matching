@@ -27,6 +27,8 @@ const STAGE_TARGETS: Record<string, Target> = {
   面接済み: { tab: BILLING_SHEET_TAB, header: "企業面接日", appendIfMissing: false },
   内定済み: { tab: OFFER_SHEET_TAB, header: "内定日", appendIfMissing: true },
   内定承諾: { tab: OFFER_SHEET_TAB, header: "内定承諾日", appendIfMissing: true },
+  // 人材紹介会社の候補者は内定者管理に載せないので、入社日は請求管理にだけ書く
+  入社済み: { tab: BILLING_SHEET_TAB, header: "入社日", appendIfMissing: false },
 };
 
 export type StageDateSheetResult =
@@ -144,7 +146,7 @@ export async function writeStageDateToSheet(args: {
 /** 日付列のセルを直接直す (取り直しで誤って上書きした値を戻す用)。請求管理 / 内定者管理 の日付列だけ */
 export async function setStageDateCell(args: { tab: string; cell: string; value: string }) {
   const allowed: Record<string, string[]> = {
-    [BILLING_SHEET_TAB]: ["M", "N"],
+    [BILLING_SHEET_TAB]: ["M", "N", "R"],
     [OFFER_SHEET_TAB]: ["J", "K"],
   };
   const m = args.cell.match(/^([A-Z]+)(\d+)$/);

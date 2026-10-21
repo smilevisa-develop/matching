@@ -80,7 +80,10 @@ export async function computeKpiDashboard(period: KpiPeriod) {
     if (p.personId && p.offerAcceptedAt && inPeriod(ymdJst(p.offerAcceptedAt)) && !kanbanAccepted.has(p.personId)) counts["内定承諾"]++;
   }
   const newCandidates = persons.filter((p) => inPeriod(ymdJst(p.createdAt))).length;
-  const joined = placements.filter((p) => p.joinAt && inPeriod(ymdJst(p.joinAt))).length;
+  // 入社: 内定者管理の入社日 + 人材紹介会社の候補者のカンバン「入社済み」
+  const joined =
+    placements.filter((p) => p.joinAt && inPeriod(ymdJst(p.joinAt))).length +
+    real.filter((c) => inPeriod(readStageDates(c.stageDates)["入社済み"])).length;
 
   // ── 転換率 (期間) ──
   // 「期間内にその段階に入った人のうち、次の段階まで進んだ人」の割合 (同じ人どうしで比べるので 100% を超えない)。

@@ -95,6 +95,9 @@ model Company {
   hiringStatus   String   @default("募集中")
   /// 支援の形: 自社支援 (登録支援機関として CROSLAN が支援。内定者管理ボードに出す) / 委託管理 (他社に委託。ボードには出さない)
   supportType    String   @default("自社支援")
+  /// 企業の区分: 通常 / 人材紹介会社 (WILLOF・ADECCO など)。
+  /// 人材紹介会社の候補者は 内定 → 入社待ち → 入社済み で終わり、内定者管理ボードには出さない。企業IDは NNag
+  companyKind    String   @default("通常")
   driveFolderUrl String?
   notes          String?
   createdAt      DateTime @default(now())
