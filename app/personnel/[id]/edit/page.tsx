@@ -385,18 +385,20 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                   }}
                 />
                 <IconActionDivider />
-                {/* 本人の連絡先へ飛ぶ。SNS の URL があればそれ、無ければメール */}
+                {/* 本人の SNS の連絡先 (グループ LINE / Messenger / WhatsApp などの URL) へ飛ぶ。メールにはしない */}
                 {(() => {
                   const sns = person.contactUrl?.trim() || null;
-                  const mail = person.email?.trim() ? `mailto:${person.email.trim()}` : null;
-                  const href = sns ?? mail;
-                  const label = sns ? (person.channel === "未設定" ? "連絡先" : person.channel) : "メール";
+                  const channel = person.channel && person.channel !== "未設定" && person.channel !== "mail" ? person.channel : null;
                   return (
                     <IconAction
-                      label={label}
-                      href={href ?? undefined}
-                      disabled={!href}
-                      title={href ? `本人の連絡先を開く (${href})` : "連絡先が未登録です。下の「連絡手段」で入力してください"}
+                      label="SNS"
+                      href={sns ?? undefined}
+                      disabled={!sns}
+                      title={
+                        sns
+                          ? `本人の SNS の連絡先を開く${channel ? ` (${channel})` : ""}: ${sns}`
+                          : "SNS の連絡先が未登録です。下の「連絡手段」の「SNS の連絡先」に URL を入力してください"
+                      }
                     >
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                         <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.6-.7L3 21l1.8-4.6A8.4 8.4 0 1 1 21 11.5z" />
