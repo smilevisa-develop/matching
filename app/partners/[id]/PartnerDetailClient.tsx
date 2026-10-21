@@ -456,7 +456,19 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
             </p>
           </Field>
           <Field label="SNS 連絡先" className="md:col-span-2">
-            <input className={INPUT} value={form.snsContact} onChange={(e) => set("snsContact", e.target.value)} placeholder="LINE / Facebook URL など" />
+            <div className="flex items-center gap-2">
+              <input className={INPUT} value={form.snsContact} onChange={(e) => set("snsContact", e.target.value)} placeholder="LINE 公式アカウントのチャット URL / Facebook URL など" />
+              {/^https?:\/\//.test(form.snsContact.trim()) ? (
+                <a
+                  href={form.snsContact.trim()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 rounded-lg border border-[var(--color-secondary)] bg-white px-3 py-2 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+                >
+                  開く
+                </a>
+              ) : null}
+            </div>
             {initial.lineQrUrl ? (
               <a href={initial.lineQrUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-2 text-xs text-[var(--color-primary)] hover:underline">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
