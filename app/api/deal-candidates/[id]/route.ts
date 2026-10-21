@@ -92,14 +92,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     });
 
-    // 入力した日付を企業データベース (請求管理 / 内定者管理) に反映する (応答は待たせない)
+    // 入力した日付を企業データベース (請求管理 / 内定者管理) に反映する (応答は待たせない)。
+    // 途中を飛ばして進めた場合 (接続済み → 内定承諾 など) は、飛ばした段階の日付も一緒に書く
     if (stageChanged) {
+      const written = Object.entries(readStageDates(candidate.stageDates)).filter(([, d]) => d === date);
       after(async () => {
-        try {
-          const r = await writeStageDateToSheet({ personId: candidate.personId, stage, date });
-          if (!r.ok) console.info("ステージ日付のスプシ反映をスキップ:", r.skipped);
-        } catch (e) {
-          console.warn("ステージ日付のスプシ反映に失敗:", e instanceof Error ? e.message : e);
+        for (const [s, d] of written) {
+          try {
+            const r = await writeStageDateToSheet({ personId: candidate.personId, stage: s, date: d });
+            if (!r.ok) console.info(`ステージ日付のスプシ反映をスキップ (${s}):`, r.skipped);
+          } catch (e) {
+            console.warn(`ステージ日付のスプシ反映に失敗 (${s}):`, e instanceof Error ? e.message : e);
+          }
         }
       });
     }
