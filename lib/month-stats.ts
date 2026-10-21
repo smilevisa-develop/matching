@@ -4,8 +4,8 @@
  * 数え方:
  *   接続 / 面談 / 推薦 / 面接 / 内定 / 内定承諾 … カンバンで候補者を動かしたときに入れた日付
  *     (DealCandidate.stageDates) がその月なら 1。日付が無い古いデータは数えない
- *   面接待ち … 今「推薦済み」にいる人数 (月に関係なく今の状態)
- *   結果待ち … 今「面接済み」にいる人数
+ *   面接待ち … 今「推薦済み」にいる人数 (月に関係なく今の状態)。募集を止めた企業 (ストップ・成約・一時中断) の人は数えない
+ *   結果待ち … 今「面接済み」にいる人数 (同上)
  *   内定 … 上に加えて、内定者管理ボードに手入力した内定日 (カンバンに紐づいていない人の分)
  *   リード (候補者獲得) … その月に追加した候補者
  *   入社 … 内定者管理の入社日がその月
@@ -14,7 +14,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { readStageDates } from "@/lib/deal-stages";
+import { dealGroup, normalizeDealStatus, readStageDates } from "@/lib/deal-stages";
 import { TEST_COMPANY_EXTERNAL_IDS, isTestCompany } from "@/lib/test-companies";
 
 export type MonthStats = {
@@ -79,7 +79,7 @@ export async function computeMonthStats(month: string): Promise<MonthStats> {
 
   const candidates = await prisma.dealCandidate.findMany({
     where: { deal: notTest },
-    select: { stage: true, stageDates: true, deal: { select: { company: { select: { externalId: true } } } } },
+    select: { stage: true, stageDates: true, deal: { select: { status: true, company: { select: { externalId: true } } } } },
   });
   for (const cand of candidates) {
     if (isTestCompany(cand.deal.company.externalId)) continue;
@@ -90,8 +90,10 @@ export async function computeMonthStats(month: string): Promise<MonthStats> {
     if (inMonth(dates["面接済み"])) stats.interviewed++;
     if (inMonth(dates["内定済み"])) stats.offers++;
     if (inMonth(dates["内定承諾"])) stats.accepted++;
-    if (cand.stage === "推薦済み") stats.waitingInterview++;
-    if (cand.stage === "面接済み") stats.waitingResult++;
+    // 待ちの人数は、まだ募集している企業の人だけ (止めた企業に残ったままの人は待っていないため)
+    const stillOpen = dealGroup(normalizeDealStatus(cand.deal.status)) !== "stopped";
+    if (stillOpen && cand.stage === "推薦済み") stats.waitingInterview++;
+    if (stillOpen && cand.stage === "面接済み") stats.waitingResult++;
   }
 
   // 内定者管理ボードに手入力した内定日も数える (カンバンで内定済みになっている人は上で数えているので除く)
