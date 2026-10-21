@@ -99,7 +99,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       after(async () => {
         for (const [s, d] of written) {
           try {
-            const r = await writeStageDateToSheet({ personId: candidate.personId, stage: s, date: d });
+            // 移した先の日付は上書きする。飛ばした段階は、手入力の日付が既にあればそちらを残す
+            const r = await writeStageDateToSheet({ personId: candidate.personId, stage: s, date: d, onlyIfEmpty: s !== stage });
             if (!r.ok) console.info(`ステージ日付のスプシ反映をスキップ (${s}):`, r.skipped);
           } catch (e) {
             console.warn(`ステージ日付のスプシ反映に失敗 (${s}):`, e instanceof Error ? e.message : e);

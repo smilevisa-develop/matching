@@ -61,6 +61,8 @@ export async function writeStageDateToSheet(args: {
   personId: number;
   stage: string;
   date: string; // YYYY-MM-DD
+  /** true なら、セルに既に日付が入っているときは書かない (飛ばした段階の日付で手入力の実際の日付を消さないため) */
+  onlyIfEmpty?: boolean;
 }): Promise<StageDateSheetResult> {
   const target = STAGE_TARGETS[args.stage];
   if (!target) return { ok: false, skipped: `ステージ「${args.stage}」はスプシに書かない` };
@@ -127,6 +129,9 @@ export async function writeStageDateToSheet(args: {
     appended = true;
   }
 
+  if (args.onlyIfEmpty && !appended && (rows[row]?.[col] ?? "").trim()) {
+    return { ok: false, skipped: `${target.tab} ${colLetter(col)}${row + 1} には既に「${rows[row][col]}」が入っている` };
+  }
   await sheets.spreadsheets.values.update({
     spreadsheetId,
     range: `${quote(target.tab)}!${colLetter(col)}${row + 1}`,
@@ -134,4 +139,23 @@ export async function writeStageDateToSheet(args: {
     requestBody: { values: [[toSheetYmd(args.date)]] },
   });
   return { ok: true, tab: target.tab, row: row + 1, column: colLetter(col), appended };
+}
+
+/** 日付列のセルを直接直す (取り直しで誤って上書きした値を戻す用)。請求管理 / 内定者管理 の日付列だけ */
+export async function setStageDateCell(args: { tab: string; cell: string; value: string }) {
+  const allowed: Record<string, string[]> = {
+    [BILLING_SHEET_TAB]: ["M", "N"],
+    [OFFER_SHEET_TAB]: ["J", "K"],
+  };
+  const m = args.cell.match(/^([A-Z]+)(\d+)$/);
+  if (!m || !allowed[args.tab]?.includes(m[1])) throw new Error(`${args.tab} ${args.cell} は直せません`);
+  const spreadsheetId = resolveCompanyMasterSpreadsheetId();
+  if (!spreadsheetId) throw new Error("企業データベースのスプシIDが未設定");
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${quote(args.tab)}!${args.cell}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[args.value]] },
+  });
 }
