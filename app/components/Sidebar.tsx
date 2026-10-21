@@ -150,8 +150,10 @@ const NAV: NavItem[] = [
   // 請求 (企業への請求 / PAへの請求) は使っていないのでメニューから外している。
   // 画面と API は残してあり、URL (/invoices/companies, /invoices/partners) を直接開けば使える。
   { label: "内定者管理", href: "/onboarding", icon: InvoiceIcon },
+  { label: "KPIダッシュボード", href: "/kpi", icon: BroadcastIcon },
   { label: "売上ダッシュボード", href: "/revenue", icon: BroadcastIcon },
   { label: "チャット", href: "/chat", icon: ChatIcon },
+  { label: "修正依頼", href: "/feedback", icon: ChatIcon },
   { label: "設定", href: "/settings", icon: SettingsIcon },
 ];
 
@@ -159,6 +161,8 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [openItems, setOpenItems] = useState<string[]>([]);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  // 修正依頼の未対応件数
+  const [openFeedbackCount, setOpenFeedbackCount] = useState(0);
   const [accountName, setAccountName] = useState("読み込み中...");
   const [accountRole, setAccountRole] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -194,13 +198,21 @@ export default function Sidebar() {
     };
 
     void loadUnreadSummary();
+    const loadFeedback = () =>
+      fetch("/api/feedback?count=1", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => setOpenFeedbackCount(d.ok ? d.open ?? 0 : 0))
+        .catch(() => undefined);
+    void loadFeedback();
 
     const intervalId = window.setInterval(() => {
       void loadUnreadSummary();
     }, 8000);
+    const feedbackInterval = window.setInterval(() => void loadFeedback(), 60000);
 
     return () => {
       window.clearInterval(intervalId);
+      window.clearInterval(feedbackInterval);
     };
   }, []);
 
@@ -381,6 +393,11 @@ export default function Sidebar() {
                 {item.href === "/chat" && unreadChatCount > 0 && (
                   <span className="min-w-5 rounded-full bg-white px-1.5 py-0.5 text-center text-[11px] font-semibold text-[var(--color-primary)]">
                     {unreadChatCount}
+                  </span>
+                )}
+                {item.href === "/feedback" && openFeedbackCount > 0 && (
+                  <span className="min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[11px] font-semibold text-white">
+                    {openFeedbackCount}
                   </span>
                 )}
               </Link>

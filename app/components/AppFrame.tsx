@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import Sidebar from "./Sidebar";
+import FeedbackWidget from "./FeedbackWidget";
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -53,6 +54,8 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1440px]">{children}</div>
       </main>
+      {/* 右下の「修正依頼」ボタン (使いにくいところ・不具合をスクショ付きですぐ送れる) */}
+      <FeedbackWidget />
     </body>
   );
 }

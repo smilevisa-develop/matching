@@ -1101,3 +1101,27 @@ model InterviewPracticeSpeech {
 
   @@index([fixed, createdAt])
 }
+
+/// 修正依頼 (操作担当者が画面右下の「修正依頼」から送る。不具合・使いにくいところ・こうしたい)
+model FeedbackReport {
+  id          Int       @id @default(autoincrement())
+  accountId   Int?
+  accountName String?
+  /// 送った画面の URL (パス + クエリ)
+  pageUrl     String
+  /// 本人が書いた内容 (母国語でもよい)
+  body        String
+  /// 日本語訳 (日本語以外で書かれたとき、送信後に AI で付ける)
+  bodyJa      String?
+  /// 添付したスクリーンショット (UploadedFile の id 配列)
+  imageIds    Json?
+  /// 未対応 / 対応中 / 完了 / 対応しない
+  status      String    @default("未対応")
+  /// 土田からの返事 (送った本人の「自分の依頼」に出る)
+  reply       String?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, createdAt])
+}
