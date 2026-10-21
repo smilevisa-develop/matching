@@ -256,10 +256,10 @@ export default function CandidateKanban({
       return layout === "compact" ? (
         // 進捗管理: 進行中の列を広く、辞退・NG・不合格は右側に 2 段 (3 列 × 2 段) に重ねる
         <div className="flex gap-1.5 pb-1">
-          <div className="flex min-w-0 flex-[3] gap-1.5">
+          <div className="flex min-w-0 flex-[2] gap-1.5">
             {activeColumns.map((c) => renderColumn(c, "max-h-[calc(100vh-18rem)] flex-1 basis-0"))}
           </div>
-          <div className="grid min-w-0 flex-[2] grid-cols-3 grid-rows-2 gap-1.5">
+          <div className="grid min-w-0 flex-1 grid-cols-3 grid-rows-2 gap-1.5">
             {exitColumns.map((c) => renderColumn(c, "max-h-[11rem] min-h-[6rem]"))}
           </div>
         </div>
@@ -330,7 +330,8 @@ function HoverCard({ candidate, rect }: { candidate: CandidateCard; rect: DOMRec
   const width = 280;
   // カードの右に出す。画面の右端からはみ出すときは左に出す
   const left = rect.right + 8 + width > window.innerWidth ? Math.max(8, rect.left - width - 8) : rect.right + 8;
-  const top = Math.min(Math.max(8, rect.top - 8), window.innerHeight - 220);
+  // 下にはみ出さないよう、画面の下の方では上にずらす (カードの高さは 300px 前後)
+  const top = Math.min(Math.max(8, rect.top - 8), window.innerHeight - 320);
   const p = candidate.person;
   return (
     <div
