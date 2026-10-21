@@ -6,10 +6,8 @@
  *      青見出し (= 関数で自動入力される) の列に「保護された範囲」を付ける。
  *      columns を渡すとその列だけ (例 ["C","D","E"])。渡さなければ青見出しを自動判定。
  *
- * 編集できる人を「サービスアカウントだけ」に絞る (editors を指定しないと、
- * 保護の枠はできても編集者全員が編集できたままになる = 制限が効かない)。
- * 同期 (数式の補修など) はサービスアカウントなのでこれまでどおり書き込める。
- * スプレッドシートの所有者は Google の仕様上いつでも編集できる。それ以外の人はブロックされる。
+ * 「警告のみ」の保護にする (2026/10/21 変更)。誰でも編集できるが、編集しようとすると警告が出る。
+ * 完全なロック (編集者をサービスアカウントだけにする) にすると、フィルターが使えなくなったため。
  */
 
 import { AuthError, requireApiAccount } from "@/lib/auth";
@@ -130,10 +128,6 @@ export async function POST(req: Request) {
         requests.push({ deleteProtectedRange: { protectedRangeId: p.id } });
       }
     }
-    // 編集できるのはサービスアカウント (= 同期) だけにする。
-    // ここを指定しないと「編集者全員」が既定になり、保護しても消せてしまう。
-    const serviceAccount = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
-    if (!serviceAccount) throw new Error("GOOGLE_SERVICE_ACCOUNT_EMAIL が未設定です");
     for (const col of targets) {
       const idx = colIndex(col);
       const header = info.columns.find((c) => c.col === col)?.header ?? col;
@@ -148,8 +142,9 @@ export async function POST(req: Request) {
               endColumnIndex: idx + 1,
             },
             description: `自動入力列 (${col} ${header}) — 関数で入るため手で編集しない`,
-            warningOnly: false,
-            editors: { users: [serviceAccount], domainUsersCanEdit: false },
+            // 「警告のみ」: 誰でも編集できるが、編集しようとすると警告が出る。
+            // 完全にロックすると、フィルターが使えなくなる (保護された列を含む表は編集できる人しか絞り込めない)ため (2026/10/21)
+            warningOnly: true,
           },
         },
       });
