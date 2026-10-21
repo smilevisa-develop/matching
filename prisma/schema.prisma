@@ -98,6 +98,8 @@ model Company {
   /// 企業の区分: 通常 / 人材紹介会社 (WILLOF・ADECCO など)。
   /// 人材紹介会社の候補者は 内定 → 入社待ち → 入社済み で終わり、内定者管理ボードには出さない。企業IDは NNag
   companyKind    String   @default("通常")
+  /// 支援方法 (スプシ「企業マスタ」E列と同じ選択肢): SMILEVISA / SMILEVISA契約予定 / 委託支援 / 行書士依頼 / 他支援 / 自社支援
+  supportMethod  String?
   driveFolderUrl String?
   notes          String?
   createdAt      DateTime @default(now())

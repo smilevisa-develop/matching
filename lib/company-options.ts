@@ -44,3 +44,11 @@ export const HIRING_STATUSES = ["募集中", "至急募集", "常時募集", "�
 
 export type SswIndustry = (typeof SSW_INDUSTRIES)[number];
 export type HiringStatus = (typeof HIRING_STATUSES)[number];
+
+/** 企業の支援方法 (スプシ「企業マスタ」E列のプルダウンと同じ選択肢・表記) */
+export const SUPPORT_METHODS = ["SMILEVISA", "SMILEVISA契約予定", "委託支援", "行書士依頼", "他支援", "自社支援"] as const;
+
+export function normalizeSupportMethod(v: unknown): string | null {
+  const s = typeof v === "string" ? v.trim() : "";
+  return (SUPPORT_METHODS as readonly string[]).includes(s) ? s : null;
+}

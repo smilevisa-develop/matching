@@ -12,6 +12,7 @@ import CandidateKanban, {
 import RecommendationsClient from "@/app/recommendations/RecommendationsClient";
 import CloseButton from "@/app/components/CloseButton";
 import { DEAL_STATUSES, normalizeDealStatus } from "@/lib/deal-stages";
+import { SUPPORT_METHODS } from "@/lib/company-options";
 
 const STATUS_OPTIONS = DEAL_STATUSES;
 
@@ -19,7 +20,7 @@ type DealDetail = {
   id: number;
   title: string;
   field: string | null;
-  company: { id: number; name: string; externalId: string | null; supportType: string; companyKind: string };
+  company: { id: number; name: string; externalId: string | null; supportType: string; companyKind: string; supportMethod: string | null };
   owner: { id: number; name: string } | null;
   status: string;
   unitPrice: string | null;
@@ -69,6 +70,7 @@ export default function DealDetailClient({
     companyExternalId: deal.company.externalId ?? "",
     supportType: deal.company.supportType ?? "自社支援",
     companyKind: deal.company.companyKind ?? "通常",
+    supportMethod: deal.company.supportMethod ?? "",
     unitPrice: deal.unitPrice ?? "",
     deadline: deal.deadline ? deal.deadline.slice(0, 10) : "",
     acceptedAt: deal.acceptedAt ? deal.acceptedAt.slice(0, 10) : "",
@@ -103,6 +105,7 @@ export default function DealDetailClient({
       companyExternalId: currentDeal.company.externalId ?? "",
       supportType: currentDeal.company.supportType ?? "自社支援",
       companyKind: currentDeal.company.companyKind ?? "通常",
+      supportMethod: currentDeal.company.supportMethod ?? "",
       unitPrice: currentDeal.unitPrice ?? "",
       deadline: currentDeal.deadline ? currentDeal.deadline.slice(0, 10) : "",
       acceptedAt: currentDeal.acceptedAt ? currentDeal.acceptedAt.slice(0, 10) : "",
@@ -142,15 +145,17 @@ export default function DealDetailClient({
       const nextExternalId = editForm.companyExternalId.trim().toLowerCase();
       const nextSupportType = editForm.supportType;
       const nextKind = editForm.companyKind;
+      const nextMethod = editForm.supportMethod;
       if (
         nextExternalId !== (currentDeal.company.externalId ?? "") ||
         nextSupportType !== currentDeal.company.supportType ||
-        nextKind !== currentDeal.company.companyKind
+        nextKind !== currentDeal.company.companyKind ||
+        nextMethod !== (currentDeal.company.supportMethod ?? "")
       ) {
         const res = await fetch(`/api/companies/${currentDeal.company.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ externalId: nextExternalId, supportType: nextSupportType, companyKind: nextKind }),
+          body: JSON.stringify({ externalId: nextExternalId, supportType: nextSupportType, companyKind: nextKind, supportMethod: nextMethod }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
@@ -158,10 +163,17 @@ export default function DealDetailClient({
           return;
         }
       }
-      const { companyExternalId: _companyExternalId, supportType: _supportType, companyKind: _companyKind, ...dealForm } = editForm;
+      const {
+        companyExternalId: _companyExternalId,
+        supportType: _supportType,
+        companyKind: _companyKind,
+        supportMethod: _supportMethod,
+        ...dealForm
+      } = editForm;
       void _companyExternalId;
       void _supportType;
       void _companyKind;
+      void _supportMethod;
       const response = await fetch(`/api/deals/${currentDeal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -177,7 +189,13 @@ export default function DealDetailClient({
       }
       setCurrentDeal((prev) => ({
         ...prev,
-        company: { ...prev.company, externalId: nextExternalId || null, supportType: nextSupportType, companyKind: nextKind },
+        company: {
+          ...prev.company,
+          externalId: nextExternalId || null,
+          supportType: nextSupportType,
+          companyKind: nextKind,
+          supportMethod: nextMethod || null,
+        },
         title: editForm.title,
         field: editForm.field || null,
         status: editForm.status,
@@ -289,6 +307,7 @@ export default function DealDetailClient({
                 <InfoRow label="分野" value={normalizeSswIndustry(currentDeal.field) ?? "未設定"} />
                 <InfoRow label="支援" value={currentDeal.company.supportType ?? "自社支援"} />
                 <InfoRow label="区分" value={currentDeal.company.companyKind ?? "通常"} />
+                <InfoRow label="支援方法" value={currentDeal.company.supportMethod ?? "未設定"} />
               </div>
             ) : null}
           </div>
@@ -341,6 +360,16 @@ export default function DealDetailClient({
             </EditField>
             <EditField label="求人名 *">
               <input className={EDIT_INPUT} value={editForm.title} onChange={(e) => setEditForm((c) => ({ ...c, title: e.target.value }))} />
+            </EditField>
+            <EditField label="支援方法 (企業の設定)">
+              <select className={EDIT_INPUT} value={editForm.supportMethod} onChange={(e) => setEditForm((c) => ({ ...c, supportMethod: e.target.value }))}>
+                <option value="">未設定</option>
+                {SUPPORT_METHODS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
             </EditField>
             <EditField label="区分 (企業の設定)">
               <select className={EDIT_INPUT} value={editForm.companyKind} onChange={(e) => setEditForm((c) => ({ ...c, companyKind: e.target.value }))}>

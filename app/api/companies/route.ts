@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { normalizeSupportMethod, writeSupportMethodToMaster } from "@/lib/company-support-method";
 import { requireApiAccount, AuthError } from "@/lib/auth";
 import { after } from "next/server";
 import { nextCompanyExternalId, requestCompanyDatabaseSync } from "@/lib/company-db-sync";
@@ -54,6 +55,7 @@ export async function POST(req: Request) {
         location: String(body.location ?? "").trim() || null,
         hiringStatus: String(body.hiringStatus ?? "").trim() || "募集中",
         companyKind,
+        supportMethod: normalizeSupportMethod(body.supportMethod),
         // 人材紹介会社の内定者は内定者管理ボードに出さない (支援もしない)
         ...(companyKind === "人材紹介会社" ? { supportType: "委託管理" } : {}),
         driveFolderUrl: String(body.driveFolderUrl ?? "").trim() || null,
@@ -61,8 +63,12 @@ export async function POST(req: Request) {
       },
     });
 
-    // 企業データベース(スプシ)へ保存直後に反映する (応答は待たせない)
-    after(() => requestCompanyDatabaseSync());
+    // 企業データベース(スプシ)へ保存直後に反映する (応答は待たせない)。
+    // 支援方法は企業マスタに行が追加されたあとに書く
+    after(async () => {
+      await requestCompanyDatabaseSync();
+      if (company.supportMethod) await writeSupportMethodToMaster(company.externalId, company.supportMethod);
+    });
     return Response.json({ ok: true, company });
   } catch (error) {
     return Response.json(

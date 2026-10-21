@@ -2,13 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { HIRING_STATUSES, SSW_INDUSTRIES } from "@/lib/company-options";
+import { HIRING_STATUSES, SSW_INDUSTRIES, SUPPORT_METHODS } from "@/lib/company-options";
 
 export default function NewCompanyPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     companyKind: "通常",
+    supportMethod: "",
     externalId: "",
     name: "",
     industry: SSW_INDUSTRIES[0] as string,
@@ -104,6 +105,14 @@ export default function NewCompanyPage() {
             <select className={INPUT} value={form.industry} onChange={(e) => setForm((current) => ({ ...current, industry: e.target.value }))}>
               {SSW_INDUSTRIES.map((industry) => (
                 <option key={industry} value={industry}>{industry}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="支援方法">
+            <select className={INPUT} value={form.supportMethod} onChange={(e) => setForm((current) => ({ ...current, supportMethod: e.target.value }))}>
+              <option value="">未設定</option>
+              {SUPPORT_METHODS.map((m) => (
+                <option key={m} value={m}>{m}</option>
               ))}
             </select>
           </Field>

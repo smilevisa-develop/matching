@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { normalizeSupportMethod, writeSupportMethodToMaster } from "@/lib/company-support-method";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { after } from "next/server";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
@@ -45,11 +46,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       body.supportType === "自社支援" || body.supportType === "委託管理" ? (body.supportType as string) : undefined;
     const companyKind =
       body.companyKind === "通常" || body.companyKind === "人材紹介会社" ? (body.companyKind as string) : undefined;
-    if (body.externalId === undefined && (supportType || companyKind)) {
-      const company = await prisma.company.update({
-        where: { id: Number(id) },
-        data: { ...(supportType ? { supportType } : {}), ...(companyKind ? { companyKind } : {}) },
-      });
+    // 支援方法 (企業マスタ E列と同じ選択肢。空欄にもできる)
+    const supportMethod = body.supportMethod !== undefined ? normalizeSupportMethod(body.supportMethod) : undefined;
+    const extra = {
+      ...(supportType ? { supportType } : {}),
+      ...(companyKind ? { companyKind } : {}),
+      ...(supportMethod !== undefined ? { supportMethod } : {}),
+    };
+    if (body.externalId === undefined && Object.keys(extra).length > 0) {
+      const company = await prisma.company.update({ where: { id: Number(id) }, data: extra });
+      if (supportMethod !== undefined) after(() => writeSupportMethodToMaster(company.externalId, company.supportMethod).then(() => undefined));
       return Response.json({ ok: true, company });
     }
     const externalId = String(body.externalId ?? "").trim().toLowerCase();
@@ -68,9 +74,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     const company = await prisma.company.update({
       where: { id: Number(id) },
-      data: { externalId, ...(supportType ? { supportType } : {}), ...(companyKind ? { companyKind } : {}) },
+      data: { externalId, ...extra },
     });
     after(() => requestCompanyDatabaseSync());
+    if (supportMethod !== undefined) after(() => writeSupportMethodToMaster(company.externalId, company.supportMethod).then(() => undefined));
     return Response.json({ ok: true, company });
   } catch (error) {
     return Response.json(
