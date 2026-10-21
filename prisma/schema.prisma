@@ -93,6 +93,8 @@ model Company {
   industry       String?
   location       String?
   hiringStatus   String   @default("募集中")
+  /// 支援の形: 自社支援 (登録支援機関として CROSLAN が支援。内定者管理ボードに出す) / 委託管理 (他社に委託。ボードには出さない)
+  supportType    String   @default("自社支援")
   driveFolderUrl String?
   notes          String?
   createdAt      DateTime @default(now())
@@ -834,8 +836,17 @@ model JobPosting {
 
 model PersonPlacement {
   id                   Int       @id @default(autoincrement())
-  personId             Int       @unique
-  person               Person    @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// 候補者 (null = 書類作成だけを請け負った内定者。候補者とは別物で、名前などは external* に持つ)
+  personId             Int?      @unique
+  person               Person?   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// 候補者に紐づかない内定者の氏名 / 企業名 / 在留資格
+  externalName         String?
+  externalCompanyName  String?
+  externalResidenceStatus String?
+  /// 申請方法 (短文。例: 本人がオンライン申請 / 行政書士へ委託)
+  applicationMethod    String?
+  /// サポート工程で選んだ支援の種類 (lib/onboarding-flow.ts の SUPPORT_OPTIONS の id 配列)
+  supports             Json?
   stage                String?
   acceptedAt           DateTime?
   preInterviewAt       DateTime?

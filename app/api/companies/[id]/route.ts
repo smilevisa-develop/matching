@@ -35,12 +35,18 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   }
 }
 
-/** 企業IDだけを直す (PUT は全項目を上書きするので、ID の修正用に分けている) */
+/** 企業ID と 支援の形 (自社支援 / 委託管理) だけを直す (PUT は全項目を上書きするので分けている) */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireApiAccount();
     const { id } = await params;
     const body = await req.json();
+    const supportType =
+      body.supportType === "自社支援" || body.supportType === "委託管理" ? (body.supportType as string) : undefined;
+    if (body.externalId === undefined && supportType) {
+      const company = await prisma.company.update({ where: { id: Number(id) }, data: { supportType } });
+      return Response.json({ ok: true, company });
+    }
     const externalId = String(body.externalId ?? "").trim().toLowerCase();
     if (!COMPANY_EXTERNAL_ID_RE.test(externalId)) {
       return Response.json(
@@ -55,7 +61,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         { status: 409 },
       );
     }
-    const company = await prisma.company.update({ where: { id: Number(id) }, data: { externalId } });
+    const company = await prisma.company.update({
+      where: { id: Number(id) },
+      data: { externalId, ...(supportType ? { supportType } : {}) },
+    });
     after(() => requestCompanyDatabaseSync());
     return Response.json({ ok: true, company });
   } catch (error) {
@@ -95,6 +104,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         industry: String(body.industry ?? "").trim() || null,
         location: String(body.location ?? "").trim() || null,
         hiringStatus: String(body.hiringStatus ?? "").trim() || "募集中",
+        // 支援の形 (自社支援 / 委託管理)。委託管理の内定者は内定者管理ボードに出さない
+        ...(body.supportType === "自社支援" || body.supportType === "委託管理" ? { supportType: body.supportType } : {}),
         driveFolderUrl: body.driveFolderUrl !== undefined
           ? (String(body.driveFolderUrl ?? "").trim() || null)
           : undefined,

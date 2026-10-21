@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
-import { resolveStage } from "@/lib/onboarding-flow";
+import { readSupports, resolveStage } from "@/lib/onboarding-flow";
 import OnboardingBoard, { type OnboardingCard } from "./OnboardingBoard";
 
 export const dynamic = "force-dynamic";
@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 /**
  * 内定者管理ボード (Trello の置き換え)。
  *
- * カードは「誰・どこの企業・次にやること・今の工程の進み具合」だけ。
- * カードを押すと、今いる工程のチェックリストだけが大きく出る
- * (他の工程は畳んでおく。全部見せると何をすればいいか分からなくなるため)。
+ * - 候補者から来た内定者 (内定承諾で自動で載る) と、候補者とは別に追加した内定者 (書類作成のみ) の両方を出す
+ * - 委託管理の企業の内定者は出さない (企業情報の「支援」が 委託管理 のもの)。件数だけ出して切り替えられる
+ * - カードは「誰・どこの企業・次にやること・今の工程の進み具合」だけ。期限は出さない
  */
 export default async function OnboardingPage() {
   await requireCurrentAccount();
@@ -27,13 +27,13 @@ export default async function OnboardingPage() {
             dealCandidates: {
               orderBy: { updatedAt: "desc" },
               take: 1,
-              select: { deal: { select: { company: { select: { name: true } } } } },
+              select: { deal: { select: { company: { select: { name: true, supportType: true } } } } },
             },
           },
         },
         tasks: {
           orderBy: { sortOrder: "asc" },
-          select: { id: true, category: true, title: true, dueAt: true, doneAt: true, note: true },
+          select: { id: true, category: true, title: true, doneAt: true, note: true },
         },
         issues: {
           orderBy: { createdAt: "desc" },
@@ -47,37 +47,46 @@ export default async function OnboardingPage() {
 
   const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
 
-  const cards: OnboardingCard[] = placements.map((p) => ({
-    personId: p.person.id,
-    personName: p.person.name,
-    residenceStatus: p.person.residenceStatus,
-    companyName: p.person.dealCandidates[0]?.deal.company.name ?? null,
-    ownerId: p.followUpOwnerId,
-    ownerName: p.followUpOwner?.name ?? null,
-    stage: resolveStage(p),
-    memo: p.currentAction ?? p.holdReason ?? "",
-    applicationAt: ymd(p.applicationAt),
-    offerAcceptedAt: ymd(p.offerAcceptedAt ?? p.offerAt),
-    applicationType: p.applicationType ?? "",
-    tasks: p.tasks.map((t) => ({
-      id: t.id,
-      category: t.category,
-      title: t.title,
-      dueAt: ymd(t.dueAt),
-      done: Boolean(t.doneAt),
-      note: t.note ?? "",
-    })),
-    issues: p.issues.map((i) => ({
-      id: i.id,
-      title: i.title,
-      open: i.status === "open",
-      createdAt: ymd(i.createdAt),
-    })),
-  }));
+  const cards: OnboardingCard[] = placements.map((p) => {
+    const company = p.person?.dealCandidates[0]?.deal.company ?? null;
+    const stage = resolveStage(p);
+    return {
+      id: p.id,
+      personId: p.person?.id ?? null,
+      personName: p.person?.name ?? p.externalName ?? "(名前なし)",
+      residenceStatus: p.person?.residenceStatus ?? p.externalResidenceStatus ?? "",
+      companyName: company?.name ?? p.externalCompanyName ?? null,
+      external: !p.person,
+      // 委託管理の企業の内定者はボードに出さない
+      outsourced: company?.supportType === "委託管理",
+      ownerId: p.followUpOwnerId,
+      ownerName: p.followUpOwner?.name ?? null,
+      stage,
+      memo: p.currentAction ?? "",
+      holdReason: p.holdReason ?? "",
+      applicationAt: ymd(p.applicationAt),
+      offerAcceptedAt: ymd(p.offerAcceptedAt ?? p.offerAt),
+      applicationType: p.applicationType ?? "",
+      applicationMethod: p.applicationMethod ?? "",
+      supports: readSupports(p.supports),
+      tasks: p.tasks.map((t) => ({
+        id: t.id,
+        category: t.category,
+        title: t.title,
+        done: Boolean(t.doneAt),
+        note: t.note ?? "",
+      })),
+      issues: p.issues.map((i) => ({
+        id: i.id,
+        title: i.title,
+        open: i.status === "open",
+        createdAt: ymd(i.createdAt),
+      })),
+    };
+  });
 
   return (
     <div className="space-y-5 p-8">
-      <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">内定者管理</h1>
       <OnboardingBoard initialCards={cards} staff={staff} />
     </div>
   );

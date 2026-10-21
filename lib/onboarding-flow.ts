@@ -25,21 +25,21 @@ export const OFFER_TO_JOIN_DAYS = 60;
 export const ONBOARDING_STAGES = [
   {
     id: "offer",
-    label: "内定直後",
+    label: "内定",
     hint: "条件・費用負担の確定、企業への共有開始",
     targetDays: 7,
     phases: ["1. 内定直後（条件確定）", "2. 企業への共有・報告"],
   },
   {
     id: "documents",
-    label: "書類収集",
+    label: "書類集め",
     hint: "必要書類の案内と回収 (共通 + 申請種別別)",
     targetDays: 10,
     phases: ["3. 書類収集（共通）", "4. 書類収集（種別別）"],
   },
   {
     id: "prepare",
-    label: "申請準備・署名",
+    label: "申請準備",
     hint: "SmileVisa登録、契約書類の署名、社内報告",
     targetDays: 7,
     phases: ["5. 申請準備・署名"],
@@ -52,22 +52,36 @@ export const ONBOARDING_STAGES = [
     phases: ["6. 申請"],
   },
   {
-    id: "result",
-    label: "結果受領・在留カード",
+    id: "card_processing",
+    label: "在留カード発行手続き中",
     hint: "結果通知、在留カード受取 (14日以内)",
     targetDays: 14,
     phases: ["7. 結果受領・在留カード"],
   },
   {
-    id: "arrival",
-    label: "渡航・住居",
-    hint: "入国日/航空券の確認、送迎、住居・生活の立ち上げ",
+    id: "card_issued",
+    label: "発行完了",
+    hint: "在留カードを受け取った",
+    targetDays: 7,
+    phases: [],
+  },
+  {
+    id: "card_cancelled",
+    label: "発行キャンセル",
+    hint: "不許可・取り下げ・辞退などで発行に至らなかった",
+    targetDays: 0,
+    phases: [],
+  },
+  {
+    id: "support",
+    label: "サポート",
+    hint: "入国・住居・銀行・保険など、必要なサポートを選んで進める",
     targetDays: 20,
     phases: ["8. 渡航・入国", "9. 住居・生活"],
   },
   {
     id: "joined",
-    label: "入社前後・請求",
+    label: "入社・請求",
     hint: "入社前確認、当日連絡、1週間後フォロー、請求",
     targetDays: 30,
     phases: ["10. 入社前後"],
@@ -90,13 +104,107 @@ const LEGACY_STAGE_MAP: Record<string, OnboardingStageId> = {
   offered: "offer",
   accepted: "documents",
   applying: "applying",
-  approved: "result",
-  entered: "arrival",
+  approved: "card_processing",
+  entered: "support",
   joined: "joined",
   // v1 のステージ名
   pledge: "offer",
-  joining: "arrival",
+  joining: "support",
+  // v2 (2026/10 前半) のステージ名
+  result: "card_processing",
+  arrival: "support",
 };
+
+/** 「次へ進む」の順番 (発行キャンセル・保留には次が無い) */
+export const NEXT_STAGE: Partial<Record<OnboardingStageId, OnboardingStageId>> = {
+  offer: "documents",
+  documents: "prepare",
+  prepare: "applying",
+  applying: "card_processing",
+  card_processing: "card_issued",
+  card_issued: "support",
+  support: "joined",
+};
+
+/** サポート工程のタスクが属する工程名 */
+export const SUPPORT_PHASES: readonly string[] = ["8. 渡航・入国", "9. 住居・生活"];
+
+/**
+ * サポート工程に入れたときに選ぶ「必要なサポート」。選んだものだけタスクになる
+ * (引っ越しが不要な人に引っ越しのタスクを出さないため)。
+ */
+export const SUPPORT_OPTIONS: { id: string; label: string; tasks: { category: string; title: string }[] }[] = [
+  {
+    id: "flight",
+    label: "航空券・ビザ（海外から呼ぶ）",
+    tasks: [
+      { category: "8. 渡航・入国", title: "COE送付・ビザ申請をサポートする" },
+      { category: "8. 渡航・入国", title: "航空券の予約内容をエビデンス付きで確認する（Eチケット）" },
+      { category: "8. 渡航・入国", title: "確定した入国日とEチケットを企業へ送付する" },
+      { category: "8. 渡航・入国", title: "入国日と在留期限の整合を確認する" },
+    ],
+  },
+  {
+    id: "pickup",
+    label: "空港送迎",
+    tasks: [{ category: "8. 渡航・入国", title: "空港送迎の担当・集合場所・時間を企業と合意する" }],
+  },
+  {
+    id: "arrival_prep",
+    label: "入国前の準備（印鑑・SIM・サイズ）",
+    tasks: [
+      { category: "8. 渡航・入国", title: "印鑑・SIMカードの準備を案内する" },
+      { category: "8. 渡航・入国", title: "身体情報（身長・服・ズボン・靴のサイズ）を確認し企業へ提供する" },
+    ],
+  },
+  {
+    id: "housing",
+    label: "住居・引っ越し",
+    tasks: [
+      { category: "9. 住居・生活", title: "住居の確保を完了する（入居日・費用・鍵の受け渡し）" },
+      { category: "9. 住居・生活", title: "引っ越しの段取り（日程・運搬・費用負担）を決める" },
+      { category: "9. 住居・生活", title: "寮退去日の確認と住所変更手続きを案内する" },
+    ],
+  },
+  {
+    id: "resident",
+    label: "住民登録（転入届）",
+    tasks: [{ category: "9. 住居・生活", title: "住民登録（転入届・マイナンバー）を案内・同行する" }],
+  },
+  {
+    id: "bank",
+    label: "銀行口座",
+    tasks: [{ category: "9. 住居・生活", title: "銀行口座の開設を案内・同行する" }],
+  },
+  {
+    id: "insurance",
+    label: "保険・年金",
+    tasks: [{ category: "9. 住居・生活", title: "健康保険・年金の加入手続きを確認する" }],
+  },
+  {
+    id: "mobile",
+    label: "携帯契約",
+    tasks: [{ category: "9. 住居・生活", title: "携帯電話の契約を案内する" }],
+  },
+  {
+    id: "orientation",
+    label: "生活オリエンテーション",
+    tasks: [{ category: "9. 住居・生活", title: "生活オリエンテーションを実施する（ゴミ出し・交通・緊急連絡先）" }],
+  },
+];
+
+/** 選んだサポート id → タスク (順番は SUPPORT_OPTIONS の並び) */
+export function buildSupportTasks(selected: readonly string[]) {
+  const set = new Set(selected);
+  return SUPPORT_OPTIONS.filter((o) => set.has(o.id)).flatMap((o) => o.tasks);
+}
+
+/** supports (Json) を安全に読む */
+export function readSupports(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set(SUPPORT_OPTIONS.map((o) => o.id));
+  return value.filter((v): v is string => typeof v === "string" && ids.has(v));
+}
 
 /** 保存値 / 日付から現在のステージを決める */
 export function resolveStage(input: {
@@ -111,8 +219,8 @@ export function resolveStage(input: {
   if (ONBOARDING_STAGES.some((s) => s.id === saved)) return saved as OnboardingStageId;
   if (LEGACY_STAGE_MAP[saved]) return LEGACY_STAGE_MAP[saved];
   if (input.joinAt) return "joined";
-  if (input.entryAt) return "arrival";
-  if (input.applicationResultAt) return "result";
+  if (input.entryAt) return "support";
+  if (input.applicationResultAt) return "card_processing";
   if (input.applicationAt) return "applying";
   if (input.offerAcceptedAt) return "documents";
   return "offer";

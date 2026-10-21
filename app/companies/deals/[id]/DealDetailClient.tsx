@@ -19,7 +19,7 @@ type DealDetail = {
   id: number;
   title: string;
   field: string | null;
-  company: { id: number; name: string; externalId: string | null };
+  company: { id: number; name: string; externalId: string | null; supportType: string };
   owner: { id: number; name: string } | null;
   status: string;
   unitPrice: string | null;
@@ -67,6 +67,7 @@ export default function DealDetailClient({
     field: normalizeSswIndustry(deal.field) ?? SSW_INDUSTRIES[0],
     status: normalizeDealStatus(deal.status),
     companyExternalId: deal.company.externalId ?? "",
+    supportType: deal.company.supportType ?? "自社支援",
     unitPrice: deal.unitPrice ?? "",
     deadline: deal.deadline ? deal.deadline.slice(0, 10) : "",
     acceptedAt: deal.acceptedAt ? deal.acceptedAt.slice(0, 10) : "",
@@ -99,6 +100,7 @@ export default function DealDetailClient({
       field: normalizeSswIndustry(currentDeal.field) ?? SSW_INDUSTRIES[0],
       status: normalizeDealStatus(currentDeal.status),
       companyExternalId: currentDeal.company.externalId ?? "",
+      supportType: currentDeal.company.supportType ?? "自社支援",
       unitPrice: currentDeal.unitPrice ?? "",
       deadline: currentDeal.deadline ? currentDeal.deadline.slice(0, 10) : "",
       acceptedAt: currentDeal.acceptedAt ? currentDeal.acceptedAt.slice(0, 10) : "",
@@ -134,13 +136,14 @@ export default function DealDetailClient({
     }
     setSavingEdit(true);
     try {
-      // 企業IDを変えたときは先に企業側を直す (重複や形式の誤りはここで止める)
+      // 企業IDや支援の形を変えたときは先に企業側を直す (重複や形式の誤りはここで止める)
       const nextExternalId = editForm.companyExternalId.trim().toLowerCase();
-      if (nextExternalId !== (currentDeal.company.externalId ?? "")) {
+      const nextSupportType = editForm.supportType;
+      if (nextExternalId !== (currentDeal.company.externalId ?? "") || nextSupportType !== currentDeal.company.supportType) {
         const res = await fetch(`/api/companies/${currentDeal.company.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ externalId: nextExternalId }),
+          body: JSON.stringify({ externalId: nextExternalId, supportType: nextSupportType }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
@@ -148,8 +151,9 @@ export default function DealDetailClient({
           return;
         }
       }
-      const { companyExternalId: _companyExternalId, ...dealForm } = editForm;
+      const { companyExternalId: _companyExternalId, supportType: _supportType, ...dealForm } = editForm;
       void _companyExternalId;
+      void _supportType;
       const response = await fetch(`/api/deals/${currentDeal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -165,7 +169,7 @@ export default function DealDetailClient({
       }
       setCurrentDeal((prev) => ({
         ...prev,
-        company: { ...prev.company, externalId: nextExternalId || null },
+        company: { ...prev.company, externalId: nextExternalId || null, supportType: nextSupportType },
         title: editForm.title,
         field: editForm.field || null,
         status: editForm.status,
@@ -275,6 +279,7 @@ export default function DealDetailClient({
                 <InfoRow label="受付日" value={currentDeal.acceptedAt ? new Date(currentDeal.acceptedAt).toLocaleDateString("ja-JP") : "未設定"} />
                 <InfoRow label="期限" value={currentDeal.deadline ? new Date(currentDeal.deadline).toLocaleDateString("ja-JP") : "未設定"} />
                 <InfoRow label="分野" value={normalizeSswIndustry(currentDeal.field) ?? "未設定"} />
+                <InfoRow label="支援" value={currentDeal.company.supportType ?? "自社支援"} />
               </div>
             ) : null}
           </div>
@@ -327,6 +332,12 @@ export default function DealDetailClient({
             </EditField>
             <EditField label="求人名 *">
               <input className={EDIT_INPUT} value={editForm.title} onChange={(e) => setEditForm((c) => ({ ...c, title: e.target.value }))} />
+            </EditField>
+            <EditField label="支援 (企業の設定)">
+              <select className={EDIT_INPUT} value={editForm.supportType} onChange={(e) => setEditForm((c) => ({ ...c, supportType: e.target.value }))}>
+                <option value="自社支援">自社支援 (内定者管理に出す)</option>
+                <option value="委託管理">委託管理 (内定者管理に出さない)</option>
+              </select>
             </EditField>
             <EditField label="分野">
               <select className={EDIT_INPUT} value={editForm.field} onChange={(e) => setEditForm((c) => ({ ...c, field: e.target.value }))}>

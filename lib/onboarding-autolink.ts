@@ -68,18 +68,22 @@ function jstDate(ymd: string | null | undefined): Date | null {
 
 /**
  * ステージ変更時に呼ぶ。
- * - 内定済み: カードを用意する。既にあっても内定日が空なら入れる (進捗管理の「今月の内定」はこの日付で数える)
- * - 内定承諾: カードを用意し、内定承諾日・内定後フォロー担当 (グェット) を入れる。紹介パートナーを実績有りにする
+ * - 内定済み: カードは作らない。既にあれば内定日だけ入れる (進捗管理の「今月の内定」はこの日付で数える)
+ * - 内定承諾: ボードにカードを作り、内定承諾日・内定後フォロー担当 (グェット) を入れる。紹介パートナーを実績有りにする
  * @param dateYmd カンバンで入力した日付 ("YYYY-MM-DD")。無ければ今日
  */
 export async function onDealCandidateStageChanged(personId: number, stage: string, dateYmd?: string | null) {
   if (stage !== OFFER_STAGE && stage !== OFFER_ACCEPTED_STAGE) return { created: false };
   const date = jstDate(dateYmd) ?? new Date();
-  const result = await ensureOnboardingCard(personId, date);
-  if (!result.created && stage === OFFER_STAGE) {
+
+  // 内定済み: ボードのカードはまだ作らない (内定承諾で作る。2026/10 採用チームの指示)。
+  // 既にカードがあれば内定日だけ入れる
+  if (stage === OFFER_STAGE) {
     await prisma.personPlacement.updateMany({ where: { personId, offerAt: null }, data: { offerAt: date } });
+    return { created: false };
   }
 
+  const result = await ensureOnboardingCard(personId, date);
   if (stage === OFFER_ACCEPTED_STAGE) {
     const owner = await prisma.staffAccount.findUnique({
       where: { loginId: FOLLOW_UP_OWNER_LOGIN_ID },

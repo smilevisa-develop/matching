@@ -19,7 +19,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
     prisma.deal.findUnique({
       where: { id: Number(id) },
       include: {
-        company: { select: { id: true, name: true, externalId: true } },
+        company: { select: { id: true, name: true, externalId: true, supportType: true } },
         owner: { select: { id: true, name: true } },
         candidates: {
           include: {

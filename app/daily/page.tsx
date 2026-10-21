@@ -111,6 +111,8 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
     },
   });
   const followUps = placements
+    // 候補者に紐づかない内定者 (書類作成のみ) とテスト企業の人は報告に入れない
+    .flatMap((p) => (p.person ? [{ ...p, person: p.person }] : []))
     .filter((p) => !isTestCompany(p.person.dealCandidates[0]?.deal.company.externalId))
     .map((p) => {
       const urgency = calcUrgency({
