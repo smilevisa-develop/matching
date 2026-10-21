@@ -90,6 +90,8 @@ export type PartnerDetailData = {
     nationality: string;
     residenceStatus: string;
     createdAt: string;
+    placedStage?: string | null;
+    placedCompany?: string | null;
   }[];
   ratingHistory: {
     id: number;
@@ -739,9 +741,42 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
           </>
         ) : null}
 
+        {/* 紹介した人の中で、内定まで進んだ人 (何名・誰・どこ) */}
+        {(() => {
+          const placed = initial.persons.filter((p) => p.placedStage);
+          return (
+            <div className="mt-6 rounded-xl border border-gray-200 p-4">
+              <p className="text-sm font-semibold text-[var(--color-text-dark)]">
+                紹介した候補者の実績
+                <span className="ml-2 text-xs font-normal text-gray-500">
+                  紹介 {initial.persons.length} 名 ・ 内定 {placed.length} 名
+                  （うち内定承諾 {placed.filter((p) => p.placedStage === "内定承諾").length} 名）
+                </span>
+              </p>
+              {placed.length > 0 ? (
+                <ul className="mt-2 space-y-1 text-sm">
+                  {placed.map((p) => (
+                    <li key={p.id} className="flex flex-wrap items-center gap-2">
+                      <Link href={`/personnel/${p.id}/edit`} className="text-[var(--color-primary)] hover:underline">
+                        #{p.id} {p.name}
+                      </Link>
+                      <span className="text-xs text-gray-500">{p.placedCompany}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${p.placedStage === "内定承諾" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600"}`}>
+                        {p.placedStage}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1 text-xs text-gray-400">まだ内定まで進んだ人はいません</p>
+              )}
+            </div>
+          );
+        })()}
+
         {initial.persons.length > 0 ? (
           <>
-            <h3 className="mt-6 text-sm font-semibold text-[var(--color-text-dark)]">紐づく候補者 (直近 50 件)</h3>
+            <h3 className="mt-6 text-sm font-semibold text-[var(--color-text-dark)]">紐づく候補者</h3>
             <div className="mt-2 overflow-hidden rounded-xl border border-gray-200">
               <table className="w-full text-sm">
                 <thead>

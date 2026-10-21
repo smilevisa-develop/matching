@@ -50,9 +50,22 @@ export default async function PartnerDetailPage({
         take: 30,
       },
       persons: {
-        select: { id: true, name: true, nationality: true, residenceStatus: true, createdAt: true },
+        select: {
+          id: true,
+          name: true,
+          nationality: true,
+          residenceStatus: true,
+          createdAt: true,
+          // 実績: 内定済み / 内定承諾 まで進んだ企業 (紹介した人の何名が、どこに決まったか)
+          dealCandidates: {
+            where: { stage: { in: ["内定済み", "内定承諾"] } },
+            orderBy: { updatedAt: "desc" },
+            take: 1,
+            select: { stage: true, deal: { select: { company: { select: { name: true } } } } },
+          },
+        },
         orderBy: { id: "desc" },
-        take: 50,
+        take: 200,
       },
       ratingHistory: {
         orderBy: { createdAt: "desc" },
@@ -142,6 +155,8 @@ export default async function PartnerDetailPage({
       nationality: p.nationality,
       residenceStatus: p.residenceStatus,
       createdAt: p.createdAt.toISOString(),
+      placedStage: p.dealCandidates[0]?.stage ?? null,
+      placedCompany: p.dealCandidates[0]?.deal.company.name ?? null,
     })),
     ratingHistory: partner.ratingHistory.map((h) => ({
       id: h.id,
