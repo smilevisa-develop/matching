@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
 import { getCoreSettings } from "@/lib/app-settings";
 import RefreshOnFocus from "@/app/components/RefreshOnFocus";
-import { normalizeDealStatus } from "@/lib/deal-stages";
+import { normalizeDealStatus, readStageDates } from "@/lib/deal-stages";
 import { isTestCompany } from "@/lib/test-companies";
 import { calcUrgency, resolveStage } from "@/lib/onboarding-flow";
 import { computeMonthStats, currentMonthJst, isMonthKey, shiftMonth } from "@/lib/month-stats";
@@ -183,6 +183,8 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
           id: cand.id,
           note: cand.note,
           stage: cand.stage,
+          // 今のステージに入った日 (月で表示を絞るのに使う。記録が無い古いデータは null)
+          stageDate: readStageDates(cand.stageDates)[cand.stage] ?? null,
           person: {
             id: cand.person.id,
             name: cand.person.name,

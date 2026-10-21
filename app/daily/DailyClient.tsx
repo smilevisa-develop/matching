@@ -33,8 +33,16 @@ export type DailyDeal = {
   deadline: string | null;
   memo: string | null;
   isTest: boolean;
-  candidates: CandidateCard[];
+  /** stageDate = 今のステージに入った日 (YYYY-MM-DD)。記録が無い古いデータは null */
+  candidates: (CandidateCard & { stageDate?: string | null })[];
 };
+
+/**
+ * 月に関係なくカンバンに出す「進行中」のステージ。対応が今も必要な人。
+ * それ以外 (内定・内定承諾・辞退・NG・不合格 = 終わった人) は、そのステージに入った日が選んだ月の人だけ出す。
+ * 日付の記録が無い終わった人 (2026/10/19 より前の動き) は過去の人として隠す。
+ */
+const IN_PROGRESS_STAGES = new Set(["接続済み", "事前面談済み", "推薦済み", "面接済み"]);
 
 type CountKey = "requiredCount" | "recommendedCount" | "interviewCount" | "offerCount";
 
@@ -66,6 +74,8 @@ export default function DailyClient({
 }) {
   const router = useRouter();
   const [openId, setOpenId] = useState<string | null>(null);
+  // 過去に終わった人 (前の月までに内定・NG になった人) もカンバンに出すか
+  const [showPast, setShowPast] = useState(false);
   // ドラッグ直後の見た目用。サーバーの内容 (from) が変わった時点で使われなくなる
   const [moved, setMoved] = useState<Record<number, { from: string; to: string }>>({});
   const stageOf = (c: CandidateCard) => (moved[c.id]?.from === c.stage ? moved[c.id].to : c.stage);
@@ -173,13 +183,44 @@ export default function DailyClient({
                     <td colSpan={COUNTS.length + 4} className="px-4 py-3">
                       {/* 表のセルは中身に合わせて広がるので、幅 0 + 最小幅 100% にして表の幅を押し広げないようにする */}
                       <div className="w-0 min-w-full">
-                      <CandidateKanban
-                        candidates={d.candidates
+                      {(() => {
+                        const all = d.candidates
                           .filter((c) => !removed.has(c.id))
-                          .map((c) => ({ ...c, stage: stageOf(c) }))}
-                        onMove={(id, stage, date) => void moveCandidate(id, stage, date)}
-                        onRemove={(candidate) => void removeCandidate(candidate)}
-                      />
+                          .map((c) => ({ ...c, stage: stageOf(c) }));
+                        // この画面で動かした人はその場で見えるように残す
+                        const shown = showPast
+                          ? all
+                          : all.filter(
+                              (c) =>
+                                IN_PROGRESS_STAGES.has(c.stage) ||
+                                Boolean(moved[c.id]) ||
+                                Boolean(c.stageDate && c.stageDate.startsWith(month)),
+                            );
+                        const hidden = all.length - shown.length;
+                        return (
+                          <>
+                            <CandidateKanban
+                              candidates={shown}
+                              onMove={(id, stage, date) => void moveCandidate(id, stage, date)}
+                              onRemove={(candidate) => void removeCandidate(candidate)}
+                            />
+                            {hidden > 0 || showPast ? (
+                              <p className="mt-2 text-[11px] text-gray-500">
+                                {showPast
+                                  ? "過去に内定・NG になった人も表示しています。"
+                                  : `前の月までに内定・NG などで終わった ${hidden} 名は隠しています。`}
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPast((v) => !v)}
+                                  className="ml-2 text-[var(--color-primary)] underline decoration-dotted"
+                                >
+                                  {showPast ? "隠す" : "過去分も表示"}
+                                </button>
+                              </p>
+                            ) : null}
+                          </>
+                        );
+                      })()}
                       </div>
                     </td>
                   </tr>
@@ -222,26 +263,29 @@ export default function DailyClient({
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => void copyReport()}
-          className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)]"
-        >
-          {copied ? "コピーしました ✓" : "Slack 用にコピー"}
-        </button>
-      </div>
-      {/* 選んだ月の実績。目標は 設定 → 月次目標 (推薦・内定)。面接待ち / 結果待ちだけは「今の状態」 */}
-      <div className="grid grid-cols-3 gap-2 md:grid-cols-5 xl:grid-cols-9">
-        <Kpi label="接続" value={stats.connected} target={null} />
-        <Kpi label="面談" value={stats.preInterviewed} target={null} />
-        <Kpi label="推薦" value={stats.recommended} target={recommendTarget} editable />
-        <Kpi label="面接待ち" value={stats.waitingInterview} target={null} hint="今 推薦済み" />
-        <Kpi label="面接" value={stats.interviewed} target={null} />
-        <Kpi label="結果待ち" value={stats.waitingResult} target={null} hint="今 面接済み" />
-        <Kpi label="内定" value={stats.offers} target={offerTarget} editable />
-        <Kpi label="内定承諾" value={stats.accepted} target={null} />
-        <Kpi label="募集中" value={counted.length} target={null} hint="社" />
+      {/* 主役は「内定の数と達成率」。他の数字はその下に小さく並べる (内定承諾は出さない) */}
+      <div className="flex flex-wrap items-stretch gap-4">
+        <OfferHero value={stats.offers} target={offerTarget} />
+        <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => void copyReport()}
+              className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)]"
+            >
+              {copied ? "コピーしました ✓" : "Slack 用にコピー"}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-x-5 gap-y-1.5 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs text-gray-500">
+            <MiniStat label="推薦" value={stats.recommended} target={recommendTarget} />
+            <MiniStat label="面接" value={stats.interviewed} />
+            <MiniStat label="面談" value={stats.preInterviewed} />
+            <MiniStat label="接続" value={stats.connected} />
+            <MiniStat label="面接待ち" value={stats.waitingInterview} title="今 推薦済みの人数" />
+            <MiniStat label="結果待ち" value={stats.waitingResult} title="今 面接済みの人数" />
+            <MiniStat label="募集中" value={counted.length} unit="社" />
+          </div>
+        </div>
       </div>
       {island("至急募集", urgent)}
       {island("募集中", open)}
@@ -249,52 +293,56 @@ export default function DailyClient({
   );
 }
 
-/** 数字 1 つ。目標があれば「現状 / 目標」と達成率のバーを出す。目標の数字を押すと設定の月次目標へ飛ぶ */
-function Kpi({
-  label,
-  value,
-  target,
-  editable = false,
-  hint,
-}: {
-  label: string;
-  value: number;
-  target: number | null;
-  editable?: boolean;
-  /** 数字の横に小さく出す補足 (例: 今 推薦済み) */
-  hint?: string;
-}) {
+/** 今月の内定 (大きく)。目標があれば「現状 / 目標」と達成率。目標の数字を押すと設定の月次目標へ飛ぶ */
+function OfferHero({ value, target }: { value: number; target: number | null }) {
   const rate = target && target > 0 ? Math.round((value / target) * 100) : null;
   const barColor = rate === null ? "" : rate >= 100 ? "bg-emerald-500" : rate >= 50 ? "bg-[var(--color-primary)]" : "bg-amber-500";
-  const targetText = rate !== null ? `/ ${target}` : editable ? "/ 目標を設定" : null;
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="truncate text-xs text-gray-500">{label}</p>
-        {rate !== null ? (
-          <p className="text-sm font-bold tabular-nums text-[var(--color-text-dark)]">{rate}%</p>
-        ) : null}
-      </div>
-      <p className="text-xl font-bold tabular-nums leading-tight text-[var(--color-text-dark)]">
-        {value}
-        {targetText && editable ? (
+    <div className="w-full rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm sm:w-[360px]">
+      <p className="text-sm font-semibold text-gray-500">内定</p>
+      <div className="mt-1 flex items-baseline justify-between gap-3">
+        <p className="tabular-nums leading-none text-[var(--color-text-dark)]">
+          <span className="text-5xl font-bold">{value}</span>
           <Link
             href="/settings#monthly-targets"
-            className="ml-1 text-sm font-medium text-gray-400 underline decoration-dotted underline-offset-2 hover:text-[var(--color-primary)]"
+            className="ml-2 text-lg font-medium text-gray-400 underline decoration-dotted underline-offset-4 hover:text-[var(--color-primary)]"
           >
-            {targetText}
+            {target && target > 0 ? `/ ${target} 名` : "/ 目標を設定"}
           </Link>
-        ) : targetText ? (
-          <span className="ml-1 text-sm font-medium text-gray-400">{targetText}</span>
-        ) : hint ? (
-          <span className="ml-1 text-[11px] font-medium text-gray-400">{hint}</span>
+        </p>
+        {rate !== null ? (
+          <p className={`text-4xl font-bold tabular-nums ${rate >= 100 ? "text-emerald-600" : "text-[var(--color-text-dark)]"}`}>{rate}%</p>
         ) : null}
-      </p>
+      </div>
       {rate !== null ? (
-        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
+        <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-gray-100">
           <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(rate, 100)}%` }} />
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** そのほかの数字 (小さく 1 行に並べる) */
+function MiniStat({
+  label,
+  value,
+  target,
+  unit,
+  title,
+}: {
+  label: string;
+  value: number;
+  target?: number | null;
+  unit?: string;
+  title?: string;
+}) {
+  return (
+    <span className="whitespace-nowrap" title={title}>
+      {label}
+      <span className="ml-1 text-sm font-semibold tabular-nums text-[var(--color-text-dark)]">{value}</span>
+      {target && target > 0 ? <span className="tabular-nums text-gray-400"> / {target}</span> : null}
+      {unit ? <span className="ml-0.5">{unit}</span> : null}
+    </span>
   );
 }
