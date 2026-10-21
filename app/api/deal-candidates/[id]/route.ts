@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { onDealCandidateStageChanged } from "@/lib/onboarding-autolink";
 import { after } from "next/server";
 import {
   ACTIVE_CANDIDATE_STAGES,
+  readFilledStages,
   readStageDates,
   stageCounterDeltas,
   todayJst,
@@ -41,23 +43,30 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // ステージごとの日付を記録する (同じステージに留まるときは触らない)。
       // 途中を飛ばして進めたとき (事前面談済み → 内定済み など) は、飛ばした段階にも同じ日付を入れる
       // (人数カウンターと同じく「通過した」扱い。月別集計で漏れないようにする)
-      const stageDates = readStageDates(before.stageDates);
+      const stageDates: Record<string, unknown> = readStageDates(before.stageDates);
+      const filled = readFilledStages(before.stageDates);
       if (before.stage !== stage) {
         const from = ACTIVE_CANDIDATE_STAGES.indexOf(before.stage);
         const to = ACTIVE_CANDIDATE_STAGES.indexOf(stage);
         if (from >= 0 && to > from) {
           for (let i = from + 1; i < to; i++) {
             const skipped = ACTIVE_CANDIDATE_STAGES[i];
-            if (!stageDates[skipped]) stageDates[skipped] = date;
+            if (!stageDates[skipped]) {
+              stageDates[skipped] = date;
+              filled.add(skipped);
+            }
           }
         }
         stageDates[stage] = date;
+        filled.delete(stage);
       }
+      // 自動で埋めた段階の印 (日数の計算から外すため)
+      if (filled.size > 0) stageDates._filled = [...filled];
       const candidate = await tx.dealCandidate.update({
         where: { id: Number(id) },
         data: {
           stage,
-          stageDates,
+          stageDates: stageDates as Prisma.InputJsonValue,
           ...(note !== undefined ? { note } : {}),
         },
       });

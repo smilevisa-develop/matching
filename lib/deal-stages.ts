@@ -62,6 +62,16 @@ export function readStageDates(value: unknown): Record<string, string> {
   return out;
 }
 
+/**
+ * 途中を飛ばして進めたときに自動で埋めた段階 (stageDates._filled)。
+ * 件数には数えるが、日付は実際の日ではないので「かかった日数」の計算には使わない。
+ */
+export function readFilledStages(value: unknown): Set<string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return new Set();
+  const f = (value as Record<string, unknown>)._filled;
+  return new Set(Array.isArray(f) ? f.filter((x): x is string => typeof x === "string") : []);
+}
+
 /** 今日の日付 (日本時間) を "YYYY-MM-DD" で返す */
 export function todayJst(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);

@@ -69,7 +69,10 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
             {k.conversions.map((c) => (
               <li key={c.label} className="flex items-center justify-between py-2">
                 <span className="text-gray-600">{c.label}</span>
-                <span className="font-semibold tabular-nums text-[var(--color-text-dark)]">{c.value === null ? "-" : `${c.value}%`}</span>
+                <span className="tabular-nums text-[var(--color-text-dark)]">
+                  <span className="font-semibold">{c.value === null ? "-" : `${c.value}%`}</span>
+                  <span className="ml-1 text-xs text-gray-400">（{c.base}）</span>
+                </span>
               </li>
             ))}
           </ul>
@@ -158,7 +161,8 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
       </div>
 
       <p className="text-xs text-gray-400">
-        ※ 推薦・面接などの件数と日数は、カンバンで候補者を動かしたときに入れた日付で数えます。2026/10/19 より前の動きは日付の記録が無いため、
+        ※ 推薦・面接などの件数と日数は、カンバンで候補者を動かしたときに入れた日付で数えます。転換率はカンバンの記録どうしで計算しています。
+        段階を飛ばして進めた分 (接続済み → 内定承諾 など) は件数には入れ、日数には入れていません。2026/10/19 より前の動きは日付の記録が無いため、
         それ以前の月は少なく出ます（内定・内定承諾は内定者管理の日付も使っています）。累計は案件ごとの人数の合計で、過去分も含みます。テスト企業は除いています。
       </p>
     </div>

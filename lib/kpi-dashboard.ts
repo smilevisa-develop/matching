@@ -9,7 +9,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { readStageDates } from "@/lib/deal-stages";
+import { readFilledStages, readStageDates } from "@/lib/deal-stages";
 import { isTestCompany } from "@/lib/test-companies";
 import { currentMonthJst, shiftMonth } from "@/lib/month-stats";
 
@@ -83,12 +83,19 @@ export async function computeKpiDashboard(period: KpiPeriod) {
   const joined = placements.filter((p) => p.joinAt && inPeriod(ymdJst(p.joinAt))).length;
 
   // ── 転換率 (期間) ──
+  // 分母と分子を同じ記録 (カンバンの日付) だけで数える。内定者管理の内定日を混ぜると、
+  // 面接の記録が無い内定が増えて 300% のようなおかしな値になるため
+  const kc: Record<string, number> = Object.fromEntries(STAGES.map(([, label]) => [label, 0]));
+  for (const c of real) {
+    const d = readStageDates(c.stageDates);
+    for (const [stage, label] of STAGES) if (inPeriod(d[stage])) kc[label]++;
+  }
   const rate = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : null);
   const conversions = [
-    { label: "推薦 → 面接", value: rate(counts["面接"], counts["推薦"]) },
-    { label: "面接 → 内定", value: rate(counts["内定"], counts["面接"]) },
-    { label: "内定 → 内定承諾", value: rate(counts["内定承諾"], counts["内定"]) },
-    { label: "内定辞退 / 内定", value: rate(counts["内定辞退"], counts["内定"]) },
+    { label: "推薦 → 面接", value: rate(kc["面接"], kc["推薦"]), base: `${kc["面接"]} / ${kc["推薦"]}` },
+    { label: "面接 → 内定", value: rate(kc["内定"], kc["面接"]), base: `${kc["内定"]} / ${kc["面接"]}` },
+    { label: "内定 → 内定承諾", value: rate(kc["内定承諾"], kc["内定"]), base: `${kc["内定承諾"]} / ${kc["内定"]}` },
+    { label: "内定辞退 / 内定", value: rate(kc["内定辞退"], kc["内定"]), base: `${kc["内定辞退"]} / ${kc["内定"]}` },
   ];
 
   // ── かかった日数 (後ろの段階の日付が期間内のもの) ──
@@ -103,6 +110,9 @@ export async function computeKpiDashboard(period: KpiPeriod) {
     const list: number[] = [];
     for (const c of real) {
       const d = readStageDates(c.stageDates);
+      // 飛ばして自動で埋めた日付は実際の日ではないので使わない
+      const filled = readFilledStages(c.stageDates);
+      if (filled.has(a) || filled.has(b)) continue;
       if (d[a] && d[b] && inPeriod(d[b])) {
         const n = days(d[a], d[b]);
         if (n >= 0) list.push(n);
