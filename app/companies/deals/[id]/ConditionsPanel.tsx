@@ -4,91 +4,18 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import CloseButton from "@/app/components/CloseButton";
 import UnsavedChangesBar from "@/app/components/UnsavedChangesBar";
+import {
+  JOB_CONDITION_FIELDS,
+  JOB_CONDITION_GROUPS,
+  migrateLegacyConditions,
+  type ConditionsRecord,
+} from "@/lib/job-conditions";
 
-export const CONDITION_FIELDS: { key: string; label: string; group: string; multiline?: boolean }[] = [
-  { key: "title", label: "タイトル", group: "基本" },
-  { key: "jobDescription", label: "仕事内容", group: "基本", multiline: true },
-  { key: "workLocation", label: "勤務地", group: "基本" },
-  { key: "nearestStation", label: "最寄り駅", group: "基本" },
-  { key: "headcount", label: "募集人数", group: "基本" },
-  { key: "gender", label: "性別", group: "基本" },
-  { key: "nationality", label: "国籍", group: "基本" },
+// 入力項目は 2026/10 の「求人テンプレート」と同じ (lib/job-conditions.ts)。以前の項目のデータは消さずに残す
+export const CONDITION_FIELDS = JOB_CONDITION_FIELDS;
+const FIELD_GROUPS: readonly string[] = JOB_CONDITION_GROUPS;
 
-  { key: "workTime1Start", label: "勤務開始 1", group: "勤務" },
-  { key: "workTime1End", label: "勤務終了 1", group: "勤務" },
-  { key: "workTime2Start", label: "勤務開始 2", group: "勤務" },
-  { key: "workTime2End", label: "勤務終了 2", group: "勤務" },
-  { key: "overtime", label: "残業有無", group: "勤務" },
-  { key: "avgMonthlyOvertime", label: "月間平均残業時間", group: "勤務" },
-  { key: "fixedOvertimeHours", label: "固定残業時間", group: "勤務" },
-  { key: "fixedOvertimePay", label: "固定残業代", group: "勤務" },
-  { key: "holidays", label: "休日", group: "勤務" },
-
-  { key: "monthlyGross", label: "月総支給額", group: "給与" },
-  { key: "basicSalary", label: "基本給", group: "給与" },
-  { key: "salaryCalcMethod", label: "給与計算方法 (月給/時給)", group: "給与" },
-  { key: "perfectAttendance", label: "皆勤手当", group: "給与" },
-  { key: "housingAllowance", label: "住宅手当", group: "給与" },
-  { key: "nightShiftAllowance", label: "深夜手当", group: "給与" },
-  { key: "commuteAllowance", label: "通勤手当", group: "給与" },
-
-  { key: "socialInsurance", label: "社会保険料", group: "控除" },
-  { key: "employmentInsurance", label: "雇用保険料", group: "控除" },
-  { key: "healthInsurance", label: "健康保険料", group: "控除" },
-  { key: "pensionInsurance", label: "厚生年金保険料", group: "控除" },
-  { key: "incomeTax", label: "所得税", group: "控除" },
-  { key: "residentTax", label: "住民税", group: "控除" },
-
-  { key: "mealProvision", label: "食費支給 (有/無)", group: "生活" },
-  { key: "mealAmount", label: "食費金額", group: "生活" },
-  { key: "dormProvision", label: "寮支給 (有/無)", group: "生活" },
-  { key: "dormAmount", label: "寮費金額", group: "生活" },
-  { key: "utilitiesProvision", label: "光熱費支給 (有/無)", group: "生活" },
-  { key: "utilitiesAmount", label: "光熱費金額", group: "生活" },
-
-  { key: "otherBenefits", label: "その他手当・福利厚生", group: "その他", multiline: true },
-  { key: "notes", label: "特記事項", group: "その他", multiline: true },
-
-  // ── 2026-06 求人票テンプレ拡張 (27 項目) ──
-  // 給与関連追加
-  { key: "salaryIncrease", label: "昇給有無", group: "給与" },
-  { key: "bonus", label: "賞与有無", group: "給与" },
-  { key: "salaryPayday", label: "給与支払日", group: "給与" },
-  { key: "salaryCutoff", label: "給与締日", group: "給与" },
-  { key: "monthlyDeduction", label: "月控除額", group: "控除" },
-  { key: "otherDeductions", label: "その他控除金額", group: "控除" },
-  { key: "socialInsuranceCoverage", label: "社会保険 (加入有無)", group: "控除" },
-  // 生活費追加
-  { key: "wifiFee", label: "Wifi代金額", group: "生活" },
-  { key: "waterFee", label: "水道代金額", group: "生活" },
-  { key: "foodProvision", label: "食事提供有無 (食費支給と別)", group: "生活" },
-  { key: "dormOccupants", label: "寮人数", group: "生活" },
-  { key: "bedroomShared", label: "寝室共有 (有/無)", group: "生活" },
-  { key: "dormCommuteTime", label: "寮から通勤時間", group: "生活" },
-  // 移住関連
-  { key: "movingSupport", label: "引越補助有無", group: "移住・応募" },
-  { key: "movingSupportDetails", label: "引越補助詳細", group: "移住・応募", multiline: true },
-  { key: "preferredEntryDate", label: "入国希望日", group: "移住・応募" },
-  { key: "foreignWorkers", label: "外国人就業者 (現在の人数など)", group: "移住・応募" },
-  { key: "overseasApplication", label: "海外応募可否", group: "移住・応募" },
-  // 募集条件追加
-  { key: "japaneseLevel", label: "日本語レベル", group: "募集条件" },
-  { key: "experienceYears", label: "経験年数", group: "募集条件" },
-  { key: "requiredQualifications", label: "必要資格", group: "募集条件", multiline: true },
-  // 選考
-  { key: "preferredInterviewDate", label: "面接希望日", group: "選考" },
-  { key: "selectionFlow", label: "選考フロー", group: "選考", multiline: true },
-  // 勤務条件追加
-  { key: "trialPeriod", label: "試用期間有無", group: "勤務" },
-  { key: "trialPeriodDetails", label: "試用期間詳細", group: "勤務" },
-  { key: "holidayCategory", label: "休日休暇区分", group: "勤務" },
-  { key: "facilities", label: "設備", group: "勤務", multiline: true },
-  { key: "commuteMethod", label: "通勤手段", group: "勤務" },
-];
-
-const FIELD_GROUPS = ["基本", "勤務", "給与", "控除", "生活", "移住・応募", "募集条件", "選考", "その他"];
-
-export type ConditionsRecord = Record<string, string | null | undefined>;
+export type { ConditionsRecord };
 
 export type JobPostingTemplateOption = { id: number; name: string };
 
@@ -149,10 +76,9 @@ export default function ConditionsPanel({
     }
   };
 
+  // 入力済みの数は、今の項目 (求人テンプレートの項目) だけで数える
   const populatedCount = useMemo(
-    () =>
-      Object.values(form).filter((v) => typeof v === "string" && (v as string).trim() !== "")
-        .length,
+    () => CONDITION_FIELDS.filter((f) => String(form[f.key] ?? "").trim() !== "").length,
     [form]
   );
 
@@ -210,7 +136,24 @@ export default function ConditionsPanel({
                 <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                   {fields.map((f) => (
                     <Field key={f.key} label={f.label}>
-                      {f.multiline ? (
+                      {f.options ? (
+                        <select
+                          value={String(form[f.key] ?? "")}
+                          onChange={(e) => setField(f.key, e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+                        >
+                          <option value="">未選択</option>
+                          {/* 以前の書き方の値が入っていたら、それも選べるように残す */}
+                          {form[f.key] && !f.options.includes(String(form[f.key])) ? (
+                            <option value={String(form[f.key])}>{String(form[f.key])}</option>
+                          ) : null}
+                          {f.options.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      ) : f.multiline ? (
                         <textarea
                           value={String(form[f.key] ?? "")}
                           onChange={(e) => setField(f.key, e.target.value)}
@@ -254,12 +197,15 @@ export default function ConditionsPanel({
   );
 }
 
+/**
+ * 表示用に整える。以前の項目 (画面には出さない) も消さずにそのまま持っておき、保存時に一緒に送る。
+ * 新しい項目が空なら、以前の項目から作った値を入れる。
+ */
 function normalize(input: ConditionsRecord): ConditionsRecord {
+  const migrated = migrateLegacyConditions(input);
   const out: ConditionsRecord = {};
-  for (const f of CONDITION_FIELDS) {
-    const v = input?.[f.key];
-    out[f.key] = typeof v === "string" ? v : "";
-  }
+  for (const [k, v] of Object.entries(migrated)) if (typeof v === "string") out[k] = v;
+  for (const f of CONDITION_FIELDS) if (typeof out[f.key] !== "string") out[f.key] = "";
   return out;
 }
 

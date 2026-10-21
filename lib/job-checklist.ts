@@ -11,6 +11,7 @@
  */
 
 import { generateContentRotating, getGeminiModel } from "./gemini-keys";
+import { migrateLegacyConditions } from "@/lib/job-conditions";
 
 export type ChecklistLanguage = "vi" | "id" | "my" | "ne";
 
@@ -64,6 +65,8 @@ function formatLocation(c: Record<string, unknown>): string {
 
 /** 残業: 固定残業かどうかを明記 */
 function formatOvertime(c: Record<string, unknown>): string {
+  // 新しい項目 (固定残業 / 残業) があればそれを使う
+  if (str(c.fixedOvertime)) return joinNonEmpty([`固定残業あり（${str(c.fixedOvertime)}）`, str(c.overtime)], " / ");
   const fh = str(c.fixedOvertimeHours);
   const fp = str(c.fixedOvertimePay);
   if (fh || fp) {
@@ -81,8 +84,8 @@ function formatDorm(c: Record<string, unknown>): string {
   const amt = str(c.dormAmount);
   if (!prov && !amt) return "";
   if (/無|なし/.test(prov)) return "なし";
-  const fee = amt ? `寮費 ${money(amt)}／月（本人負担）` : "";
-  return joinNonEmpty([prov || "あり", fee], "・");
+  const fee = amt ? `家賃 ${money(amt)}／月（本人負担）` : "";
+  return joinNonEmpty([prov || "あり", str(c.roomType), fee], "・");
 }
 
 /** 食事: あり/なし＋金額を円で */
@@ -105,26 +108,22 @@ const KEY_POINT_FIELDS: { key: string; label: string; from: (c: Record<string, u
     label: "月収（額面・手取りではありません）",
     from: (c) => money(str(c.monthlyGross) || str(c.basicSalary)),
   },
-  {
-    key: "workTime",
-    label: "勤務時間",
-    from: (c) => {
-      const a = joinNonEmpty([str(c.workTime1Start), str(c.workTime1End)], "〜");
-      const b = joinNonEmpty([str(c.workTime2Start), str(c.workTime2End)], "〜");
-      return joinNonEmpty([a, b], " / ");
-    },
-  },
+  { key: "takeHome", label: "予想の手取り", from: (c) => money(str(c.expectedTakeHome)) },
+  { key: "workTime", label: "勤務時間", from: (c) => joinNonEmpty([str(c.workHours), str(c.breakTime) && `休憩 ${str(c.breakTime)}`], "（") + (str(c.breakTime) && str(c.workHours) ? "）" : "") },
   { key: "overtime", label: "残業", from: (c) => formatOvertime(c) },
   { key: "holidays", label: "休日", from: (c) => str(c.holidays) },
   { key: "dorm", label: "寮", from: (c) => formatDorm(c) },
   { key: "meal", label: "食事", from: (c) => formatMeal(c) },
-  { key: "benefits", label: "待遇・手当（有給など）", from: (c) => str(c.otherBenefits) },
+  { key: "benefits", label: "手当", from: (c) => str(c.allowances) || str(c.otherBenefits) },
   { key: "notes", label: "備考", from: (c) => str(c.notes) },
 ];
 
 /** 求人の conditions から日本語の要点リストを作る (値が空の項目は除外) */
 export function buildJapaneseKeyPoints(conditions: unknown): JaKeyPoint[] {
-  const c = conditions && typeof conditions === "object" ? (conditions as Record<string, unknown>) : {};
+  // 2026/10 の求人テンプレートの項目 (勤務時間・固定残業・手当・予想の手取り・部屋タイプ) を、以前の項目より優先して使う
+  const c = migrateLegacyConditions(
+    conditions && typeof conditions === "object" ? (conditions as Record<string, string>) : {},
+  ) as Record<string, unknown>;
   const out: JaKeyPoint[] = [];
   for (const f of KEY_POINT_FIELDS) {
     const value = f.from(c);

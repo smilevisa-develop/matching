@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { createResumeDocumentFromTemplate, ensureCompanyDriveFolder } from "@/lib/google-docs";
+import { conditionPlaceholders } from "@/lib/job-conditions";
 
 type JobPostingFields = {
   title?: string;
@@ -286,6 +287,11 @@ export async function POST(req: Request) {
           // 勤務時間1/2 の結合を追加 (テンプレで {{勤務時間1}} と書いてある想定)
           replacements["勤務時間1"] = buildWorkTimeString(fields.workTime1Start, fields.workTime1End);
           replacements["勤務時間2"] = buildWorkTimeString(fields.workTime2Start, fields.workTime2End);
+          // 2026/10 の求人テンプレートの項目 ({{雇用形態}} {{手当}} {{予想の手取り}} など)。
+          // 求人の条件 (Deal.conditions) から作る。値があるものは上の古い差し込みより優先
+          for (const [k, v] of Object.entries(conditionPlaceholders((deal.conditions ?? {}) as Record<string, string>))) {
+            if (v) replacements[k] = v;
+          }
 
           const filledKeys = Object.entries(replacements)
             .filter(([, v]) => typeof v === "string" && v.trim() !== "")

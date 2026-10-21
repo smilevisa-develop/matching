@@ -644,39 +644,42 @@ export const JOB_POSTING_SCHEMA = `次のJSONスキーマで求人票情報を�
 
 fields:
 - title: 求人票のタイトル(職種+会社名など)
+- employmentType: 雇用形態 ("特定技能" / "技術・人文知識・国際業務" のどちらか)
+- field: 分野 (特定技能の分野。例: 介護 / 外食 / 建設)
+- jobType: 職種
 - jobDescription: 仕事内容
 - workLocation: 勤務地(都道府県+市区町村以下)
-- nearestStation: 最寄り駅
 - headcount: 募集人数(数字の文字列)
-- gender: 男/女/不問
 - nationality: 希望国籍(不問の場合は"不問")
-- workTime1Start / workTime1End: シフト1 開始/終了 "HH:MM"
-- workTime2Start / workTime2End: シフト2(二交代制などある場合)
-- overtime: 残業有無("有"/"無")
-- avgMonthlyOvertime: 月間平均残業時間(数字の文字列, 時間)
-- fixedOvertimeHours: 固定残業時間
-- fixedOvertimePay: 固定残業代(円)
-- monthlyGross: 月総支給額(円)
+- gender: "不問" / "男性" / "女性"
+- preferredEntryDate: 入社希望時期
+- experienceYears: 実務経験
+- japaneseLevel: 日本語レベル ("不問" / "N1以上" / "N2以上" / "N3以上" / "N4以上" / "JFT-Basic合格" のどれか)
+- education: 学歴
+- requiredQualifications: 免許・資格など
+- workHours: 勤務時間 (例: "8:00〜17:00 / 20:00〜5:00(夜勤)")
+- breakTime: 休憩 (例: "60分")
+- overtime: 残業 (有無と月平均など)
+- fixedOvertime: 固定残業 (時間と金額。無ければ含めない)
+- holidays: 休日
+- transfer: 転勤・異動 ("あり" / "なし")
+- monthlyGross: 額面(月総支給額。円)
 - basicSalary: 基本給(円)
-- salaryCalcMethod: 給与計算方法(月給/時給)
-- perfectAttendance: 皆勤手当(円)
-- housingAllowance: 住宅手当(円)
-- nightShiftAllowance: 深夜手当(円)
-- commuteAllowance: 通勤手当(円 or "全額支給")
-- socialInsurance: 社会保険料の記載(有/無/概算)
-- employmentInsurance: 雇用保険料
-- healthInsurance: 健康保険料
-- pensionInsurance: 厚生年金保険料
-- incomeTax: 所得税
-- residentTax: 住民税
-- mealProvision: 食費支給の有無(有/無)
-- mealAmount: 食費金額(円/月)
-- dormProvision: 寮の有無(有/無)
-- dormAmount: 寮費金額(円/月)
-- utilitiesProvision: 光熱費支給の有無(有/無)
-- utilitiesAmount: 光熱費金額(円/月)
-- holidays: 休日(週休2日制など)
-- otherBenefits: その他手当・福利厚生
+- allowances: 手当 (種類と金額をまとめて。例: "皆勤手当 10000円 / 住宅手当 20000円")
+- expectedTakeHome: 予想の手取り(円)
+- bonus: 賞与
+- salaryIncrease: 昇給
+- dormProvision: 寮の有無 ("あり" / "なし")
+- dormAmount: 家賃 (寮費。円/月)
+- roomType: 部屋タイプ (個室 / 相部屋 など)
+- dormCommuteTime: 寮から職場までの通勤時間
+- commuteMethod: 通勤手段
+- movingSupport: 引っ越し手当
+- ssw2Support: 特定技能2号への支援 ("支援あり" / "支援なし")
+- visaCostCoverage: ビザ申請の費用 ("会社負担" / "本人負担" / "一部負担")
+- overseasApplication: 海外からの応募 ("可" / "不可")
+- travelCostCoverage: 渡航費 ("会社負担" / "本人負担" / "一部負担")
+- foreignWorkers: 外国人材の採用実績
 - notes: 特記事項`;
 
 const JOB_POSTING_SYSTEM_PROMPT = `あなたは日本の求人票から項目を抽出するアシスタントです。
