@@ -78,7 +78,10 @@ export type OnboardingCard = {
   issues: OnboardingIssue[];
 };
 
-type Staff = { id: number; name: string };
+type Staff = { id: number; name: string; loginId: string };
+
+/** 内定者フォローの担当 (追加するときの最初の担当。内定承諾で自動で載るときと同じ) */
+const DEFAULT_FOLLOW_UP_LOGIN_ID = "nguyet";
 
 // 列の id は lib/onboarding-flow.ts と同じ。見出しだけ短くしている
 const COLUMNS: { id: OnboardingStageId; label: string }[] = [
@@ -1029,7 +1032,15 @@ function SupportModal({ card, onCancel, onConfirm }: { card: OnboardingCard; onC
 
 /** 候補者とは別の内定者 (書類作成のみ) を追加する */
 function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCancel: () => void; onCreated: (card: OnboardingCard) => void }) {
-  const [form, setForm] = useState({ name: "", companyName: "", residenceStatus: "", followUpOwnerId: "", applicationType: "", applicationMethod: "" });
+  const defaultOwner = staff.find((s) => s.loginId === DEFAULT_FOLLOW_UP_LOGIN_ID);
+  const [form, setForm] = useState({
+    name: "",
+    companyName: "",
+    residenceStatus: "",
+    followUpOwnerId: defaultOwner ? String(defaultOwner.id) : "",
+    applicationType: "",
+    applicationMethod: "",
+  });
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 

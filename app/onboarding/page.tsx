@@ -46,7 +46,7 @@ export default async function OnboardingPage() {
       },
       orderBy: { updatedAt: "desc" },
     }),
-    prisma.staffAccount.findMany({ select: { id: true, name: true }, orderBy: { id: "asc" } }),
+    prisma.staffAccount.findMany({ select: { id: true, name: true, loginId: true }, orderBy: { id: "asc" } }),
   ]);
 
   const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
