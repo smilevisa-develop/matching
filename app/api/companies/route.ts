@@ -3,6 +3,7 @@ import { normalizeSupportMethod, writeSupportMethodToMaster } from "@/lib/compan
 import { requireApiAccount, AuthError } from "@/lib/auth";
 import { after } from "next/server";
 import { nextCompanyExternalId, requestCompanyDatabaseSync } from "@/lib/company-db-sync";
+import { ensureCompanyDriveFolder } from "@/lib/google-docs";
 
 /** 次に使える企業ID (?nextId=人材紹介会社 / 通常) を返す */
 async function nextIdResponse(kind: string) {
@@ -51,7 +52,8 @@ export async function POST(req: Request) {
       data: {
         externalId,
         name,
-        industry: String(body.industry ?? "").trim() || null,
+        // 人材紹介会社は業種を持たない
+        industry: companyKind === "人材紹介会社" ? null : String(body.industry ?? "").trim() || null,
         location: String(body.location ?? "").trim() || null,
         hiringStatus: String(body.hiringStatus ?? "").trim() || "募集中",
         companyKind,
@@ -63,13 +65,29 @@ export async function POST(req: Request) {
       },
     });
 
+    // 企業を追加した時点で Drive に企業フォルダ (企業ID_企業名) を作る。
+    // 以前は求人票や推薦リストを作るときに初めて作っていた。同じ企業IDのフォルダが既にあればそれを使う
+    let driveWarning: string | null = null;
+    let saved = company;
+    if (!company.driveFolderUrl) {
+      try {
+        const folder = await ensureCompanyDriveFolder({ externalId: company.externalId, companyName: company.name });
+        if (folder.folderUrl) {
+          saved = await prisma.company.update({ where: { id: company.id }, data: { driveFolderUrl: folder.folderUrl } });
+        }
+      } catch (error) {
+        driveWarning = `Drive フォルダを作れませんでした: ${error instanceof Error ? error.message : String(error)}`;
+        console.error("[companies] drive folder", error);
+      }
+    }
+
     // 企業データベース(スプシ)へ保存直後に反映する (応答は待たせない)。
     // 支援方法は企業マスタに行が追加されたあとに書く
     after(async () => {
       await requestCompanyDatabaseSync();
       if (company.supportMethod) await writeSupportMethodToMaster(company.externalId, company.supportMethod);
     });
-    return Response.json({ ok: true, company });
+    return Response.json({ ok: true, company: saved, driveWarning });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "error" },

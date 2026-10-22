@@ -179,6 +179,8 @@ export default function DealDetailClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...dealForm,
+          // 人材紹介会社は分野を入れない (画面に出していないので、今の値をそのまま残す)
+          field: nextKind === "人材紹介会社" ? currentDeal.field : dealForm.field,
           ownerId: editForm.ownerId ? Number(editForm.ownerId) : null,
         }),
       });
@@ -197,7 +199,7 @@ export default function DealDetailClient({
           supportMethod: nextMethod || null,
         },
         title: editForm.title,
-        field: editForm.field || null,
+        field: nextKind === "人材紹介会社" ? prev.field : editForm.field || null,
         status: editForm.status,
         unitPrice: editForm.unitPrice || null,
         deadline: editForm.deadline ? new Date(editForm.deadline).toISOString() : null,
@@ -304,7 +306,9 @@ export default function DealDetailClient({
                 <InfoRow label="単価" value={formatUnitPrice(currentDeal.unitPrice)} />
                 <InfoRow label="受付日" value={currentDeal.acceptedAt ? new Date(currentDeal.acceptedAt).toLocaleDateString("ja-JP") : "未設定"} />
                 <InfoRow label="期限" value={currentDeal.deadline ? new Date(currentDeal.deadline).toLocaleDateString("ja-JP") : "未設定"} />
-                <InfoRow label="分野" value={normalizeSswIndustry(currentDeal.field) ?? "未設定"} />
+                {currentDeal.company.companyKind === "人材紹介会社" ? null : (
+                  <InfoRow label="分野" value={normalizeSswIndustry(currentDeal.field) ?? "未設定"} />
+                )}
                 <InfoRow label="支援" value={currentDeal.company.supportType ?? "自社支援"} />
                 <InfoRow label="区分" value={currentDeal.company.companyKind ?? "通常"} />
                 <InfoRow label="支援方法" value={currentDeal.company.supportMethod ?? "未設定"} />
@@ -383,13 +387,15 @@ export default function DealDetailClient({
                 <option value="委託管理">委託管理 (内定者管理に出さない)</option>
               </select>
             </EditField>
-            <EditField label="分野">
-              <select className={EDIT_INPUT} value={editForm.field} onChange={(e) => setEditForm((c) => ({ ...c, field: e.target.value }))}>
-                {SSW_INDUSTRIES.map((industry) => (
-                  <option key={industry} value={industry}>{industry}</option>
-                ))}
-              </select>
-            </EditField>
+            {editForm.companyKind === "人材紹介会社" ? null : (
+              <EditField label="分野">
+                <select className={EDIT_INPUT} value={editForm.field} onChange={(e) => setEditForm((c) => ({ ...c, field: e.target.value }))}>
+                  {SSW_INDUSTRIES.map((industry) => (
+                    <option key={industry} value={industry}>{industry}</option>
+                  ))}
+                </select>
+              </EditField>
+            )}
             <EditField label="求人ステータス">
               <select className={EDIT_INPUT} value={editForm.status} onChange={(e) => setEditForm((c) => ({ ...c, status: e.target.value }))}>
                 {STATUS_OPTIONS.map((status) => (

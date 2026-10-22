@@ -33,13 +33,14 @@ export default function NewCompanyPage() {
       const response = await fetch("/api/companies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, industry: form.companyKind === "人材紹介会社" ? "" : form.industry }),
       });
       const result = await response.json();
       if (!response.ok || !result.ok) {
         alert(result.error || "登録に失敗しました");
         return;
       }
+      if (result.driveWarning) alert(`企業は登録しました。${result.driveWarning}`);
       router.push(`/companies/${result.company.id}`);
       router.refresh();
     } finally {
@@ -95,12 +96,14 @@ export default function NewCompanyPage() {
               placeholder="14sv"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Drive の企業フォルダ名と推薦リストの保存先検索に使用します。区分を押すと次の番号が入ります。
+              保存すると Drive に「企業ID_企業名」のフォルダを作ります。区分を押すと次の番号が入ります。
             </p>
           </Field>
           <Field label="企業名 *">
             <input className={INPUT} value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} />
           </Field>
+          {/* 人材紹介会社は業種を入れない */}
+          {form.companyKind === "人材紹介会社" ? null : (
           <Field label="業種 (特定技能16分野)">
             <select className={INPUT} value={form.industry} onChange={(e) => setForm((current) => ({ ...current, industry: e.target.value }))}>
               {SSW_INDUSTRIES.map((industry) => (
@@ -108,6 +111,7 @@ export default function NewCompanyPage() {
               ))}
             </select>
           </Field>
+          )}
           <Field label="支援方法">
             <select className={INPUT} value={form.supportMethod} onChange={(e) => setForm((current) => ({ ...current, supportMethod: e.target.value }))}>
               <option value="">未設定</option>
