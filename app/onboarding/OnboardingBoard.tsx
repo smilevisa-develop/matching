@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import PersonAvatar from "@/app/components/PersonAvatar";
 import {
   APPLICATION_TYPES,
   HOLD_STAGE,
@@ -46,7 +47,13 @@ export type OnboardingCard = {
   id: number;
   /** 候補者 id (候補者に紐づかない内定者は null) */
   personId: number | null;
+  /** 表示名 (アルファベットの英語名。無ければカナ名) */
   personName: string;
+  /** カナ名 (英語名を出しているときだけ。詳細の吹き出しで併記) */
+  kanaName: string | null;
+  nationality: string;
+  photoUrl: string | null;
+  partnerName: string | null;
   residenceStatus: string;
   companyName: string | null;
   /** 候補者とは別に追加した内定者 */
@@ -391,14 +398,35 @@ function BoardCard({
   const done = stageTasks.filter((t) => t.done).length;
   const complete = stageTasks.length > 0 && done === stageTasks.length;
   const next = nextThing(card);
+  // カーソルを合わせて少し待つと詳細を大きく出す (候補者カンバンと同じ)
+  const [hoverRect, setHoverRect] = useState<DOMRect | null>(null);
+  const hoverTimer = useRef<number | null>(null);
+  const endHover = () => {
+    if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+    setHoverRect(null);
+  };
 
   return (
+    <>
     <button
       type="button"
       draggable
-      onDragStart={onDragStart}
+      onDragStart={() => {
+        endHover();
+        onDragStart();
+      }}
       onDragEnd={onDragEnd}
-      onClick={onClick}
+      onClick={() => {
+        endHover();
+        onClick();
+      }}
+      onMouseEnter={(event) => {
+        if (dragging) return;
+        const el = event.currentTarget;
+        if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+        hoverTimer.current = window.setTimeout(() => setHoverRect(el.getBoundingClientRect()), 250);
+      }}
+      onMouseLeave={endHover}
       className={`w-full cursor-grab rounded-xl border border-gray-200 bg-white p-3 text-left shadow-sm hover:shadow-md ${dragging ? "opacity-40" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -424,6 +452,59 @@ function BoardCard({
         <p className="mt-1.5 text-xs text-emerald-700">この工程は完了。次へ進めます</p>
       ) : null}
     </button>
+    {hoverRect && !dragging ? <BoardHoverCard card={card} rect={hoverRect} next={next} done={done} total={stageTasks.length} /> : null}
+    </>
+  );
+}
+
+/** カードにカーソルを合わせたときに出す、大きめの内定者情報 (空の項目は出さない) */
+function BoardHoverCard({ card, rect, next, done, total }: { card: OnboardingCard; rect: DOMRect; next: string | null; done: number; total: number }) {
+  const width = 300;
+  // カードの右に出す。画面の右端からはみ出すときは左に出す
+  const left = rect.right + 8 + width > window.innerWidth ? Math.max(8, rect.left - width - 8) : rect.right + 8;
+  // 下にはみ出さないよう、画面の下の方では上にずらす
+  const top = Math.min(Math.max(8, rect.top - 8), window.innerHeight - 380);
+  const stageLabel = COLUMNS.find((c) => c.id === card.stage)?.label ?? card.stage;
+  const supportLabels = SUPPORT_OPTIONS.filter((o) => card.supports.includes(o.id)).map((o) => o.label);
+  const rows: [string, string | null][] = [
+    ["企業", card.companyName],
+    ["工程", total > 0 ? `${stageLabel}（${done}/${total}）` : stageLabel],
+    ["担当", card.ownerName],
+    ["国籍", card.nationality || null],
+    ["在留資格", card.residenceStatus || null],
+    ["申請種別", card.applicationType || null],
+    ["申請方法", card.applicationMethod || null],
+    ["内定承諾日", card.offerAcceptedAt ? card.offerAcceptedAt.replaceAll("-", "/") : null],
+    ["申請日", card.applicationAt ? card.applicationAt.replaceAll("-", "/") : null],
+    ["サポート", supportLabels.length > 0 ? supportLabels.join("・") : null],
+    ["パートナー", card.partnerName],
+    [card.stage === HOLD_STAGE ? "保留理由" : card.memo ? "メモ" : "次にやること", card.stage === HOLD_STAGE ? card.holdReason || null : next],
+  ];
+  return (
+    <div className="pointer-events-none fixed z-[70] rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl" style={{ left, top, width }}>
+      <div className="flex items-center gap-3">
+        <PersonAvatar photoUrl={card.photoUrl} name={card.personName} size={56} className="shrink-0 rounded-xl" />
+        <div className="min-w-0">
+          {card.personId ? (
+            <p className="text-xs font-semibold text-[var(--color-primary)]">ID {String(card.personId).padStart(3, "0")}</p>
+          ) : (
+            <p className="text-xs text-gray-500">書類作成のみ</p>
+          )}
+          <p className="text-base font-bold leading-snug text-[var(--color-text-dark)]">{card.personName}</p>
+          {card.kanaName ? <p className="text-sm text-gray-600">{card.kanaName}</p> : null}
+        </div>
+      </div>
+      <dl className="mt-3 space-y-1 text-sm">
+        {rows
+          .filter(([, v]) => v)
+          .map(([k, v]) => (
+            <div key={k} className="flex gap-2">
+              <dt className="w-20 shrink-0 text-gray-500">{k}</dt>
+              <dd className="min-w-0 whitespace-pre-wrap break-words text-gray-800">{v}</dd>
+            </div>
+          ))}
+      </dl>
+    </div>
   );
 }
 
@@ -557,6 +638,7 @@ function CardDrawer({
                   <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-normal text-gray-500">書類作成のみ (候補者とは別)</span>
                 </p>
               )}
+              {card.kanaName ? <p className="text-sm text-gray-600">{card.kanaName}</p> : null}
               <p className="truncate text-xs text-gray-500">{[card.companyName, card.residenceStatus].filter(Boolean).join(" ・ ")}</p>
             </div>
             <button type="button" onClick={onClose} className="px-1 text-xl leading-none text-gray-400 hover:text-gray-600">
@@ -971,6 +1053,10 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
         id: Number(data.placement.id),
         personId: null,
         personName: form.name.trim(),
+        kanaName: null,
+        nationality: "",
+        photoUrl: null,
+        partnerName: null,
         residenceStatus: form.residenceStatus.trim(),
         companyName: form.companyName.trim() || null,
         external: true,

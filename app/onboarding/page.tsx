@@ -24,6 +24,10 @@ export default async function OnboardingPage() {
             id: true,
             name: true,
             residenceStatus: true,
+            nationality: true,
+            photoUrl: true,
+            partner: { select: { name: true } },
+            onboarding: { select: { englishName: true } },
             dealCandidates: {
               orderBy: { updatedAt: "desc" },
               take: 1,
@@ -53,7 +57,12 @@ export default async function OnboardingPage() {
     return {
       id: p.id,
       personId: p.person?.id ?? null,
-      personName: p.person?.name ?? p.externalName ?? "(名前なし)",
+      // カードの名前はアルファベット (英語名)。無い人だけカナ名
+      personName: p.person?.onboarding?.englishName?.trim() || p.person?.name || p.externalName || "(名前なし)",
+      kanaName: p.person?.onboarding?.englishName?.trim() ? p.person.name : null,
+      nationality: p.person?.nationality ?? "",
+      photoUrl: p.person?.photoUrl ?? null,
+      partnerName: p.person?.partner?.name ?? null,
       residenceStatus: p.person?.residenceStatus ?? p.externalResidenceStatus ?? "",
       companyName: company?.name ?? p.externalCompanyName ?? null,
       external: !p.person,
