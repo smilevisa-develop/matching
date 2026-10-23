@@ -10,6 +10,7 @@ import {
   inferRegistrantFromAccount,
 } from "@/lib/candidate-profile";
 import SearchableSelect from "@/app/components/SearchableSelect";
+import { confirmNoDuplicatePersons } from "@/lib/confirm-duplicate-person";
 
 type Partner = { id: number; name: string; country: string | null };
 
@@ -207,6 +208,8 @@ export default function BulkAddClient({ partners }: { partners: Partner[] }) {
       return;
     }
     if (!confirm(`${targets.length} 件の候補者を一括登録します。よろしいですか?`)) return;
+    // 名前・生年月日が同じ候補者がいれば「本当に登録しますか？」と確認する (二重登録を防ぐ)
+    if (!(await confirmNoDuplicatePersons(targets.map((c) => ({ name: c.name, englishName: c.englishName, birthDate: c.birthDate }))))) return;
 
     setCreating(true);
     try {

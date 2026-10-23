@@ -10,6 +10,7 @@ import {
   inferRegistrantFromAccount,
 } from "@/lib/candidate-profile";
 import SearchableSelect from "@/app/components/SearchableSelect";
+import { confirmNoDuplicatePersons } from "@/lib/confirm-duplicate-person";
 
 export default function NewPersonnelPage() {
   const router = useRouter();
@@ -51,6 +52,11 @@ export default function NewPersonnelPage() {
     if (!form.englishName.trim()) { alert("英語名を入力してください"); return; }
     if (!form.name.trim()) { alert("カタカナ名を入力してください"); return; }
     setSubmitting(true);
+    // 名前が同じ候補者がいれば「本当に登録しますか？」と確認する (二重登録を防ぐ)
+    if (!(await confirmNoDuplicatePersons([{ name: form.name, englishName: form.englishName }]))) {
+      setSubmitting(false);
+      return;
+    }
     try {
       const res = await fetch("/api/personnel", {
         method: "POST",
