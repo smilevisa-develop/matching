@@ -6,6 +6,7 @@
  *   /api/onboarding/p45     内定者レコード (PersonPlacement) の id。候補者に紐づかない内定者はこちらだけ
  *
  * PATCH  ステージ / 担当 / メモ / 保留理由 / キャンセル理由 / 内定辞退の理由 / 申請方法 / 主要日付 / 申請種別 の更新
+ * DELETE 間違えて追加したカードを消す (チェックリスト・問題記録も消える。候補者本体とカンバンは残る)
  * POST   body.action:
  *        "createTasks"   … 標準チェックリストを作成 (replace で未完了を入れ替え)
  *        "addTask"       … タスクを 1 件追加 { category, title }
@@ -267,6 +268,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ personI
     }
 
     return Response.json({ ok: false, error: "action が不正です" }, { status: 400 });
+  } catch (error) {
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : "error" },
+      { status: error instanceof AuthError ? error.status : 500 },
+    );
+  }
+}
+
+export async function DELETE(_: Request, { params }: { params: Promise<{ personId: string }> }) {
+  try {
+    await requireApiAccount();
+    const { personId: raw } = await params;
+    // 無いときに作らないよう、ここでは resolvePlacement を使わない
+    const where = /^p\d+$/.test(raw) ? { id: Number(raw.slice(1)) } : { personId: Number(raw) };
+    const placement = await prisma.personPlacement.findFirst({ where, select: { id: true } });
+    if (!placement) return Response.json({ ok: false, error: "カードが見つかりません" }, { status: 404 });
+    // チェックリスト・問題記録は連鎖で消える
+    await prisma.personPlacement.delete({ where: { id: placement.id } });
+    return Response.json({ ok: true });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "error" },

@@ -220,6 +220,18 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
     patchLocal(card.id, { supports, tasks: toTasks(data.tasks ?? []) });
   };
 
+  /** 間違えて追加したカードを消す (候補者本体・カンバンは残る) */
+  const removeCard = async (card: OnboardingCard) => {
+    const res = await fetch(apiPath(card), { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      alert(`削除に失敗しました: ${data.error ?? res.statusText}`);
+      return;
+    }
+    setOpenId(null);
+    setCards((prev) => prev.filter((c) => c.id !== card.id));
+  };
+
   const openCard = cards.find((c) => c.id === openId) ?? null;
   const holdCard = cards.find((c) => c.id === pendingHold) ?? null;
   const cancelCard = cards.find((c) => c.id === pendingCancel) ?? null;
@@ -383,6 +395,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
           onLocal={(patch) => patchLocal(openCard.id, patch)}
           onMove={(stage) => moveTo(openCard, stage)}
           onPickSupports={() => setPendingSupport(openCard.id)}
+          onDelete={() => removeCard(openCard)}
         />
       ) : null}
 
@@ -601,9 +614,11 @@ function CardDrawer({
   onLocal,
   onMove,
   onPickSupports,
+  onDelete,
 }: {
   card: OnboardingCard;
   staff: Staff[];
+  onDelete: () => Promise<void>;
   onClose: () => void;
   onSave: (patch: Partial<OnboardingCard>) => void;
   onLocal: (patch: Partial<OnboardingCard>) => void;
@@ -1006,6 +1021,27 @@ function CardDrawer({
                 </ul>
               </div>
             ) : null}
+          </section>
+
+          {/* 間違えて追加したカードを消す */}
+          <section className="border-t border-gray-100 px-5 py-4 text-right">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `${card.personName} のカードを内定者管理から削除します。チェックリストとメモも消えます (候補者本体とカンバンは残ります)。\nよろしいですか？`,
+                  )
+                )
+                  return;
+                setBusy(true);
+                void onDelete().finally(() => setBusy(false));
+              }}
+              className="text-xs text-red-600 underline decoration-dotted hover:text-red-700 disabled:opacity-50"
+            >
+              このカードを削除（間違えて追加したとき）
+            </button>
           </section>
         </div>
       </div>
