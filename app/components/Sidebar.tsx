@@ -154,6 +154,8 @@ const NAV: NavItem[] = [
   { label: "売上ダッシュボード", href: "/revenue", icon: BroadcastIcon },
   { label: "チャット", href: "/chat", icon: ChatIcon },
   { label: "修正依頼", href: "/feedback", icon: ChatIcon },
+  // 一時的: 重複していた候補者をまとめた結果の確認 (担当者の確認が終わったら外す)
+  { label: "重複の確認", href: "/duplicates", icon: SettingsIcon },
   { label: "設定", href: "/settings", icon: SettingsIcon },
 ];
 
