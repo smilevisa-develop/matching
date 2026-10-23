@@ -5,7 +5,7 @@
  *   /api/onboarding/123     候補者ID (従来)
  *   /api/onboarding/p45     内定者レコード (PersonPlacement) の id。候補者に紐づかない内定者はこちらだけ
  *
- * PATCH  ステージ / 担当 / メモ / 保留理由 / 申請方法 / 主要日付 / 申請種別 の更新
+ * PATCH  ステージ / 担当 / メモ / 保留理由 / キャンセル理由 / 申請方法 / 主要日付 / 申請種別 の更新
  * POST   body.action:
  *        "createTasks"   … 標準チェックリストを作成 (replace で未完了を入れ替え)
  *        "addTask"       … タスクを 1 件追加 { category, title }
@@ -31,6 +31,9 @@ import {
 } from "@/lib/onboarding-flow";
 
 export const runtime = "nodejs";
+
+/** キャンセルの工程 (理由を入れる) */
+const CANCEL_STAGE = "card_cancelled";
 export const dynamic = "force-dynamic";
 
 const DATE_FIELDS = [
@@ -93,7 +96,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
         data.heldFromStage = null;
         data.holdReason = null;
       }
+      // キャンセルに入れるときは理由も一緒に保存する (列から出しても記録として残す)
+      if (body.stage === CANCEL_STAGE && typeof body.cancelReason === "string") data.cancelReason = body.cancelReason.trim() || null;
     }
+    if (body.cancelReason !== undefined && data.cancelReason === undefined) data.cancelReason = str(body.cancelReason);
     if (body.holdReason !== undefined && data.holdReason === undefined) data.holdReason = str(body.holdReason);
     if (body.applicationType !== undefined) data.applicationType = str(body.applicationType);
     if (body.applicationMethod !== undefined) data.applicationMethod = str(body.applicationMethod);

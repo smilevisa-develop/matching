@@ -73,6 +73,7 @@ export default async function OnboardingPage() {
       stage,
       memo: p.currentAction ?? "",
       holdReason: p.holdReason ?? "",
+      cancelReason: p.cancelReason ?? "",
       applicationAt: ymd(p.applicationAt),
       offerAcceptedAt: ymd(p.offerAcceptedAt ?? p.offerAt),
       applicationType: p.applicationType ?? "",

@@ -65,6 +65,8 @@ export type OnboardingCard = {
   stage: OnboardingStageId;
   memo: string;
   holdReason: string;
+  /** キャンセルにした理由 */
+  cancelReason: string;
   /** YYYY-MM-DD (未申請は空) */
   applicationAt: string;
   offerAcceptedAt: string;
@@ -91,11 +93,14 @@ const COLUMNS: { id: OnboardingStageId; label: string }[] = [
   { id: "applying", label: "申請中" },
   { id: "card_processing", label: "在留カード発行手続き中" },
   { id: "card_issued", label: "発行完了" },
-  { id: "card_cancelled", label: "発行キャンセル" },
+  { id: "card_cancelled", label: "キャンセル" },
   { id: "support", label: "サポート" },
   { id: "joined", label: "入社・請求" },
   { id: "hold", label: "保留" },
 ];
+
+/** キャンセルの列 (入れるときに理由を書くポップが出る) */
+const CANCEL_STAGE: OnboardingStageId = "card_cancelled";
 
 const todayYmd = () => new Date().toISOString().slice(0, 10);
 const apiPath = (card: OnboardingCard) => `/api/onboarding/p${card.id}`;
@@ -109,6 +114,7 @@ function tasksOfStage(card: OnboardingCard, stage = card.stage) {
 /** カードに 1 行だけ出す「次にやること」。保留なら保留理由、メモがあればメモ、無ければ最初の未完了タスク */
 function nextThing(card: OnboardingCard): string | null {
   if (card.stage === HOLD_STAGE && card.holdReason) return `保留: ${card.holdReason}`;
+  if (card.stage === CANCEL_STAGE && card.cancelReason) return `キャンセル: ${card.cancelReason}`;
   if (card.memo) return card.memo;
   const pending = tasksOfStage(card).find((t) => !t.done);
   return pending ? pending.title : null;
@@ -136,6 +142,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
   const [adding, setAdding] = useState(false);
   // 保留 / サポートに入れるときのポップ (移動先が決まってから保存する)
   const [pendingHold, setPendingHold] = useState<number | null>(null);
+  const [pendingCancel, setPendingCancel] = useState<number | null>(null);
   const [pendingSupport, setPendingSupport] = useState<number | null>(null);
 
   const visible = cards.filter((c) => showOutsourced || !c.outsourced);
@@ -155,8 +162,10 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
       body.stage = patch.stage;
       body.currentAction = card.memo;
       if (patch.stage === HOLD_STAGE) body.holdReason = patch.holdReason ?? card.holdReason;
+      if (patch.stage === CANCEL_STAGE) body.cancelReason = patch.cancelReason ?? card.cancelReason;
     }
     if (patch.holdReason !== undefined && patch.stage === undefined) body.holdReason = patch.holdReason;
+    if (patch.cancelReason !== undefined && patch.stage === undefined) body.cancelReason = patch.cancelReason;
     if (patch.ownerId !== undefined) body.followUpOwnerId = patch.ownerId;
     if (patch.memo !== undefined) body.currentAction = patch.memo;
     if (patch.applicationAt !== undefined) body.applicationAt = patch.applicationAt || null;
@@ -177,10 +186,11 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
     if (Array.isArray(data.tasks)) patchLocal(id, { tasks: toTasks(data.tasks) });
   };
 
-  /** 列へ移す。保留とサポートは先にポップを出す */
+  /** 列へ移す。保留・キャンセル・サポートは先にポップを出す */
   const moveTo = (card: OnboardingCard, stage: OnboardingStageId) => {
     if (card.stage === stage) return;
     if (stage === HOLD_STAGE) setPendingHold(card.id);
+    else if (stage === CANCEL_STAGE) setPendingCancel(card.id);
     else if (stage === "support") setPendingSupport(card.id);
     else void save(card.id, { stage });
   };
@@ -202,6 +212,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
 
   const openCard = cards.find((c) => c.id === openId) ?? null;
   const holdCard = cards.find((c) => c.id === pendingHold) ?? null;
+  const cancelCard = cards.find((c) => c.id === pendingCancel) ?? null;
   const supportCard = cards.find((c) => c.id === pendingSupport) ?? null;
 
   const dropHandlers = (stage: OnboardingStageId) => ({
@@ -356,6 +367,21 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
         />
       ) : null}
 
+      {cancelCard ? (
+        <ReasonModal
+          title={`${cancelCard.personName} をキャンセルにする`}
+          label="キャンセルの理由 (カードに出ます)"
+          placeholder="例: 不許可。本人が辞退。企業が内定取り消し"
+          submitLabel="キャンセルにする"
+          initial={cancelCard.cancelReason}
+          onCancel={() => setPendingCancel(null)}
+          onConfirm={(reason) => {
+            setPendingCancel(null);
+            void save(cancelCard.id, { stage: CANCEL_STAGE, cancelReason: reason });
+          }}
+        />
+      ) : null}
+
       {supportCard ? (
         <SupportModal
           card={supportCard}
@@ -450,7 +476,9 @@ function BoardCard({
       </div>
       <p className="mt-0.5 truncate text-xs text-gray-500">{[card.companyName, card.ownerName].filter(Boolean).join(" ・ ")}</p>
       {next ? (
-        <p className={`mt-1.5 line-clamp-2 text-xs ${card.stage === HOLD_STAGE ? "font-medium text-amber-700" : "text-gray-700"}`}>{next}</p>
+        <p className={`mt-1.5 line-clamp-2 text-xs ${
+            card.stage === HOLD_STAGE ? "font-medium text-amber-700" : card.stage === CANCEL_STAGE ? "font-medium text-red-700" : "text-gray-700"
+          }`}>{next}</p>
       ) : complete ? (
         <p className="mt-1.5 text-xs text-emerald-700">この工程は完了。次へ進めます</p>
       ) : null}
@@ -481,7 +509,11 @@ function BoardHoverCard({ card, rect, next, done, total }: { card: OnboardingCar
     ["申請日", card.applicationAt ? card.applicationAt.replaceAll("-", "/") : null],
     ["サポート", supportLabels.length > 0 ? supportLabels.join("・") : null],
     ["パートナー", card.partnerName],
-    [card.stage === HOLD_STAGE ? "保留理由" : card.memo ? "メモ" : "次にやること", card.stage === HOLD_STAGE ? card.holdReason || null : next],
+    card.stage === HOLD_STAGE
+      ? ["保留理由", card.holdReason || null]
+      : card.stage === CANCEL_STAGE
+        ? ["キャンセル理由", card.cancelReason || null]
+        : [card.memo ? "メモ" : "次にやること", next],
   ];
   return (
     <div className="pointer-events-none fixed z-[70] rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl" style={{ left, top, width }}>
@@ -532,6 +564,7 @@ function CardDrawer({
 }) {
   const [memo, setMemo] = useState(card.memo);
   const [holdReason, setHoldReason] = useState(card.holdReason);
+  const [cancelReason, setCancelReason] = useState(card.cancelReason);
   const [method, setMethod] = useState(card.applicationMethod);
   const [busy, setBusy] = useState(false);
   const [showIssues, setShowIssues] = useState(card.issues.some((i) => i.open));
@@ -711,6 +744,22 @@ function CardDrawer({
                   value={holdReason}
                   onChange={(e) => setHoldReason(e.target.value)}
                   onBlur={() => holdReason.trim() !== card.holdReason && onSave({ holdReason: holdReason.trim() })}
+                  rows={2}
+                  className={`mt-1 w-full ${field}`}
+                />
+              </label>
+            </section>
+          ) : null}
+
+          {/* キャンセルの理由 (キャンセル中だけ) */}
+          {card.stage === CANCEL_STAGE ? (
+            <section className="border-b border-red-100 bg-red-50 px-5 py-3">
+              <label className="block text-xs font-semibold text-red-800">
+                キャンセルの理由
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  onBlur={() => cancelReason.trim() !== card.cancelReason && onSave({ cancelReason: cancelReason.trim() })}
                   rows={2}
                   className={`mt-1 w-full ${field}`}
                 />
@@ -1002,6 +1051,51 @@ function HoldReasonModal({ card, onCancel, onConfirm }: { card: OnboardingCard; 
   );
 }
 
+/** キャンセルなど、列に入れるときに理由を書くポップ */
+function ReasonModal({
+  title,
+  label,
+  placeholder,
+  submitLabel,
+  initial,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  label: string;
+  placeholder: string;
+  submitLabel: string;
+  initial: string;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState(initial);
+  return (
+    <ModalFrame title={title} onCancel={onCancel}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!reason.trim()) return;
+          onConfirm(reason.trim());
+        }}
+      >
+        <label className="mt-3 block text-xs text-gray-600">
+          {label}
+          <textarea autoFocus required rows={3} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={placeholder} className={MODAL_INPUT} />
+        </label>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onCancel} className={BTN_SUB}>
+            やめる
+          </button>
+          <button type="submit" disabled={!reason.trim()} className={BTN_MAIN}>
+            {submitLabel}
+          </button>
+        </div>
+      </form>
+    </ModalFrame>
+  );
+}
+
 /** サポートに入れるときに必要な支援を選ぶ */
 function SupportModal({ card, onCancel, onConfirm }: { card: OnboardingCard; onCancel: () => void; onConfirm: (supports: string[]) => void }) {
   const [selected, setSelected] = useState<string[]>(card.supports);
@@ -1077,6 +1171,7 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
         stage: "offer",
         memo: "",
         holdReason: "",
+        cancelReason: "",
         applicationAt: "",
         offerAcceptedAt: "",
         applicationType: form.applicationType,

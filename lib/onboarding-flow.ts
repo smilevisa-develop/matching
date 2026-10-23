@@ -67,7 +67,7 @@ export const ONBOARDING_STAGES = [
   },
   {
     id: "card_cancelled",
-    label: "発行キャンセル",
+    label: "キャンセル",
     hint: "不許可・取り下げ・辞退などで発行に至らなかった",
     targetDays: 0,
     phases: [],
@@ -115,7 +115,7 @@ const LEGACY_STAGE_MAP: Record<string, OnboardingStageId> = {
   arrival: "support",
 };
 
-/** 「次へ進む」の順番 (発行キャンセル・保留には次が無い) */
+/** 「次へ進む」の順番 (キャンセル・保留には次が無い) */
 export const NEXT_STAGE: Partial<Record<OnboardingStageId, OnboardingStageId>> = {
   offer: "documents",
   documents: "prepare",
