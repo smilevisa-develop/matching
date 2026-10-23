@@ -104,7 +104,8 @@ export async function computeMonthStats(month: string): Promise<MonthStats> {
       where: {
         OR: [{ offerAt: range }, { offerAt: null, offerAcceptedAt: range }],
         person: {
-          dealCandidates: { none: { stage: { in: ["内定済み", "内定承諾"] } } },
+          // カンバンで内定まで進んだ人 (辞退・取り消し・入社も含む) は上で数えているので除く
+          dealCandidates: { none: { stage: { in: ["内定済み", "内定承諾", "入社待ち", "入社済み", "内定辞退", "内定取り消し"] } } },
           NOT: { dealCandidates: { some: { deal: { company: { externalId: { in: TEST_COMPANY_EXTERNAL_IDS } } } } } },
         },
       },

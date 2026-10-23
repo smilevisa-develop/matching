@@ -87,6 +87,13 @@ export const ONBOARDING_STAGES = [
     phases: ["10. 入社前後"],
   },
   {
+    id: "declined",
+    label: "内定辞退",
+    hint: "本人が内定を辞退した。ボードには出さない (右下の「内定辞退」に入れる)",
+    targetDays: 0,
+    phases: [],
+  },
+  {
     id: "hold",
     label: "⚠ 保留・問題対応中",
     hint: "問題が解決するまで一時的にここへ置く",
@@ -98,6 +105,8 @@ export const ONBOARDING_STAGES = [
 export type OnboardingStageId = (typeof ONBOARDING_STAGES)[number]["id"];
 
 export const HOLD_STAGE: OnboardingStageId = "hold";
+/** 内定辞退 (ボードから消える。カンバンの候補者も「内定辞退」になる) */
+export const DECLINED_STAGE: OnboardingStageId = "declined";
 
 /** 旧ステージ (入社進捗ページ) からの読み替え */
 const LEGACY_STAGE_MAP: Record<string, OnboardingStageId> = {

@@ -882,6 +882,8 @@ model PersonPlacement {
   heldFromStage        String?
   /// キャンセル (不許可・取り下げ・辞退など) にした理由
   cancelReason         String?
+  /// 内定辞退にした理由 (内定辞退の人はボードから消える)
+  declineReason        String?
   /// 内定フォロー担当 (採用担当とは別。ワークフロー STEP3 以降の担当)
   followUpOwnerId      Int?
   followUpOwner        StaffAccount? @relation("PlacementFollowUpOwner", fields: [followUpOwnerId], references: [id], onDelete: SetNull)

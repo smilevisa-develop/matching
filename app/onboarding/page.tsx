@@ -17,6 +17,8 @@ export default async function OnboardingPage() {
 
   const [placements, staff] = await Promise.all([
     prisma.personPlacement.findMany({
+      // 内定辞退の人はボードに出さない
+      where: { OR: [{ stage: null }, { stage: { not: "declined" } }] },
       include: {
         followUpOwner: { select: { name: true } },
         person: {

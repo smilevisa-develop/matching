@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import PersonAvatar from "@/app/components/PersonAvatar";
 import {
   APPLICATION_TYPES,
+  DECLINED_STAGE,
   HOLD_STAGE,
   NEXT_STAGE,
   ONBOARDING_STAGES,
@@ -67,6 +68,8 @@ export type OnboardingCard = {
   holdReason: string;
   /** キャンセルにした理由 */
   cancelReason: string;
+  /** 内定辞退の理由 (内定辞退にするとボードから消える) */
+  declineReason?: string;
   /** YYYY-MM-DD (未申請は空) */
   applicationAt: string;
   offerAcceptedAt: string;
@@ -143,9 +146,11 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
   // 保留 / サポートに入れるときのポップ (移動先が決まってから保存する)
   const [pendingHold, setPendingHold] = useState<number | null>(null);
   const [pendingCancel, setPendingCancel] = useState<number | null>(null);
+  const [pendingDecline, setPendingDecline] = useState<number | null>(null);
   const [pendingSupport, setPendingSupport] = useState<number | null>(null);
 
-  const visible = cards.filter((c) => showOutsourced || !c.outsourced);
+  // 内定辞退にした人はボードから消す
+  const visible = cards.filter((c) => c.stage !== DECLINED_STAGE && (showOutsourced || !c.outsourced));
   const outsourcedCount = cards.filter((c) => c.outsourced).length;
 
   const patchLocal = (id: number, patch: Partial<OnboardingCard>) =>
@@ -163,6 +168,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
       body.currentAction = card.memo;
       if (patch.stage === HOLD_STAGE) body.holdReason = patch.holdReason ?? card.holdReason;
       if (patch.stage === CANCEL_STAGE) body.cancelReason = patch.cancelReason ?? card.cancelReason;
+      if (patch.stage === DECLINED_STAGE) body.declineReason = patch.declineReason ?? "";
     }
     if (patch.holdReason !== undefined && patch.stage === undefined) body.holdReason = patch.holdReason;
     if (patch.cancelReason !== undefined && patch.stage === undefined) body.cancelReason = patch.cancelReason;
@@ -191,6 +197,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
     if (card.stage === stage) return;
     if (stage === HOLD_STAGE) setPendingHold(card.id);
     else if (stage === CANCEL_STAGE) setPendingCancel(card.id);
+    else if (stage === DECLINED_STAGE) setPendingDecline(card.id);
     else if (stage === "support") setPendingSupport(card.id);
     else void save(card.id, { stage });
   };
@@ -213,6 +220,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
   const openCard = cards.find((c) => c.id === openId) ?? null;
   const holdCard = cards.find((c) => c.id === pendingHold) ?? null;
   const cancelCard = cards.find((c) => c.id === pendingCancel) ?? null;
+  const declineCard = cards.find((c) => c.id === pendingDecline) ?? null;
   const supportCard = cards.find((c) => c.id === pendingSupport) ?? null;
 
   const dropHandlers = (stage: OnboardingStageId) => ({
@@ -299,6 +307,8 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
         })}
       </div>
 
+      {/* 下の段: 保留 (横向き) と、右下に小さく「内定辞退」の入れ口 */}
+      <div className="mt-3 flex items-stretch gap-3">
       {/* 保留: 工程から外れている人を一目で拾えるよう、下に横向きで置く */}
       {(() => {
         const list = visible.filter((c) => c.stage === HOLD_STAGE);
@@ -307,7 +317,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
         return (
           <div
             {...dropHandlers(HOLD_STAGE)}
-            className={`mt-3 rounded-2xl border p-3 transition-all duration-150 ${
+            className={`min-w-0 flex-1 rounded-2xl border p-3 transition-all duration-150 ${
               isTarget ? "border-[var(--color-primary)] bg-[var(--color-light)] ring-2 ring-[var(--color-primary)]" : "border-gray-200 bg-gray-50"
             }`}
           >
@@ -342,6 +352,23 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
           </div>
         );
       })()}
+
+      {/* 内定辞退: ここに入れると理由を聞いて、ボードから消す (カンバンの候補者も内定辞退になる) */}
+      {(() => {
+        const isTarget = Boolean(draggingId) && overStage === DECLINED_STAGE;
+        return (
+          <div
+            {...dropHandlers(DECLINED_STAGE)}
+            className={`flex w-[150px] shrink-0 flex-col items-center justify-center rounded-2xl border-2 border-dashed px-3 py-3 text-center transition-all duration-150 ${
+              isTarget ? "scale-[1.03] border-red-500 bg-red-50 text-red-700" : "border-gray-300 bg-white text-gray-400"
+            }`}
+          >
+            <p className="text-sm font-semibold">内定辞退</p>
+            <p className="mt-1 text-[10px] leading-snug">ここに入れると理由を聞いて、ボードから消します</p>
+          </div>
+        );
+      })()}
+      </div>
 
       {openCard ? (
         <CardDrawer
@@ -378,6 +405,22 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
           onConfirm={(reason) => {
             setPendingCancel(null);
             void save(cancelCard.id, { stage: CANCEL_STAGE, cancelReason: reason });
+          }}
+        />
+      ) : null}
+
+      {declineCard ? (
+        <ReasonModal
+          title={`${declineCard.personName} を内定辞退にする`}
+          label="内定辞退の理由 (このボードからは消えます。カンバンの候補者も「内定辞退」になります)"
+          placeholder="例: 家族の事情で帰国。他社に決めた。給与条件が合わない"
+          submitLabel="内定辞退にする"
+          initial=""
+          onCancel={() => setPendingDecline(null)}
+          onConfirm={(reason) => {
+            setPendingDecline(null);
+            if (openId === declineCard.id) setOpenId(null);
+            void save(declineCard.id, { stage: DECLINED_STAGE, declineReason: reason });
           }}
         />
       ) : null}

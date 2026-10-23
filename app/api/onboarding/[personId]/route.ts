@@ -5,7 +5,7 @@
  *   /api/onboarding/123     候補者ID (従来)
  *   /api/onboarding/p45     内定者レコード (PersonPlacement) の id。候補者に紐づかない内定者はこちらだけ
  *
- * PATCH  ステージ / 担当 / メモ / 保留理由 / キャンセル理由 / 申請方法 / 主要日付 / 申請種別 の更新
+ * PATCH  ステージ / 担当 / メモ / 保留理由 / キャンセル理由 / 内定辞退の理由 / 申請方法 / 主要日付 / 申請種別 の更新
  * POST   body.action:
  *        "createTasks"   … 標準チェックリストを作成 (replace で未完了を入れ替え)
  *        "addTask"       … タスクを 1 件追加 { category, title }
@@ -14,11 +14,17 @@
  *        "setSupports"   … サポート工程で必要な支援を選ぶ { supports: string[] } → その分のタスクに入れ替える
  */
 
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { moveDealCandidateStage } from "@/lib/deal-candidate-move";
+import { todayJst } from "@/lib/deal-stages";
+import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
+import { requestKpiSheetSync } from "@/lib/kpi-sheet-sync";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import {
   buildFlowTasks,
   buildSupportTasks,
+  DECLINED_STAGE,
   HOLD_STAGE,
   OFFER_TO_APPLICATION_DAYS,
   OFFER_TO_JOIN_DAYS,
@@ -98,6 +104,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
       }
       // キャンセルに入れるときは理由も一緒に保存する (列から出しても記録として残す)
       if (body.stage === CANCEL_STAGE && typeof body.cancelReason === "string") data.cancelReason = body.cancelReason.trim() || null;
+      if (body.stage === DECLINED_STAGE && typeof body.declineReason === "string") data.declineReason = body.declineReason.trim() || null;
     }
     if (body.cancelReason !== undefined && data.cancelReason === undefined) data.cancelReason = str(body.cancelReason);
     if (body.holdReason !== undefined && data.holdReason === undefined) data.holdReason = str(body.holdReason);
@@ -116,6 +123,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
       if (parsed !== undefined) data[field] = parsed;
     }
     const updated = await prisma.personPlacement.update({ where: { id: placement.id }, data });
+
+    // 内定辞退にしたら、カンバンの候補者 (内定済み・内定承諾・入社待ち) も「内定辞退」にする (内定辞退の人数も 1 増える)
+    if (data.stage === DECLINED_STAGE && placement.personId) {
+      const links = await prisma.dealCandidate.findMany({
+        where: { personId: placement.personId, stage: { in: ["内定済み", "内定承諾", "入社待ち"] } },
+        select: { id: true },
+      });
+      const today = todayJst();
+      for (const link of links) await moveDealCandidateStage(link.id, "内定辞退", today);
+      if (links.length > 0) {
+        after(() => requestCompanyDatabaseSync());
+        after(() => requestKpiSheetSync());
+      }
+    }
 
     // 申請種別が変わったら、未完了タスクをその種別の内容で作り直す (完了済みは残す)
     let rebuiltTasks = false;

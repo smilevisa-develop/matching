@@ -91,8 +91,15 @@ export async function onDealCandidateStageChanged(personId: number, stage: strin
     });
     const current = await prisma.personPlacement.findUnique({
       where: { personId },
-      select: { offerAt: true, followUpOwnerId: true, applicationPlannedAt: true, joinPlannedAt: true },
+      select: { offerAt: true, followUpOwnerId: true, applicationPlannedAt: true, joinPlannedAt: true, stage: true },
     });
+    // 内定辞退でボードから消していた人を、また内定承諾にしたらボードに戻す
+    if (current?.stage === "declined") {
+      await prisma.personPlacement.update({
+        where: { personId },
+        data: { stage: "offer", stageChangedAt: new Date(), declineReason: null },
+      });
+    }
     await prisma.personPlacement.update({
       where: { personId },
       data: {

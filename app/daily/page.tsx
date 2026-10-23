@@ -84,6 +84,7 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
 
   // 内定者フォローの要対応 (内定者管理ボードと同じ判定。チェックリスト・問題記録は今は使っていないので数えない)
   const placements = await prisma.personPlacement.findMany({
+    where: { OR: [{ stage: null }, { stage: { not: "declined" } }] },
     select: {
       stage: true,
       stageChangedAt: true,

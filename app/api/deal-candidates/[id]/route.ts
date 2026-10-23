@@ -1,12 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/generated/prisma/client";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { isOfferedStage, onDealCandidateStageChanged, removeUntouchedOnboardingCard } from "@/lib/onboarding-autolink";
 import { after } from "next/server";
 import {
-  isAgencyKind,
-  progressStagesForKind,
-  readFilledStages,
   readStageDates,
   stageCounterDeltas,
   todayJst,
@@ -15,6 +11,7 @@ import {
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 import { removeUntouchedOfferRow, writeStageDateToSheet } from "@/lib/candidate-date-sheet";
 import { requestKpiSheetSync } from "@/lib/kpi-sheet-sync";
+import { moveDealCandidateStage } from "@/lib/deal-candidate-move";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -34,67 +31,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return Response.json({ ok: false, error: "候補者ステップを指定してください" }, { status: 400 });
     }
 
-    // ステージの移動に合わせて人数カウンターも動かす (カンバンと数字を常に揃えるため)。
-    // 同時に動かされても二重に数えないよう、前のステージの読み取りから更新までを 1 つにまとめる。
-    const { candidate, counters, stageChanged, agency, fromStage } = await prisma.$transaction(async (tx) => {
-      const before = await tx.dealCandidate.findUniqueOrThrow({
-        where: { id: Number(id) },
-        select: { stage: true, dealId: true, stageDates: true, deal: { select: { company: { select: { companyKind: true } } } } },
-      });
-      const kind = before.deal.company.companyKind;
-      const progress = progressStagesForKind(kind);
-      // ステージごとの日付を記録する (同じステージに留まるときは触らない)。
-      // 途中を飛ばして進めたとき (事前面談済み → 内定済み など) は、飛ばした段階にも同じ日付を入れる
-      // (人数カウンターと同じく「通過した」扱い。月別集計で漏れないようにする)
-      const stageDates: Record<string, unknown> = readStageDates(before.stageDates);
-      const filled = readFilledStages(before.stageDates);
-      if (before.stage !== stage) {
-        const from = progress.indexOf(before.stage);
-        const to = progress.indexOf(stage);
-        if (from >= 0 && to > from) {
-          for (let i = from + 1; i < to; i++) {
-            const skipped = progress[i];
-            if (!stageDates[skipped]) {
-              stageDates[skipped] = date;
-              filled.add(skipped);
-            }
-          }
-        }
-        stageDates[stage] = date;
-        filled.delete(stage);
-      }
-      // 自動で埋めた段階の印 (日数の計算から外すため)
-      if (filled.size > 0) stageDates._filled = [...filled];
-      const candidate = await tx.dealCandidate.update({
-        where: { id: Number(id) },
-        data: {
-          stage,
-          stageDates: stageDates as Prisma.InputJsonValue,
-          ...(note !== undefined ? { note } : {}),
-        },
-      });
-      const deltas = Object.entries(stageCounterDeltas(before.stage, stage)).filter(([, n]) => n !== 0) as [
-        CounterField,
-        number,
-      ][];
-      const select = {
-        recommendedCount: true,
-        interviewCount: true,
-        offerCount: true,
-        declineCount: true,
-        rejectCount: true,
-      };
-      const current = await tx.deal.findUniqueOrThrow({ where: { id: before.dealId }, select });
-      const common = { candidate, stageChanged: before.stage !== stage, agency: isAgencyKind(kind), fromStage: before.stage };
-      if (deltas.length === 0) return { ...common, counters: current };
-      const counters = await tx.deal.update({
-        where: { id: before.dealId },
-        // 手で直した結果より多く戻されても 0 未満にはしない
-        data: Object.fromEntries(deltas.map(([field, n]) => [field, Math.max(0, current[field] + n)])),
-        select,
-      });
-      return { ...common, counters };
-    });
+    // ステージの移動に合わせて人数カウンターも動かす (lib/deal-candidate-move.ts)
+    const { candidate, counters, stageChanged, agency, fromStage } = await moveDealCandidateStage(Number(id), stage, date, note);
 
     // 内定済み・内定承諾から内定より前に戻した (間違えて動かした) ときは、自動で作ったカードと行を片付ける
     if (isOfferedStage(fromStage) && !isOfferedStage(stage)) {
