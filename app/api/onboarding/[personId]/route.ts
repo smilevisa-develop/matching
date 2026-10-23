@@ -110,6 +110,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
     if (body.holdReason !== undefined && data.holdReason === undefined) data.holdReason = str(body.holdReason);
     if (body.applicationType !== undefined) data.applicationType = str(body.applicationType);
     if (body.applicationMethod !== undefined) data.applicationMethod = str(body.applicationMethod);
+    if (typeof body.documentsOnly === "boolean") data.documentsOnly = body.documentsOnly;
     if (body.externalName !== undefined && !placement.personId) data.externalName = str(body.externalName);
     if (body.externalCompanyName !== undefined && !placement.personId) data.externalCompanyName = str(body.externalCompanyName);
     if (body.externalResidenceStatus !== undefined && !placement.personId) data.externalResidenceStatus = str(body.externalResidenceStatus);

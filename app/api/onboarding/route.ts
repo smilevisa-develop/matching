@@ -4,7 +4,7 @@
  * 書類作成だけを請け負った内定者など、候補者一覧に載せない人を内定者管理に出すためのもの。
  * 候補者 (Person) は作らず、PersonPlacement に名前・企業名・在留資格を直接持つ (id も候補者とは別)。
  *
- * POST /api/onboarding  { name, companyName?, residenceStatus?, followUpOwnerId?, applicationType?, applicationMethod? }
+ * POST /api/onboarding  { name, companyName?, residenceStatus?, followUpOwnerId?, applicationType?, applicationMethod?, documentsOnly? }
  */
 
 import { prisma } from "@/lib/prisma";
@@ -32,6 +32,8 @@ export async function POST(req: Request) {
         externalResidenceStatus: str(body.residenceStatus, 50),
         applicationMethod: str(body.applicationMethod),
         applicationType,
+        // 書類作成のみ (画面では最初からチェックが入っている)
+        documentsOnly: body.documentsOnly !== false,
         followUpOwnerId: Number.isFinite(ownerId) && ownerId > 0 ? ownerId : null,
         stage: "offer",
         stageChangedAt: new Date(),

@@ -59,6 +59,8 @@ export type OnboardingCard = {
   companyName: string | null;
   /** 候補者とは別に追加した内定者 */
   external: boolean;
+  /** 書類作成のみを請け負った内定者 (薄く色を付けて出す) */
+  documentsOnly: boolean;
   /** 委託管理の企業の内定者 (ボードには出さない) */
   outsourced: boolean;
   ownerId: number | null;
@@ -178,6 +180,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
     if (patch.offerAcceptedAt !== undefined) body.offerAcceptedAt = patch.offerAcceptedAt || null;
     if (patch.applicationType !== undefined) body.applicationType = patch.applicationType || null;
     if (patch.applicationMethod !== undefined) body.applicationMethod = patch.applicationMethod || null;
+    if (patch.documentsOnly !== undefined) body.documentsOnly = patch.documentsOnly;
     const res = await fetch(apiPath(card), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -499,12 +502,14 @@ function BoardCard({
         hoverTimer.current = window.setTimeout(() => setHoverRect(el.getBoundingClientRect()), 250);
       }}
       onMouseLeave={endHover}
-      className={`w-full cursor-grab rounded-xl border border-gray-200 bg-white p-3 text-left shadow-sm hover:shadow-md ${dragging ? "opacity-40" : ""}`}
+      className={`w-full cursor-grab rounded-xl border p-3 text-left shadow-sm hover:shadow-md ${
+        card.documentsOnly ? "border-violet-200 bg-violet-50" : "border-gray-200 bg-white"
+      } ${dragging ? "opacity-40" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold text-[var(--color-text-dark)]">
           {card.personName}
-          {card.external ? <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] font-normal text-gray-500">書類のみ</span> : null}
+          {card.documentsOnly ? <span className="ml-1 rounded bg-violet-100 px-1 text-[10px] font-normal text-violet-700">書類のみ</span> : null}
         </p>
         {stageTasks.length > 0 ? (
           <span
@@ -714,11 +719,15 @@ function CardDrawer({
               ) : (
                 <p className="text-lg font-bold text-[var(--color-text-dark)]">
                   {card.personName}
-                  <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-normal text-gray-500">書類作成のみ (候補者とは別)</span>
+                  <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-normal text-gray-500">候補者とは別</span>
                 </p>
               )}
               {card.kanaName ? <p className="text-sm text-gray-600">{card.kanaName}</p> : null}
               <p className="truncate text-xs text-gray-500">{[card.companyName, card.residenceStatus].filter(Boolean).join(" ・ ")}</p>
+              <label className="mt-1 inline-flex cursor-pointer items-center gap-1.5 text-xs text-violet-700">
+                <input type="checkbox" checked={card.documentsOnly} onChange={(e) => onSave({ documentsOnly: e.target.checked })} />
+                書類作成のみ
+              </label>
             </div>
             <button type="button" onClick={onClose} className="px-1 text-xl leading-none text-gray-400 hover:text-gray-600">
               ×
@@ -1178,6 +1187,8 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
     applicationType: "",
     applicationMethod: "",
   });
+  // 書類作成のみ (最初からチェック)
+  const [documentsOnly, setDocumentsOnly] = useState(true);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -1189,7 +1200,7 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
       const res = await fetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, followUpOwnerId: form.followUpOwnerId ? Number(form.followUpOwnerId) : null }),
+        body: JSON.stringify({ ...form, documentsOnly, followUpOwnerId: form.followUpOwnerId ? Number(form.followUpOwnerId) : null }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
@@ -1208,6 +1219,7 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
         residenceStatus: form.residenceStatus.trim(),
         companyName: form.companyName.trim() || null,
         external: true,
+        documentsOnly,
         outsourced: false,
         ownerId,
         ownerName: staff.find((s) => s.id === ownerId)?.name ?? null,
@@ -1268,7 +1280,12 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
         </div>
         <label className="block text-xs text-gray-600">
           申請方法 (短文)
-          <input value={form.applicationMethod} onChange={(e) => set("applicationMethod", e.target.value)} placeholder="例: 書類作成のみ。提出は本人" className={MODAL_INPUT} />
+          <input value={form.applicationMethod} onChange={(e) => set("applicationMethod", e.target.value)} placeholder="例: 提出は本人" className={MODAL_INPUT} />
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-text-dark)]">
+          <input type="checkbox" checked={documentsOnly} onChange={(e) => setDocumentsOnly(e.target.checked)} />
+          書類作成のみ
+          <span className="text-xs text-gray-400">(ボードで薄い紫で表示)</span>
         </label>
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onCancel} className={BTN_SUB}>

@@ -850,6 +850,8 @@ model PersonPlacement {
   externalResidenceStatus String?
   /// 申請方法 (短文。例: 本人がオンライン申請 / 行政書士へ委託)
   applicationMethod    String?
+  /// 書類作成だけを請け負った内定者 (ボードで薄く色を付けて出す)
+  documentsOnly        Boolean   @default(false)
   /// サポート工程で選んだ支援の種類 (lib/onboarding-flow.ts の SUPPORT_OPTIONS の id 配列)
   supports             Json?
   stage                String?
