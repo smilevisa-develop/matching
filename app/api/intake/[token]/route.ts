@@ -100,7 +100,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ token: string }
     const cleanStr = (v: unknown) =>
       typeof v === "string" ? v.trim() || null : null;
 
-    // 基本情報 (氏名・生年月日・性別・電話・メール・住所)。空欄は既存を消さないため送らない。
+    // 基本情報 (氏名・生年月日・性別・電話・メール・住所・郵便番号・配偶者・子供)。空欄は既存を消さないため送らない。
     const basic = body?.basic && typeof body.basic === "object" ? body.basic : {};
     const onboardingData: Record<string, string> = {};
     const bEnglishName = cleanStr(basic.englishName);
@@ -109,10 +109,14 @@ export async function PUT(req: Request, ctx: { params: Promise<{ token: string }
     const bPhone = cleanStr(basic.phoneNumber);
     const bEmail = cleanStr(basic.email);
     const bGender = cleanStr(basic.gender);
+    const bPostal = cleanStr(basic.postalCode);
+    const bSpouse = basic.spouseStatus === "有" || basic.spouseStatus === "無" ? (basic.spouseStatus as string) : null;
+    const bChildren = typeof basic.childrenCount === "string" ? basic.childrenCount.replace(/[^0-9]/g, "") || null : null;
     if (bEnglishName) onboardingData.englishName = bEnglishName;
     if (bBirthDate) onboardingData.birthDate = bBirthDate;
     if (bAddress) onboardingData.address = bAddress;
     if (bPhone) onboardingData.phoneNumber = bPhone;
+    if (bPostal) onboardingData.postalCode = bPostal;
     if (bEmail) await prisma.person.update({ where: { id: person.id }, data: { email: bEmail } });
     // 職歴 (会社名・入社・退社・仕事内容/退職理由)。1 件でも書かれていたら置き換える
     const workExperiences = normalizeWorkHistories(body?.workExperiences).filter(
@@ -152,6 +156,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ token: string }
 
     const extra = {
       ...(bGender ? { gender: bGender } : {}),
+      ...(bSpouse ? { spouseStatus: bSpouse } : {}),
+      ...(bChildren ? { childrenCount: bChildren } : {}),
       ...(workExperiences.length > 0 ? { workExperiences } : {}),
     };
     // resumeProfile を upsert (無ければ作る)

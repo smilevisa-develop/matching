@@ -23,10 +23,12 @@ export default async function IntakePage({
       email: true,
       residenceStatus: true,
       intakeConfig: true,
-      onboarding: { select: { englishName: true, birthDate: true, address: true, phoneNumber: true } },
+      onboarding: { select: { englishName: true, birthDate: true, address: true, phoneNumber: true, postalCode: true } },
       resumeProfile: {
         select: {
           gender: true,
+          spouseStatus: true,
+          childrenCount: true,
           workExperiences: true,
           motivation: true,
           selfIntroduction: true,
@@ -73,6 +75,9 @@ export default async function IntakePage({
         phoneNumber: person.onboarding?.phoneNumber ?? "",
         email: person.email ?? "",
         address: person.onboarding?.address ?? "",
+        postalCode: person.onboarding?.postalCode ?? "",
+        spouseStatus: person.resumeProfile?.spouseStatus ?? "",
+        childrenCount: (person.resumeProfile?.childrenCount ?? "").replace(/[^0-9]/g, ""),
       }}
       initialWork={normalizeWorkHistories(person.resumeProfile?.workExperiences).map(
         (w): WorkRow => ({ companyName: w.companyName, startDate: w.startDate, endDate: w.endDate, reason: w.reason }),

@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import CloseButton from "@/app/components/CloseButton";
 import {
   INTERVIEW_SECTIONS,
+  RESUME_TEXT_QUESTIONS,
   type InterviewQuestion,
-  allInterviewQuestions,
 } from "@/lib/interview-questions";
 
 type CustomQuestion = {
@@ -64,9 +64,11 @@ export default function IntakeFormBuilderModal({
   };
   // 初回送付は必須 (must) の質問だけを対象にする。任意質問はフォームに含めない
   const unfilled = useMemo(() => {
-    return allInterviewQuestions().filter(
-      (q) => (q.priority ?? "optional") === "must" && !isAnswered(q),
-    );
+    // 面談前に必要な質問 (must) + 履歴書にそのまま載る文章 (来日目的・今の仕事・志望動機・自己紹介)
+    return [
+      ...INTERVIEW_SECTIONS.flatMap((s) => s.questions).filter((q) => (q.priority ?? "optional") === "must"),
+      ...RESUME_TEXT_QUESTIONS,
+    ].filter((q) => !isAnswered(q));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers]);
 
@@ -159,6 +161,8 @@ export default function IntakeFormBuilderModal({
       );
       if (items.length > 0) map.set(section.title, items);
     }
+    const resume = RESUME_TEXT_QUESTIONS.filter((q) => !isAnswered(q));
+    if (resume.length > 0) map.set("履歴書のための質問", resume);
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers]);
@@ -227,7 +231,8 @@ export default function IntakeFormBuilderModal({
                   で除外できます (候補者には聞きません)。
                 </p>
                 <p className="mt-1.5 rounded-lg bg-[var(--color-light)] px-3 py-2 text-[11px] leading-relaxed text-gray-600">
-                  面談前に最低限必要な質問だけを送ります。
+                  基本情報 (英語名・生年月日・性別・電話・メール・住所・郵便番号・配偶者・子供) と職歴は毎回フォームに出ます (入力済みの値は最初から入っています)。
+                  そのほかは、面談前に必要な質問と履歴書に載る文章のうち、まだ空のものだけを送ります。
                   居住地 (日本/海外) や在留資格によって一部の質問は自動で出し分けられます。
                 </p>
                 {unfilled.length === 0 ? (

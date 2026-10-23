@@ -685,6 +685,18 @@ export function allInterviewQuestions(): InterviewQuestion[] {
 /** 現行 + 以前の質問 (回答の表示や履歴書連携の項目を探すとき用) */
 export const ALL_INTERVIEW_SECTIONS: InterviewSection[] = [...INTERVIEW_SECTIONS, ...LEGACY_SECTIONS];
 
+/**
+ * 履歴書にそのまま載る文章の質問のうち、今の事前質問 (INTERVIEW_SECTIONS) に無いもの
+ * (来日目的・今の仕事・志望動機・自己紹介)。候補者フォームの「履歴書のための質問」で聞く
+ */
+export const RESUME_TEXT_QUESTIONS: InterviewQuestion[] = LEGACY_SECTIONS.flatMap((s) =>
+  s.questions.filter(
+    (q) =>
+      q.existingField &&
+      !INTERVIEW_SECTIONS.some((cur) => cur.questions.some((c) => c.existingField === q.existingField)),
+  ),
+);
+
 export function buildInterviewSections(opts: {
   priority: QuestionPriority;
   ctx: QuestionContext;

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   LOCATION_QUESTION_KEY,
+  RESUME_TEXT_QUESTIONS,
   buildInterviewSections,
   parseLocationAnswer,
   type InterviewQuestion,
@@ -45,6 +46,11 @@ type BasicInfo = {
   phoneNumber: string;
   email: string;
   address: string;
+  postalCode: string;
+  /** 配偶者 (有 / 無) */
+  spouseStatus: string;
+  /** 子供の人数 (数字) */
+  childrenCount: string;
 };
 
 export type WorkRow = { companyName: string; startDate: string; endDate: string; reason: string };
@@ -63,6 +69,8 @@ type PageBlock = {
 };
 
 const GENDER_OPTIONS = ["男性", "女性", "その他"];
+// 候補者の詳細画面 (lib/candidate-profile.ts の SPOUSE_OPTIONS) と同じ値で保存する
+const SPOUSE_OPTIONS = ["無", "有"];
 const EMPTY_WORK: WorkRow = { companyName: "", startDate: "", endDate: "", reason: "" };
 
 const INPUT =
@@ -97,7 +105,18 @@ export default function IntakeClient({
 
   const [form, setForm] = useState<InitialAnswers>(initial);
   const [basicForm, setBasicForm] = useState<BasicInfo>(() => {
-    const b = { englishName: "", birthDate: "", gender: "", phoneNumber: "", email: "", address: "", ...(basic ?? {}) };
+    const b = {
+      englishName: "",
+      birthDate: "",
+      gender: "",
+      phoneNumber: "",
+      email: "",
+      address: "",
+      postalCode: "",
+      spouseStatus: "",
+      childrenCount: "",
+      ...(basic ?? {}),
+    };
     // <input type=date> 用に YYYY-MM-DD へ寄せる ("1998/05/10" → "1998-05-10")
     const bd = /^\d{4}\D\d{2}\D\d{2}$/.test(b.birthDate) ? b.birthDate.replace(/\D/g, "-") : b.birthDate;
     return { ...b, birthDate: bd };
@@ -147,6 +166,15 @@ export default function IntakeClient({
         questions: s.questions.map((q) => ({ kind: "interview" as const, q })),
       })),
     );
+    // 履歴書にそのまま載る文章 (来日目的・今の仕事・志望動機・自己紹介)。まだ空のものだけ聞く
+    const resumeQs = RESUME_TEXT_QUESTIONS.filter((q) => !excludedKeys.includes(q.key) && !isAnswered(q));
+    if (resumeQs.length > 0) {
+      blocks.push({
+        title: t("resumeTitle"),
+        description: t("resumeDesc"),
+        questions: resumeQs.map((q) => ({ kind: "interview" as const, q })),
+      });
+    }
     if (customQuestions.length > 0) {
       blocks.push({
         title: t("customTitle"),
@@ -387,6 +415,27 @@ export default function IntakeClient({
               <QuestionField label={t("phone")} sub={ja("phone")} type="text" hint="090-1234-5678" value={basicForm.phoneNumber} onChange={(v) => setBasic("phoneNumber", v)} />
               <QuestionField label={t("email")} sub={ja("email")} type="text" hint="example@gmail.com" value={basicForm.email} onChange={(v) => setBasic("email", v)} />
               <QuestionField label={t("address")} sub={ja("address")} type="textarea" hint={t("addressHint")} value={basicForm.address} onChange={(v) => setBasic("address", v)} />
+              <QuestionField label={t("postalCode")} sub={ja("postalCode")} type="text" hint={t("postalHint")} value={basicForm.postalCode} onChange={(v) => setBasic("postalCode", v)} />
+              <QuestionField
+                label={t("spouse")}
+                sub={ja("spouse")}
+                type="select"
+                options={SPOUSE_OPTIONS}
+                optionLabel={(o) => tOption(lang, o)}
+                unselected={t("unselected")}
+                value={basicForm.spouseStatus}
+                onChange={(v) => setBasic("spouseStatus", v)}
+              />
+              <div>
+                <FieldLabel label={t("children")} sub={ja("children")} />
+                <input
+                  className={INPUT}
+                  inputMode="numeric"
+                  value={basicForm.childrenCount}
+                  onChange={(e) => setBasic("childrenCount", e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder={t("childrenHint")}
+                />
+              </div>
             </div>
           ) : currentPage.work ? (
             <div className="mt-5 space-y-4">
