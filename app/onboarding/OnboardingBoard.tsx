@@ -56,6 +56,8 @@ export type OnboardingCard = {
   photoUrl: string | null;
   partnerName: string | null;
   residenceStatus: string;
+  /** 在留期限 (YYYY-MM-DD。無ければ空) */
+  visaExpiryDate: string;
   companyName: string | null;
   /** 候補者とは別に追加した内定者 */
   external: boolean;
@@ -106,6 +108,34 @@ const COLUMNS: { id: OnboardingStageId; label: string }[] = [
 
 /** キャンセルの列 (入れるときに理由を書くポップが出る) */
 const CANCEL_STAGE: OnboardingStageId = "card_cancelled";
+
+/** 在留期限までの日数と色。赤 = 30 日以内 (切れている)、黄 = 90 日以内 */
+export function visaAlert(ymd: string): { days: number; level: "red" | "yellow" | "none" } | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  const today = new Date(new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" }));
+  const days = Math.round((new Date(ymd).getTime() - today.getTime()) / 86_400_000);
+  return { days, level: days <= 30 ? "red" : days <= 90 ? "yellow" : "none" };
+}
+const VISA_RANK = { red: 0, yellow: 1, none: 2 } as const;
+/**
+ * 在留期限を出す工程 = 新しい在留カードがまだ出ていない人だけ。
+ * 発行完了より後 (サポート・入社) の人の在留期限は申請前の古いカードのもので、出すと間違えるため出さない
+ */
+const VISA_STAGES = new Set<string>(["offer", "documents", "prepare", "applying", "card_processing", "hold"]);
+const visaOf = (card: OnboardingCard) => (VISA_STAGES.has(card.stage) ? card.visaExpiryDate : "");
+/** 在留期限が近い人を上に (赤 → 黄 → そのほか。同じ色の中は期限の近い順、そのほかは元の順) */
+function byVisaUrgency(list: OnboardingCard[]): OnboardingCard[] {
+  return list
+    .map((c, i) => ({ c, i, a: visaAlert(visaOf(c)) }))
+    .sort((x, y) => {
+      const rx = VISA_RANK[x.a?.level ?? "none"];
+      const ry = VISA_RANK[y.a?.level ?? "none"];
+      if (rx !== ry) return rx - ry;
+      if (rx < 2) return (x.a?.days ?? 0) - (y.a?.days ?? 0);
+      return x.i - y.i;
+    })
+    .map((x) => x.c);
+}
 
 const todayYmd = () => new Date().toISOString().slice(0, 10);
 const apiPath = (card: OnboardingCard) => `/api/onboarding/p${card.id}`;
@@ -280,7 +310,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
 
       <div className="flex gap-3 overflow-x-auto pb-2">
         {COLUMNS.filter((c) => c.id !== HOLD_STAGE).map((col) => {
-          const list = visible.filter((c) => c.stage === col.id);
+          const list = byVisaUrgency(visible.filter((c) => c.stage === col.id));
           const dragging = cards.find((c) => c.id === draggingId);
           const isTarget = Boolean(dragging) && overStage === col.id && dragging?.stage !== col.id;
           return (
@@ -326,7 +356,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
       <div className="mt-3 flex items-stretch gap-3">
       {/* 保留: 工程から外れている人を一目で拾えるよう、下に横向きで置く */}
       {(() => {
-        const list = visible.filter((c) => c.stage === HOLD_STAGE);
+        const list = byVisaUrgency(visible.filter((c) => c.stage === HOLD_STAGE));
         const dragging = cards.find((c) => c.id === draggingId);
         const isTarget = Boolean(dragging) && overStage === HOLD_STAGE && dragging?.stage !== HOLD_STAGE;
         return (
@@ -536,6 +566,7 @@ function BoardCard({
         ) : null}
       </div>
       <p className="mt-0.5 truncate text-xs text-gray-500">{[card.companyName, card.ownerName].filter(Boolean).join(" ・ ")}</p>
+      <VisaBadge ymd={visaOf(card)} />
       {next ? (
         <p className={`mt-1.5 line-clamp-2 text-xs ${
             card.stage === HOLD_STAGE ? "font-medium text-amber-700" : card.stage === CANCEL_STAGE ? "font-medium text-red-700" : "text-gray-700"
@@ -564,6 +595,7 @@ function BoardHoverCard({ card, rect, next, done, total }: { card: OnboardingCar
     ["担当", card.ownerName],
     ["国籍", card.nationality || null],
     ["在留資格", card.residenceStatus || null],
+    ["在留期限", visaOf(card) ? visaOf(card).replaceAll("-", "/") : null],
     ["申請種別", card.applicationType || null],
     ["申請方法", card.applicationMethod || null],
     ["内定承諾日", card.offerAcceptedAt ? card.offerAcceptedAt.replaceAll("-", "/") : null],
@@ -601,6 +633,24 @@ function BoardHoverCard({ card, rect, next, done, total }: { card: OnboardingCar
           ))}
       </dl>
     </div>
+  );
+}
+
+/** 在留期限の表示。90 日以内は黄、30 日以内・切れていれば赤で目立たせる */
+function VisaBadge({ ymd }: { ymd: string }) {
+  const a = visaAlert(ymd);
+  if (!a) return null;
+  const date = ymd.replaceAll("-", "/");
+  if (a.level === "none") return <p className="mt-1 text-[11px] text-gray-400">在留期限 {date}</p>;
+  const left = a.days < 0 ? "期限切れ" : a.days === 0 ? "今日まで" : `あと ${a.days} 日`;
+  return (
+    <p
+      className={`mt-1 inline-block rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
+        a.level === "red" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800"
+      }`}
+    >
+      在留期限 {date}（{left}）
+    </p>
   );
 }
 
@@ -739,6 +789,7 @@ function CardDrawer({
               )}
               {card.kanaName ? <p className="text-sm text-gray-600">{card.kanaName}</p> : null}
               <p className="truncate text-xs text-gray-500">{[card.companyName, card.residenceStatus].filter(Boolean).join(" ・ ")}</p>
+              <VisaBadge ymd={visaOf(card)} />
               <label className="mt-1 inline-flex cursor-pointer items-center gap-1.5 text-xs text-violet-700">
                 <input type="checkbox" checked={card.documentsOnly} onChange={(e) => onSave({ documentsOnly: e.target.checked })} />
                 書類作成のみ
@@ -1253,6 +1304,7 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
         photoUrl: null,
         partnerName: null,
         residenceStatus: form.residenceStatus.trim(),
+        visaExpiryDate: "",
         companyName: form.companyName.trim() || null,
         external: true,
         documentsOnly,

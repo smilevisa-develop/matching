@@ -5,6 +5,11 @@ import OnboardingBoard, { type OnboardingCard } from "./OnboardingBoard";
 
 export const dynamic = "force-dynamic";
 
+function toYmd(v: string | null | undefined): string {
+  const m = (v ?? "").match(/(\d{4})\D(\d{1,2})\D(\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : "";
+}
+
 /**
  * 内定者管理ボード (Trello の置き換え)。
  *
@@ -26,6 +31,7 @@ export default async function OnboardingPage() {
             id: true,
             name: true,
             residenceStatus: true,
+            resumeProfile: { select: { visaExpiryDate: true } },
             nationality: true,
             photoUrl: true,
             partner: { select: { name: true } },
@@ -66,6 +72,8 @@ export default async function OnboardingPage() {
       photoUrl: p.person?.photoUrl ?? null,
       partnerName: p.person?.partner?.name ?? null,
       residenceStatus: p.person?.residenceStatus ?? p.externalResidenceStatus ?? "",
+      // 在留期限 (候補者詳細に入っているもの)。「2027/03/25」なども YYYY-MM-DD にそろえる
+      visaExpiryDate: toYmd(p.person?.resumeProfile?.visaExpiryDate),
       companyName: company?.name ?? p.externalCompanyName ?? null,
       external: !p.person,
       documentsOnly: p.documentsOnly,
