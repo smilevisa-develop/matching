@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { AuthError, requireApiAccount } from "@/lib/auth";
-import { onDealCandidateStageChanged } from "@/lib/onboarding-autolink";
+import { isOfferedStage, onDealCandidateStageChanged, removeUntouchedOnboardingCard } from "@/lib/onboarding-autolink";
 import { after } from "next/server";
 import {
   isAgencyKind,
@@ -13,7 +13,7 @@ import {
   type CounterField,
 } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
-import { writeStageDateToSheet } from "@/lib/candidate-date-sheet";
+import { removeUntouchedOfferRow, writeStageDateToSheet } from "@/lib/candidate-date-sheet";
 import { requestKpiSheetSync } from "@/lib/kpi-sheet-sync";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -36,7 +36,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     // ステージの移動に合わせて人数カウンターも動かす (カンバンと数字を常に揃えるため)。
     // 同時に動かされても二重に数えないよう、前のステージの読み取りから更新までを 1 つにまとめる。
-    const { candidate, counters, stageChanged, agency } = await prisma.$transaction(async (tx) => {
+    const { candidate, counters, stageChanged, agency, fromStage } = await prisma.$transaction(async (tx) => {
       const before = await tx.dealCandidate.findUniqueOrThrow({
         where: { id: Number(id) },
         select: { stage: true, dealId: true, stageDates: true, deal: { select: { company: { select: { companyKind: true } } } } },
@@ -85,15 +85,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         rejectCount: true,
       };
       const current = await tx.deal.findUniqueOrThrow({ where: { id: before.dealId }, select });
-      if (deltas.length === 0) return { candidate, counters: current, stageChanged: before.stage !== stage, agency: isAgencyKind(kind) };
+      const common = { candidate, stageChanged: before.stage !== stage, agency: isAgencyKind(kind), fromStage: before.stage };
+      if (deltas.length === 0) return { ...common, counters: current };
       const counters = await tx.deal.update({
         where: { id: before.dealId },
         // 手で直した結果より多く戻されても 0 未満にはしない
         data: Object.fromEntries(deltas.map(([field, n]) => [field, Math.max(0, current[field] + n)])),
         select,
       });
-      return { candidate, counters, stageChanged: before.stage !== stage, agency: isAgencyKind(kind) };
+      return { ...common, counters };
     });
+
+    // 内定済み・内定承諾から内定より前に戻した (間違えて動かした) ときは、自動で作ったカードと行を片付ける
+    if (isOfferedStage(fromStage) && !isOfferedStage(stage)) {
+      after(() => cleanUpMistakenOffer(candidate.personId));
+    }
 
     // 内定済み / 内定承諾 になったら内定者管理ボードにカードを用意する (応答は待たせない)。
     // 人材紹介会社 (WILLOF・ADECCO など) の候補者は内定者管理に出さない
@@ -144,6 +150,10 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   try {
     await requireApiAccount();
     const { id } = await params;
+    const removedLink = await prisma.dealCandidate.findUniqueOrThrow({
+      where: { id: Number(id) },
+      select: { stage: true, personId: true },
+    });
     const counters = await prisma.$transaction(async (tx) => {
       const link = await tx.dealCandidate.findUniqueOrThrow({
         where: { id: Number(id) },
@@ -170,11 +180,28 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
       });
     });
     after(() => requestCompanyDatabaseSync());
+    // 内定承諾などで自動で作ったカード・企業データベースの行も片付ける (間違えて入れた人のため)
+    if (isOfferedStage(removedLink.stage)) after(() => cleanUpMistakenOffer(removedLink.personId));
     return Response.json({ ok: true, counters });
   } catch (error) {
     return Response.json(
       { ok: false, error: error instanceof Error ? error.message : "error" },
       { status: error instanceof AuthError ? error.status : 500 }
     );
+  }
+}
+
+/** 間違えて内定にした候補者の後片付け: 内定者管理のカードと、企業データベース「内定者管理」の行 (手を付けていなければ) */
+async function cleanUpMistakenOffer(personId: number) {
+  try {
+    const card = await removeUntouchedOnboardingCard(personId);
+    if (!card.removed) {
+      console.info(`内定者カードは残す (${personId}):`, card.reason);
+      return;
+    }
+    const row = await removeUntouchedOfferRow(personId);
+    if (!row.removed) console.info(`内定者管理の行は残す (${personId}):`, row.reason);
+  } catch (e) {
+    console.warn("内定の後片付けに失敗:", e instanceof Error ? e.message : e);
   }
 }

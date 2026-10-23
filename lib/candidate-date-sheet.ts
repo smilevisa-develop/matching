@@ -9,8 +9,11 @@
  *
  * 行は A 列の候補者ID (4 桁ゼロ埋め。例 0277) で探す。
  * 列は見出し行の文字で探す (列の位置が変わっても追従する)。見出しが無ければ何もしない。
- * 内定者管理に追記するとき、直前の行と内定日の月が変わっていれば「N月」の区切り行を 1 行入れる
- * (月ごとに見やすくするため。既存の 8月 / 9月 の行と同じ置き方)。
+ *
+ * 内定者管理に行を足すときは、内定日の月の「N月」区切りの最後に行を差し込む (2026/10 採用チームの依頼:
+ * 8・9 月の内定ならその月のところにはめ込み、月の流れが分かるように)。
+ * その月の区切りが無ければ、月の順になる位置に区切り行ごと差し込む。
+ * 差し込んだ行には、下の空き行 (B〜F 列の関数・M 列の「未」が入っている) をそのまま写す。
  */
 
 import { resolveCompanyMasterSpreadsheetId } from "@/lib/company-master-sync";
@@ -106,26 +109,18 @@ export async function writeStageDateToSheet(args: {
   if (row < 0) {
     if (!target.appendIfMissing) return { ok: false, skipped: `「${target.tab}」に候補者 ${id} の行が無い` };
 
-    // 最後にデータが入っている行 (A 列か日付列に何かある行) の次に追記する
-    let last = headerRow;
-    for (let i = headerRow + 1; i < rows.length; i++) {
-      if ((rows[i][0] ?? "").trim() || (rows[i][col] ?? "").trim()) last = i;
-    }
-    const prevDate = (rows[last]?.[col] ?? "").trim();
-    const prevMonth = prevDate.match(/^(\d{4})[/-](\d{2})/);
-    const [y, m] = args.date.split("-");
-    const monthChanged = prevMonth ? !(prevMonth[1] === y && prevMonth[2] === m) : false;
-    const values: string[][] = [];
-    if (monthChanged) values.push([`${Number(m)}月`]);
-    values.push([id]);
-    const startRow = last + 2; // 1 始まり
-    await sheets.spreadsheets.values.update({
+    // 月の区切りの中に行を差し込む (関数入りの空き行を写す)
+    const offerCol = rows[headerRow].findIndex((c) => c.trim() === "内定日");
+    row = await insertOfferRow({
+      sheets,
       spreadsheetId,
-      range: `${quote(target.tab)}!A${startRow}`,
-      valueInputOption: "USER_ENTERED",
-      requestBody: { values },
+      tab: target.tab,
+      rows,
+      headerRow,
+      dateCol: offerCol >= 0 ? offerCol : col,
+      date: args.date,
+      id,
     });
-    row = last + values.length; // 0 始まり index の追記行
     appended = true;
   }
 
@@ -158,4 +153,157 @@ export async function setStageDateCell(args: { tab: string; cell: string; value:
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [[args.value]] },
   });
+}
+
+type SheetsClient = Awaited<ReturnType<typeof getSheetsClient>>;
+
+const MONTH_HEADER_RE = /^(\d{1,2})月$/;
+
+async function tabSheetId(sheets: SheetsClient, spreadsheetId: string, tab: string): Promise<number> {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(sheetId,title)" });
+  const hit = meta.data.sheets?.find((s) => s.properties?.title === tab);
+  if (hit?.properties?.sheetId == null) throw new Error(`タブ「${tab}」が見つからない`);
+  return hit.properties.sheetId;
+}
+
+/** 「YYYY/MM/DD」などの先頭から [年, 月] */
+function yearMonthOf(v: string | undefined): [number, number] | null {
+  const m = (v ?? "").trim().match(/^(\d{4})[/-](\d{1,2})/);
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+/** 内定者管理のどこに行を差し込むか (シートは触らない。テストしやすいように分けている) */
+export function planOfferInsert(rows: string[][], headerRow: number, dateCol: number, date: string) {
+  const [ty, tm] = date.split("-").map(Number);
+  const a = (i: number) => (rows[i]?.[0] ?? "").trim();
+  const hasData = (i: number) => {
+    const v = a(i);
+    return !!v && !MONTH_HEADER_RE.test(v);
+  };
+
+  let lastData = headerRow;
+  for (let i = headerRow + 1; i < rows.length; i++) if (a(i)) lastData = i;
+
+  // 月の区切り行と、その区切りの年 (区切りの下の行の内定日から。分からなければ 1 つ前の区切りから繰り上げ)
+  type Section = { row: number; year: number | null; month: number; end: number };
+  const sections: Section[] = [];
+  for (let i = headerRow + 1; i <= lastData; i++) {
+    const m = a(i).match(MONTH_HEADER_RE);
+    if (m) sections.push({ row: i, year: null, month: Number(m[1]), end: i });
+  }
+  for (let k = 0; k < sections.length; k++) {
+    const sec = sections[k];
+    const next = k + 1 < sections.length ? sections[k + 1].row : lastData + 1;
+    sec.end = sec.row;
+    for (let i = sec.row + 1; i < next; i++) {
+      if (!hasData(i)) continue;
+      sec.end = i;
+      const ym = yearMonthOf(rows[i]?.[dateCol]);
+      if (sec.year == null && ym && ym[1] === sec.month) sec.year = ym[0];
+    }
+  }
+  for (let k = 0; k < sections.length; k++) {
+    if (sections[k].year != null) continue;
+    const prev = sections[k - 1];
+    sections[k].year = prev?.year != null ? (sections[k].month < prev.month ? prev.year + 1 : prev.year) : ty;
+  }
+  const key = (y: number, m: number) => y * 12 + m;
+
+  // 同じ月の区切り (下にあるほうを優先)
+  const same = [...sections].reverse().find((s) => s.year === ty && s.month === tm);
+  // 区切りが無いときに入れる位置 = 月の順で次に来る区切りの前 / 無ければ一番下
+  const later = sections.find((s) => key(s.year ?? ty, s.month) > key(ty, tm));
+  const insertAt = same ? same.end + 1 : later ? later.row : lastData + 1;
+  // 一番上の区切りより前の月 (区切りを作る前の古い内定) は、区切りを作らずにその直前に入れる
+  const withHeader = !same && sections.length > 0 && later !== sections[0];
+  const count = withHeader ? 2 : 1;
+
+  const headerSource = sections.length > 0 ? sections[sections.length - 1].row : -1;
+  return { insertAt, withHeader, count, lastData, headerSource };
+}
+
+/**
+ * 内定者管理に候補者の行を差し込み、その行の index (0 始まり) を返す。
+ * - 内定日の月の「N月」区切りがあれば、その区切りの最後のデータ行の次に入れる
+ * - 無ければ、月の順で次に来る区切りの前に「N月」の区切り行と一緒に入れる (後ろの月が無ければ一番下)
+ */
+async function insertOfferRow(args: {
+  sheets: SheetsClient;
+  spreadsheetId: string;
+  tab: string;
+  rows: string[][];
+  headerRow: number;
+  dateCol: number;
+  date: string;
+  id: string;
+}): Promise<number> {
+  const { sheets, spreadsheetId, tab, date, id } = args;
+  const [, tm] = date.split("-").map(Number);
+  const { insertAt, withHeader, count, lastData, headerSource } = planOfferInsert(args.rows, args.headerRow, args.dateCol, date);
+  const sheetId = await tabSheetId(sheets, spreadsheetId, tab);
+  // 写し元: データの下の空き行 (B〜F の関数と M の「未」が入っている)。差し込みで下にずれる分を足す
+  const template = lastData + 1 + (lastData + 1 >= insertAt ? count : 0);
+  const headerSrc = headerSource >= 0 ? headerSource + (headerSource >= insertAt ? count : 0) : -1;
+  const grid = (r: number) => ({ sheetId, startRowIndex: r, endRowIndex: r + 1, startColumnIndex: 0, endColumnIndex: 60 });
+
+  const requests: object[] = [
+    { insertDimension: { range: { sheetId, dimension: "ROWS", startIndex: insertAt, endIndex: insertAt + count }, inheritFromBefore: insertAt > 0 } },
+  ];
+  const dataRow = insertAt + (withHeader ? 1 : 0);
+  requests.push({ copyPaste: { source: grid(template), destination: grid(dataRow), pasteType: "PASTE_NORMAL" } });
+  if (withHeader && headerSrc >= 0) {
+    requests.push({ copyPaste: { source: grid(headerSrc), destination: grid(insertAt), pasteType: "PASTE_FORMAT" } });
+  }
+  await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+
+  const values = withHeader ? [[`${tm}月`], [id]] : [[id]];
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${quote(tab)}!A${insertAt + 1}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values },
+  });
+  return dataRow;
+}
+
+/**
+ * カンバンから外した・内定より前に戻したときに、システムが足した内定者管理の行を消す。
+ * 内定日・内定承諾日のほかに何か手で入れてあれば (申請種別・申請日など) 残す。
+ * 消したあと月の区切りの中が空になったら、その区切り行も消す。
+ */
+export async function removeUntouchedOfferRow(personId: number): Promise<{ removed: boolean; reason?: string }> {
+  const spreadsheetId = resolveCompanyMasterSpreadsheetId();
+  if (!spreadsheetId) return { removed: false, reason: "企業データベースのスプシIDが未設定" };
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${quote(OFFER_SHEET_TAB)}!A1:AZ2000` });
+  const rows = (res.data.values ?? []).map((r) => r.map((c) => String(c ?? "")));
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) if (rows[i].some((c) => c.trim() === "内定日")) { headerRow = i; break; }
+  if (headerRow < 0) return { removed: false, reason: "見出しが無い" };
+  const head = rows[headerRow].map((c) => c.trim());
+  const keep = new Set(["内定日", "内定承諾日", "ファイル回収"].map((h) => head.indexOf(h)).filter((i) => i >= 0));
+  const id = sheetPersonId(personId);
+  const idNum = String(personId);
+  const row = rows.findIndex((r, i) => i > headerRow && ((r[0] ?? "").trim() === id || (r[0] ?? "").trim() === idNum));
+  if (row < 0) return { removed: false, reason: "行が無い" };
+  // 手入力の列 (G 列以降。関数の B〜F と、内定日・内定承諾日・ファイル回収の「未」は見ない)
+  const touched = rows[row].some((v, j) => {
+    if (j < 6 || keep.has(j)) return false;
+    return v.trim() !== "";
+  });
+  const fileCol = head.indexOf("ファイル回収");
+  if (touched || (fileCol >= 0 && !["", "未"].includes((rows[row][fileCol] ?? "").trim()))) {
+    return { removed: false, reason: "手で入れた内容があるので残す" };
+  }
+  const a = (i: number) => (rows[i]?.[0] ?? "").trim();
+  // 月の区切りの中がこの行だけなら、区切りも一緒に消す
+  const above = row - 1;
+  const belowIsBoundary = !a(row + 1) || MONTH_HEADER_RE.test(a(row + 1));
+  const start = MONTH_HEADER_RE.test(a(above)) && belowIsBoundary ? above : row;
+  const sheetId = await tabSheetId(sheets, spreadsheetId, OFFER_SHEET_TAB);
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: start, endIndex: row + 1 } } }] },
+  });
+  return { removed: true };
 }

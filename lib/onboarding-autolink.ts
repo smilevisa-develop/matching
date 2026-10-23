@@ -125,3 +125,44 @@ export async function onDealCandidateStageChanged(personId: number, stage: strin
   }
   return result;
 }
+
+/** 内定が出た扱いのステージ (ここから外れたら自動で作ったカードを片付ける) */
+const OFFERED_STAGES = new Set(["内定済み", "内定承諾", "入社待ち", "入社済み", "内定辞退", "内定取り消し"]);
+
+export function isOfferedStage(stage: string | null | undefined) {
+  return OFFERED_STAGES.has(stage ?? "");
+}
+
+/**
+ * 間違えて内定承諾にした候補者をカンバンから外した / 内定より前に戻したときの片付け。
+ * ほかの求人でも内定が出ていなければ、自動で作った内定者管理のカードを消す。
+ * ただし誰かが手を付けたカード (タスク完了・問題の記録・申請日・工程を進めた) は残す。
+ */
+export async function removeUntouchedOnboardingCard(personId: number): Promise<{ removed: boolean; reason?: string }> {
+  const stillOffered = await prisma.dealCandidate.count({
+    where: { personId, stage: { in: [...OFFERED_STAGES] } },
+  });
+  if (stillOffered > 0) return { removed: false, reason: "ほかの求人で内定が出ている" };
+  const placement = await prisma.personPlacement.findUnique({
+    where: { personId },
+    select: {
+      id: true,
+      stage: true,
+      applicationAt: true,
+      applicationType: true,
+      currentAction: true,
+      _count: { select: { issues: true, tasks: { where: { doneAt: { not: null } } } } },
+    },
+  });
+  if (!placement) return { removed: false, reason: "カードが無い" };
+  const touched =
+    (placement.stage && placement.stage !== "offer") ||
+    placement.applicationAt ||
+    placement.applicationType ||
+    placement.currentAction ||
+    placement._count.issues > 0 ||
+    placement._count.tasks > 0;
+  if (touched) return { removed: false, reason: "手を付けたカードなので残す" };
+  await prisma.personPlacement.delete({ where: { id: placement.id } });
+  return { removed: true };
+}
