@@ -24,10 +24,10 @@ const STAGES = [
   ["内定承諾", "内定承諾"],
   ["応募辞退", "応募辞退"],
   ["内定辞退", "内定辞退"],
-  ["内定取り消し", "内定取り消し"],
   ["書類NG", "書類NG"],
   ["面談NG", "面談NG"],
   ["選考NG", "選考NG"],
+  ["不合格", "不合格"],
 ] as const;
 
 const DAY = 86_400_000;
@@ -178,7 +178,7 @@ export async function computeKpiDashboard(period: KpiPeriod) {
         offered.add(c.person.id);
       }
       if (inM(d["内定辞退"])) row.decline++;
-      if (inM(d["選考NG"])) row.reject++;
+      if (inM(d["不合格"])) row.reject++;
     }
     for (const p of placements) if (p.personId && p.offerAt && inM(ymdJst(p.offerAt)) && !offered.has(p.personId)) row.offer++;
     return row;

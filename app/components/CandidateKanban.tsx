@@ -45,7 +45,7 @@ const STAGE_DOT: Record<string, string> = {
   書類NG: "bg-[#FB923C]",
   面談NG: "bg-[#EC4899]",
   選考NG: "bg-[#F97316]",
-  内定取り消し: "bg-[#B91C1C]",
+  不合格: "bg-[#EF4444]",
 };
 
 /** 候補者カード見出し用: 「001 DAO VAN HOANG」形式 (英語名がなければカナ名) */

@@ -8,8 +8,9 @@
  *
  * 流れ (2026/10 採用チームの整理):
  *   接続済み → 事前面談済み → 推薦済み → 面接済み → 内定済み → 内定承諾
- *   外れる先: 書類NG (CV NG: 日本語・書類などで推薦できない) / 面談NG / 選考NG (推薦後の書類選考落ち)
- *             (面接で不合格もここ) / 内定辞退 / 内定取り消し / 応募辞退
+ *   外れる先 (下の段。2026/10/24 採用チームの並び): 書類NG (CV NG: 日本語・書類などで推薦できない) / 面談NG /
+ *             応募辞退 / 選考NG (推薦後の書類選考落ち) / 不合格 (面接の結果) / 内定辞退
+ *   内定取り消しは内定のあとのことなので、カンバンではなく内定者管理の「キャンセル」で扱う
  */
 export const CANDIDATE_STAGES = [
   "接続済み",
@@ -21,20 +22,19 @@ export const CANDIDATE_STAGES = [
   // 人材紹介会社 (WILLOF・ADECCO など) の企業だけで使う。内定のあとは 入社待ち → 入社済み で終わる
   "入社待ち",
   "入社済み",
-  // 外れた人 (選考から外れた列)。カンバンでは下の段 / 右側にまとめて置く
-  "応募辞退",
-  "内定辞退",
+  // 外れた人 (選考から外れた列)。カンバンでは下の段 / 右側にまとめて置く (この順で並ぶ)
   "書類NG",
   "面談NG",
+  "応募辞退",
   "選考NG",
-  // 内定のあとに企業側から取り消された (2026/10 追加)。「不合格」は選考NG にまとめた
-  "内定取り消し",
+  "不合格",
+  "内定辞退",
 ] as const;
 
 export type CandidateStage = (typeof CANDIDATE_STAGES)[number];
 
-/** 選考から外れた列 (辞退・NG・不合格)。カンバンでは進行中の列と分けて置く */
-export const EXIT_STAGES: readonly string[] = ["応募辞退", "内定辞退", "内定取り消し", "書類NG", "面談NG", "選考NG"];
+/** 選考から外れた列 (辞退・NG・不合格)。カンバンでは進行中の列と分けて置く (この順で並ぶ) */
+export const EXIT_STAGES: readonly string[] = ["書類NG", "面談NG", "応募辞退", "選考NG", "不合格", "内定辞退"];
 
 /** 企業の区分 (Company.companyKind) */
 export const COMPANY_KINDS = ["通常", "人材紹介会社"] as const;
@@ -75,8 +75,8 @@ export const STAGE_DATE_LABELS: Record<string, string> = {
   入社済み: "入社日",
   応募辞退: "辞退の連絡日",
   内定辞退: "辞退日",
-  内定取り消し: "取り消しの連絡日",
   選考NG: "NG の連絡日",
+  不合格: "不合格の連絡日",
 };
 
 /** ステージごとの日付 (DealCandidate.stageDates) を安全に読む */
@@ -127,8 +127,8 @@ const PIPELINE: { stage: string; counter: CounterField | null }[] = [
 // 選考の流れから外れる列。入ったときに 1 増やし、戻したら 1 減らす
 const EXIT_COUNTERS: Record<string, CounterField> = {
   内定辞退: "declineCount",
-  // 人数カウンターの「選考NG」(旧: 不合格)
-  選考NG: "rejectCount",
+  // 人数カウンターの「不合格」(面接の結果)。選考NG は数えない
+  不合格: "rejectCount",
 };
 
 /**
@@ -136,8 +136,8 @@ const EXIT_COUNTERS: Record<string, CounterField> = {
  *
  * - 先へ進めたら、通過した段階ぶん増やす (事前面談済み → 内定済み なら 推薦・面接・内定 が +1)
  * - 間違えて進めたものを戻したら、そのぶん減らす
- * - 内定辞退 / 選考NG は入ったら +1、出したら -1。それまでに数えた推薦・面接・内定はそのまま
- * - 書類NG / 面談NG / 応募辞退 / 内定取り消し は数えない
+ * - 内定辞退 / 不合格 は入ったら +1、出したら -1。それまでに数えた推薦・面接・内定はそのまま
+ * - 書類NG / 面談NG / 応募辞退 / 選考NG は数えない
  */
 export function stageCounterDeltas(prev: string, next: string): Partial<Record<CounterField, number>> {
   const deltas: Partial<Record<CounterField, number>> = {};

@@ -468,7 +468,7 @@ export default function DealDetailClient({
           <CounterCell label="面接" value={currentDeal.interviewCount} onChange={(n) => void updateCounter("interviewCount", n)} />
           <CounterCell label="内定" value={currentDeal.offerCount} onChange={(n) => void updateCounter("offerCount", n)} />
           <CounterCell label="内定辞退" value={currentDeal.declineCount} onChange={(n) => void updateCounter("declineCount", n)} tone="amber" />
-          <CounterCell label="選考NG" value={currentDeal.rejectCount} onChange={(n) => void updateCounter("rejectCount", n)} tone="red" />
+          <CounterCell label="不合格" value={currentDeal.rejectCount} onChange={(n) => void updateCounter("rejectCount", n)} tone="red" />
         </div>
       </section>
 
