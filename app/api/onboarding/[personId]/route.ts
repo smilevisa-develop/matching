@@ -13,11 +13,13 @@
  *        "addIssue"      … 問題を 1 件記録 { title, detail }
  *        "completeStage" … その工程のタスクを一括で完了 { stage } (undo: true で全部戻す)
  *        "setSupports"   … サポート工程で必要な支援を選ぶ { supports: string[] } → その分のタスクに入れ替える
+ *        "ensureFolder"  … 内定者の Drive フォルダ (企業フォルダ / 内定者 / 英語名) を用意して URL を返す
  */
 
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { moveDealCandidateStage } from "@/lib/deal-candidate-move";
+import { ensurePlacementFolder } from "@/lib/placement-folder";
 import { todayJst } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 import { requestKpiSheetSync } from "@/lib/kpi-sheet-sync";
@@ -173,6 +175,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ personI
     const { personId: raw } = await params;
     const body = await req.json();
     const placement = await resolvePlacement(raw);
+
+    if (body.action === "ensureFolder") {
+      const r = await ensurePlacementFolder(placement.id);
+      if (!r.folderUrl) return Response.json({ ok: false, error: r.reason ?? "フォルダを用意できませんでした" }, { status: 400 });
+      return Response.json({ ok: true, folderUrl: r.folderUrl });
+    }
 
     if (body.action === "createTasks") {
       const already = await prisma.placementTask.count({ where: { placementId: placement.id } });

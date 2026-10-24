@@ -10,6 +10,8 @@
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { buildFlowTasks } from "@/lib/onboarding-flow";
+import { after } from "next/server";
+import { ensurePlacementFolder } from "@/lib/placement-folder";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +46,8 @@ export async function POST(req: Request) {
       await prisma.placementTask.createMany({ data: tasks.map((t) => ({ ...t, placementId: placement.id })) });
     }
     const created = await prisma.placementTask.findMany({ where: { placementId: placement.id }, orderBy: { sortOrder: "asc" } });
+    // 内定者フォルダ (企業名がシステムの企業と一致すれば、企業フォルダ / 内定者 / 名前) を作る
+    after(() => ensurePlacementFolder(placement.id).then(() => undefined).catch((e) => console.warn("内定者フォルダ:", e)));
     return Response.json({ ok: true, placement, tasks: created });
   } catch (error) {
     return Response.json(

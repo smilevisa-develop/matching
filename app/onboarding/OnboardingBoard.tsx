@@ -63,6 +63,8 @@ export type OnboardingCard = {
   external: boolean;
   /** 書類作成のみを請け負った内定者 (薄く色を付けて出す) */
   documentsOnly: boolean;
+  /** 内定者の Drive フォルダ (企業フォルダ / 内定者 / 英語名)。まだ無ければ null */
+  driveFolderUrl: string | null;
   /** 委託管理の企業の内定者 (ボードには出さない) */
   outsourced: boolean;
   ownerId: number | null;
@@ -645,6 +647,52 @@ function BoardHoverCard({ card, rect, next, done, total }: { card: OnboardingCar
   );
 }
 
+/** 内定者の Drive フォルダを開くボタン (企業フォルダ / 内定者 / 英語名)。まだ無ければ作ってから開く */
+function FolderButton({ card, onLocal }: { card: OnboardingCard; onLocal: (patch: Partial<OnboardingCard>) => void }) {
+  const [busy, setBusy] = useState(false);
+  const open = async () => {
+    if (card.driveFolderUrl) {
+      window.open(card.driveFolderUrl, "_blank", "noopener");
+      return;
+    }
+    // 作るのを待つ間にポップアップが止められないよう、先にタブを開いておく
+    const tab = window.open("", "_blank");
+    setBusy(true);
+    try {
+      const res = await fetch(apiPath(card), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ensureFolder" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok || !data.folderUrl) {
+        tab?.close();
+        alert(`フォルダを用意できませんでした: ${data.error ?? res.statusText}`);
+        return;
+      }
+      onLocal({ driveFolderUrl: data.folderUrl });
+      if (tab) tab.location.href = data.folderUrl;
+      else window.open(data.folderUrl, "_blank", "noopener");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void open()}
+      disabled={busy}
+      title={card.driveFolderUrl ? "内定者フォルダを開く" : "内定者フォルダを作って開く"}
+      aria-label="内定者フォルダを開く"
+      className="shrink-0 rounded-md p-1 text-amber-500 hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+        <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z" />
+      </svg>
+    </button>
+  );
+}
+
 /** 在留期限の表示。90 日以内は黄、30 日以内・切れていれば赤で目立たせる */
 function VisaBadge({ ymd }: { ymd: string }) {
   const a = visaAlert(ymd);
@@ -786,15 +834,18 @@ function CardDrawer({
         <div className="border-b border-gray-200 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
+              <div className="flex items-center gap-2">
               {card.personId ? (
                 <Link href={`/personnel/${card.personId}/edit`} className="text-lg font-bold text-[var(--color-text-dark)] hover:underline">
                   {card.personName}
                 </Link>
               ) : (
-                <p className="text-lg font-bold text-[var(--color-text-dark)]">
-                  {card.personName}
-                  <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-normal text-gray-500">候補者とは別</span>
-                </p>
+                <p className="text-lg font-bold text-[var(--color-text-dark)]">{card.personName}</p>
+              )}
+              <FolderButton card={card} onLocal={onLocal} />
+              </div>
+              {card.personId ? null : (
+                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-normal text-gray-500">候補者とは別</span>
               )}
               {card.kanaName ? <p className="text-sm text-gray-600">{card.kanaName}</p> : null}
               <p className="truncate text-xs text-gray-500">{[card.companyName, card.residenceStatus].filter(Boolean).join(" ・ ")}</p>
@@ -1329,6 +1380,7 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
         companyName: form.companyName.trim() || null,
         external: true,
         documentsOnly,
+        driveFolderUrl: null,
         outsourced: false,
         ownerId,
         ownerName: staff.find((s) => s.id === ownerId)?.name ?? null,

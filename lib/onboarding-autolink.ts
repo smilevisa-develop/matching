@@ -16,6 +16,7 @@
 
 import { prisma } from "./prisma";
 import { buildFlowTasks, OFFER_TO_APPLICATION_DAYS, OFFER_TO_JOIN_DAYS } from "./onboarding-flow";
+import { ensurePlacementFolder } from "./placement-folder";
 
 export const OFFER_STAGE = "内定済み";
 export const OFFER_ACCEPTED_STAGE = "内定承諾";
@@ -58,6 +59,12 @@ export async function ensureOnboardingCard(personId: number, baseDate: Date | nu
     await prisma.placementTask.createMany({
       data: tasks.map((t) => ({ ...t, placementId: placement.id })),
     });
+  }
+  // 内定者フォルダ (企業フォルダ / 内定者 / 英語名) を作る。失敗してもカードは作る
+  try {
+    await ensurePlacementFolder(placement.id);
+  } catch (e) {
+    console.warn("内定者フォルダの作成に失敗:", e instanceof Error ? e.message : e);
   }
   return { created: true, placementId: placement.id };
 }

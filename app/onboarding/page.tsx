@@ -78,6 +78,7 @@ export default async function OnboardingPage() {
       companyName: company?.name ?? p.externalCompanyName ?? null,
       external: !p.person,
       documentsOnly: p.documentsOnly,
+      driveFolderUrl: p.driveFolderUrl ?? null,
       // 委託管理の企業と人材紹介会社の内定者はボードに出さない
       outsourced: company?.supportType === "委託管理" || company?.companyKind === "人材紹介会社",
       ownerId: p.followUpOwnerId,
