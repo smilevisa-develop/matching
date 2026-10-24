@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { createResumeDocumentFromTemplate, ensureCompanyDriveFolder } from "@/lib/google-docs";
 import { conditionPlaceholders } from "@/lib/job-conditions";
+import { createJobPostingSheet, isSpreadsheetUrl, jobPostingSheetValues } from "@/lib/job-posting-sheet";
+import { JOB_CONDITION_FIELDS } from "@/lib/job-conditions";
 
 type JobPostingFields = {
   title?: string;
@@ -225,6 +227,23 @@ export async function POST(req: Request) {
       fields[key] = clean(body?.[key]);
     }
 
+    // 求人票作成ページの AI 取り込みから来たときは、読み取った内容を案件の「条件」にも入れる (空の項目だけ)
+    if (body?.saveConditions === true) {
+      const current = { ...((deal.conditions ?? {}) as Record<string, string>) };
+      let changed = false;
+      for (const f of JOB_CONDITION_FIELDS) {
+        const v = clean(body?.[f.key]);
+        if (v && !(current[f.key] ?? "").trim()) {
+          current[f.key] = v;
+          changed = true;
+        }
+      }
+      if (changed) {
+        await prisma.deal.update({ where: { id: deal.id }, data: { conditions: current } });
+        deal.conditions = current;
+      }
+    }
+
     let documentId: string | null = null;
     let documentUrl: string | null = null;
     let driveFolderUrl: string | null = null;
@@ -252,6 +271,29 @@ export async function POST(req: Request) {
             });
           }
 
+          // 求人の条件 = 保存済みの条件に、画面で入力中 (未保存) の条件を重ねたもの
+          const conds: Record<string, string> = { ...((deal.conditions ?? {}) as Record<string, string>) };
+          for (const f of JOB_CONDITION_FIELDS) {
+            const v = clean(body?.[f.key]);
+            if (v) conds[f.key] = v;
+          }
+
+          // 2026/10〜: テンプレートがスプレッドシート (求人テンプレート) なら、その形のまま C 列に入れて作る
+          if (isSpreadsheetUrl(template.templateUrl)) {
+            const sheet = await createJobPostingSheet({
+              templateUrl: template.templateUrl,
+              folderUrl: folder.folderUrl,
+              title,
+              values: jobPostingSheetValues(conds, {
+                ID: deal.company.externalId ?? String(deal.company.id),
+                作成日: new Date().toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }),
+                分野: deal.field ?? "",
+              }),
+            });
+            documentId = sheet.documentId;
+            documentUrl = sheet.documentUrl;
+            console.log(`[job-postings] dealId=${dealId} sheet filled ${sheet.filled} cells`);
+          } else {
           // テンプレートの差し込み変数を日本語 placeholder に変換して組み立てる
           const replacements: Record<string, string> = {
             会社名: deal.company.name,
@@ -289,7 +331,7 @@ export async function POST(req: Request) {
           replacements["勤務時間2"] = buildWorkTimeString(fields.workTime2Start, fields.workTime2End);
           // 2026/10 の求人テンプレートの項目 ({{雇用形態}} {{手当}} {{予想の手取り}} など)。
           // 求人の条件 (Deal.conditions) から作る。値があるものは上の古い差し込みより優先
-          for (const [k, v] of Object.entries(conditionPlaceholders((deal.conditions ?? {}) as Record<string, string>))) {
+          for (const [k, v] of Object.entries(conditionPlaceholders(conds))) {
             if (v) replacements[k] = v;
           }
 
@@ -308,6 +350,7 @@ export async function POST(req: Request) {
           });
           documentId = generated.documentId;
           documentUrl = generated.documentUrl;
+          }
         } catch (error) {
           // Drive 連携が失敗した場合は フィールドのみ DB 保存し、警告を応答に含める。
           // UI で「Drive に保存できませんでした」というメッセージを見せる。

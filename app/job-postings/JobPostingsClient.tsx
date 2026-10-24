@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import CloseButton from "@/app/components/CloseButton";
 import DealPicker from "@/app/components/DealPicker";
+import { JOB_CONDITION_FIELDS } from "@/lib/job-conditions";
 
 type Deal = {
   id: number;
@@ -240,45 +241,11 @@ export default function JobPostingsClient({
   );
 }
 
-// AI 抽出結果のプレビュー用フィールド定義 (テンプレ側の placeholder と一致)
-const EXTRACTED_FIELDS: { key: string; label: string }[] = [
-  { key: "jobDescription", label: "仕事内容" },
-  { key: "workLocation", label: "勤務地" },
-  { key: "nearestStation", label: "最寄り駅" },
-  { key: "headcount", label: "募集人数" },
-  { key: "gender", label: "性別" },
-  { key: "nationality", label: "国籍" },
-  { key: "workTime1Start", label: "勤務時間1 開始" },
-  { key: "workTime1End", label: "勤務時間1 終了" },
-  { key: "workTime2Start", label: "勤務時間2 開始" },
-  { key: "workTime2End", label: "勤務時間2 終了" },
-  { key: "overtime", label: "残業有無" },
-  { key: "avgMonthlyOvertime", label: "月平均残業時間" },
-  { key: "fixedOvertimeHours", label: "固定残業時間" },
-  { key: "fixedOvertimePay", label: "固定残業代" },
-  { key: "monthlyGross", label: "月総支給額" },
-  { key: "basicSalary", label: "基本給" },
-  { key: "salaryCalcMethod", label: "給与計算方法" },
-  { key: "perfectAttendance", label: "皆勤手当" },
-  { key: "housingAllowance", label: "住宅手当" },
-  { key: "nightShiftAllowance", label: "深夜手当" },
-  { key: "commuteAllowance", label: "通勤手当" },
-  { key: "socialInsurance", label: "社会保険料" },
-  { key: "employmentInsurance", label: "雇用保険料" },
-  { key: "healthInsurance", label: "健康保険料" },
-  { key: "pensionInsurance", label: "厚生年金保険料" },
-  { key: "incomeTax", label: "所得税" },
-  { key: "residentTax", label: "住民税" },
-  { key: "mealProvision", label: "食費支給" },
-  { key: "mealAmount", label: "食費金額" },
-  { key: "dormProvision", label: "寮の有無" },
-  { key: "dormAmount", label: "寮費" },
-  { key: "utilitiesProvision", label: "光熱費支給" },
-  { key: "utilitiesAmount", label: "光熱費金額" },
-  { key: "holidays", label: "休日" },
-  { key: "otherBenefits", label: "その他手当" },
-  { key: "notes", label: "特記事項" },
-];
+// AI 抽出結果のプレビュー用フィールド = 求人の条件 (2026/10 の求人テンプレートの項目)。社内メモは除く
+const EXTRACTED_FIELDS: { key: string; label: string }[] = JOB_CONDITION_FIELDS.filter((f) => f.key !== "memo").map((f) => ({
+  key: f.key,
+  label: f.label,
+}));
 
 type ExtractedJobPostingMap = Record<string, string>;
 
@@ -349,43 +316,23 @@ function JobPostingUploadModal({
     setExtracting(true);
     setError(null);
     try {
-      const pdfFile = files.find((f) => f.mimeType === "application/pdf");
-      let payload: Record<string, unknown> = {};
-      if (pdfFile) {
-        // multipart で PDF を 1 件送る
-        const blob = await fetch(pdfFile.dataUrl).then((r) => r.blob());
-        const formData = new FormData();
-        formData.append("file", new File([blob], pdfFile.fileName, { type: pdfFile.mimeType }));
-        const parseRes = await fetch("/api/job-sheet/parse", {
-          method: "POST",
-          body: formData,
-        });
-        const parseResult = await parseRes.json();
-        if (!parseRes.ok || !parseResult.success) {
-          setError(parseResult.error || "PDF 解析に失敗しました");
-          return;
-        }
-        // 1 ページ目の mappedJobs を採用 (複数求人 PDF は将来対応)
-        const first = (parseResult.mappedJobs ?? [])[0] ?? {};
-        payload = first as Record<string, unknown>;
-      } else {
-        const extractRes = await fetch("/api/job-postings/extract", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            files: files.map((file) => ({
-              fileName: file.fileName,
-              dataUrl: file.dataUrl,
-            })),
-          }),
-        });
-        const extractResult = await extractRes.json();
-        if (!extractRes.ok || !extractResult.ok) {
-          setError(extractResult.error || "AI取込に失敗しました");
-          return;
-        }
-        payload = (extractResult.extracted ?? {}) as Record<string, unknown>;
+      // 案件ページの「条件」の AI 取り込みと同じ読み取り (PDF・画像どちらも可)。新しい項目で返ってくる
+      const extractRes = await fetch("/api/job-postings/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          files: files.map((file) => ({
+            fileName: file.fileName,
+            dataUrl: file.dataUrl,
+          })),
+        }),
+      });
+      const extractResult = await extractRes.json();
+      if (!extractRes.ok || !extractResult.ok) {
+        setError(extractResult.error || "AI取込に失敗しました");
+        return;
       }
+      const payload = (extractResult.extracted ?? {}) as Record<string, unknown>;
 
       const normalized: ExtractedJobPostingMap = {};
       for (const field of EXTRACTED_FIELDS) {
@@ -413,6 +360,8 @@ function JobPostingUploadModal({
           templateId: template.id,
           title,
           ...extracted,
+          // 読み取った内容を案件の「条件」にも入れる (空の項目だけ)
+          saveConditions: true,
         }),
       });
       const createResult = await createRes.json();

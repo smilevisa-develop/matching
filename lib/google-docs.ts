@@ -56,7 +56,7 @@ function getGoogleClientEmail() {
   return value;
 }
 
-async function getGoogleClients() {
+export async function getGoogleClients() {
   const auth = new google.auth.JWT({
     email: getGoogleClientEmail(),
     key: getGooglePrivateKey(),
