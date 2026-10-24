@@ -19,6 +19,8 @@ import { buildFlowTasks, OFFER_TO_APPLICATION_DAYS, OFFER_TO_JOIN_DAYS } from ".
 
 export const OFFER_STAGE = "内定済み";
 export const OFFER_ACCEPTED_STAGE = "内定承諾";
+export const JOIN_WAITING_STAGE = "入社待ち";
+export const JOINED_STAGE = "入社済み";
 
 /** 内定後フォロー担当のログインID (設定 → アカウント管理の loginId) */
 export const FOLLOW_UP_OWNER_LOGIN_ID = "nguyet";
@@ -72,7 +74,8 @@ function jstDate(ymd: string | null | undefined): Date | null {
  * - 内定承諾: ボードにカードを作り、内定承諾日・内定後フォロー担当 (グェット) を入れる。紹介パートナーを実績有りにする
  * @param dateYmd カンバンで入力した日付 ("YYYY-MM-DD")。無ければ今日
  */
-export async function onDealCandidateStageChanged(personId: number, stage: string, dateYmd?: string | null) {
+export async function onDealCandidateStageChanged(personId: number, stage: string, dateYmd?: string | null): Promise<{ created: boolean }> {
+  if (stage === JOIN_WAITING_STAGE || stage === JOINED_STAGE) return onJoinStage(personId, stage, dateYmd);
   if (stage !== OFFER_STAGE && stage !== OFFER_ACCEPTED_STAGE) return { created: false };
   const date = jstDate(dateYmd) ?? new Date();
 
@@ -172,4 +175,29 @@ export async function removeUntouchedOnboardingCard(personId: number): Promise<{
   if (touched) return { removed: false, reason: "手を付けたカードなので残す" };
   await prisma.personPlacement.delete({ where: { id: placement.id } });
   return { removed: true };
+}
+
+/**
+ * カンバンで「入社待ち」「入社済み」にしたときの日付を、内定者カードにも入れる。
+ * - 入社待ち: 入社予定日
+ * - 入社済み: 入社日 (カードの工程も「入社・請求」まで進める。戻しはしない)
+ * 内定承諾を飛ばしてここまで動かした人はカードが無いので、先に内定承諾と同じ手順でカードを作る。
+ */
+async function onJoinStage(personId: number, stage: string, dateYmd?: string | null): Promise<{ created: boolean }> {
+  const date = jstDate(dateYmd) ?? new Date();
+  const existing = await prisma.personPlacement.findUnique({ where: { personId }, select: { id: true } });
+  const created: { created: boolean } = existing ? { created: false } : await onDealCandidateStageChanged(personId, OFFER_ACCEPTED_STAGE, dateYmd);
+  const card = await prisma.personPlacement.findUnique({ where: { personId }, select: { stage: true } });
+  if (!card) return created;
+  if (stage === JOIN_WAITING_STAGE) {
+    await prisma.personPlacement.update({ where: { personId }, data: { joinPlannedAt: date } });
+  } else {
+    // 保留・キャンセル・内定辞退のカードは工程を動かさない (日付だけ入れる)
+    const movable = !["hold", "card_cancelled", "declined", "joined"].includes(card.stage ?? "");
+    await prisma.personPlacement.update({
+      where: { personId },
+      data: { joinAt: date, ...(movable ? { stage: "joined", stageChangedAt: new Date() } : {}) },
+    });
+  }
+  return created;
 }

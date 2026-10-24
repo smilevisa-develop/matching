@@ -57,7 +57,8 @@ export default async function OnboardingPage() {
     prisma.staffAccount.findMany({ select: { id: true, name: true, loginId: true }, orderBy: { id: "asc" } }),
   ]);
 
-  const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
+  // 日本時間の日付 (UTC のままだと、日本時間 0 時で入れた日付が前の日になる)
+  const ymd = (d: Date | null) => (d ? new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10) : "");
 
   const cards: OnboardingCard[] = placements.map((p) => {
     const company = p.person?.dealCandidates[0]?.deal.company ?? null;
@@ -86,6 +87,9 @@ export default async function OnboardingPage() {
       holdReason: p.holdReason ?? "",
       cancelReason: p.cancelReason ?? "",
       applicationAt: ymd(p.applicationAt),
+      entryAt: ymd(p.entryAt),
+      joinPlannedAt: ymd(p.joinPlannedAt),
+      joinAt: ymd(p.joinAt),
       offerAcceptedAt: ymd(p.offerAcceptedAt ?? p.offerAt),
       applicationType: p.applicationType ?? "",
       applicationMethod: p.applicationMethod ?? "",

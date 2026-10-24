@@ -58,7 +58,9 @@ const DATE_FIELDS = [
 function parseDate(value: unknown): Date | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
-  const d = new Date(String(value));
+  const v = String(value);
+  // 「YYYY-MM-DD」は日本時間の 0 時として保存する (表示・月の集計も日本時間で行うため)
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00+09:00`) : new Date(v);
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 

@@ -77,6 +77,10 @@ export type OnboardingCard = {
   /** YYYY-MM-DD (未申請は空) */
   applicationAt: string;
   offerAcceptedAt: string;
+  /** 入国日 / 入社予定日 / 入社日 (YYYY-MM-DD。未入力は空) */
+  entryAt: string;
+  joinPlannedAt: string;
+  joinAt: string;
   /** 認定 / 変更 / 更新 / 特定活動 (未設定は空) */
   applicationType: string;
   /** 申請方法 (短文) */
@@ -207,6 +211,9 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
     if (patch.ownerId !== undefined) body.followUpOwnerId = patch.ownerId;
     if (patch.memo !== undefined) body.currentAction = patch.memo;
     if (patch.applicationAt !== undefined) body.applicationAt = patch.applicationAt || null;
+    if (patch.entryAt !== undefined) body.entryAt = patch.entryAt || null;
+    if (patch.joinPlannedAt !== undefined) body.joinPlannedAt = patch.joinPlannedAt || null;
+    if (patch.joinAt !== undefined) body.joinAt = patch.joinAt || null;
     if (patch.offerAcceptedAt !== undefined) body.offerAcceptedAt = patch.offerAcceptedAt || null;
     if (patch.applicationType !== undefined) body.applicationType = patch.applicationType || null;
     if (patch.applicationMethod !== undefined) body.applicationMethod = patch.applicationMethod || null;
@@ -600,6 +607,8 @@ function BoardHoverCard({ card, rect, next, done, total }: { card: OnboardingCar
     ["申請方法", card.applicationMethod || null],
     ["内定承諾日", card.offerAcceptedAt ? card.offerAcceptedAt.replaceAll("-", "/") : null],
     ["申請日", card.applicationAt ? card.applicationAt.replaceAll("-", "/") : null],
+    ["入社予定日", card.joinPlannedAt && !card.joinAt ? card.joinPlannedAt.replaceAll("-", "/") : null],
+    ["入社日", card.joinAt ? card.joinAt.replaceAll("-", "/") : null],
     ["サポート", supportLabels.length > 0 ? supportLabels.join("・") : null],
     ["パートナー", card.partnerName],
     card.stage === HOLD_STAGE
@@ -1032,6 +1041,18 @@ function CardDrawer({
                 申請日
                 <input type="date" value={card.applicationAt} onChange={(e) => onSave({ applicationAt: e.target.value })} className={`mt-1 w-full ${field}`} />
               </label>
+              <label className="text-xs text-gray-500">
+                入国日
+                <input type="date" value={card.entryAt} onChange={(e) => onSave({ entryAt: e.target.value })} className={`mt-1 w-full ${field}`} />
+              </label>
+              <label className="text-xs text-gray-500">
+                入社予定日
+                <input type="date" value={card.joinPlannedAt} onChange={(e) => onSave({ joinPlannedAt: e.target.value })} className={`mt-1 w-full ${field}`} />
+              </label>
+              <label className="text-xs text-gray-500">
+                入社日
+                <input type="date" value={card.joinAt} onChange={(e) => onSave({ joinAt: e.target.value })} className={`mt-1 w-full ${field}`} />
+              </label>
             </div>
           </section>
 
@@ -1316,6 +1337,9 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
         holdReason: "",
         cancelReason: "",
         applicationAt: "",
+        entryAt: "",
+        joinPlannedAt: "",
+        joinAt: "",
         offerAcceptedAt: "",
         applicationType: form.applicationType,
         applicationMethod: form.applicationMethod.trim(),
