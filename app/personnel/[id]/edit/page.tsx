@@ -7,7 +7,7 @@ import {
 } from "./CustomQuestionsPanel";
 import ExtractPanel from "./ExtractPanel";
 import PlacementPanel from "./PlacementPanel";
-import { readFilledStages, readStageDates } from "@/lib/deal-stages";
+import { kanbanDatesOf, toPlacementData } from "@/lib/progress-board";
 import { PRE_OFFER_STAGE } from "@/lib/onboarding-flow";
 import DriveActionsPanel from "./DriveActionsPanel";
 import PhotoPanel from "./PhotoPanel";
@@ -141,47 +141,9 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
   });
 
   const toDate = (d: Date | null | undefined) => (d ? d.toISOString() : null);
-  // 日本時間の日付 (内定者管理で入れた日付は日本時間 0 時。UTC のままだと前の日になる)
-  const toYmdJst = (d: Date | null | undefined) => (d ? new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10) : null);
-
-  // カンバンで動かしたときの日付 (進捗 / 日程が空のときの候補として出す。途中を飛ばして自動で埋めた日付は使わない)
-  const kanbanDates: Partial<Record<string, string>> = {};
-  const KANBAN_DATE_FIELDS: Record<string, string> = {
-    事前面談済み: "preInterviewAt",
-    面接済み: "companyInterviewAt",
-    内定済み: "offerAt",
-    内定承諾: "offerAcceptedAt",
-  };
-  for (const dc of person.dealCandidates) {
-    const dates = readStageDates(dc.stageDates);
-    const filled = readFilledStages(dc.stageDates);
-    for (const [stage, field] of Object.entries(KANBAN_DATE_FIELDS)) {
-      if (!kanbanDates[field] && dates[stage] && !filled.has(stage)) kanbanDates[field] = dates[stage];
-    }
-    if (!kanbanDates.acceptedAt && dc.deal.acceptedAt) kanbanDates.acceptedAt = toYmdJst(dc.deal.acceptedAt) ?? undefined;
-  }
-
-  const placementData = {
-    acceptedAt: toYmdJst(placement?.acceptedAt),
-    preInterviewAt: toYmdJst(placement?.preInterviewAt),
-    companyInterviewAt: toYmdJst(placement?.companyInterviewAt),
-    offerAt: toYmdJst(placement?.offerAt),
-    offerAcceptedAt: toYmdJst(placement?.offerAcceptedAt),
-    applicationPlannedAt: toYmdJst(placement?.applicationPlannedAt),
-    applicationAt: toYmdJst(placement?.applicationAt),
-    applicationResultAt: toYmdJst(placement?.applicationResultAt),
-    applicationType: placement?.applicationType ?? null,
-    applicantName: placement?.applicantName ?? null,
-    returnHomeFlag: placement?.returnHomeFlag ?? null,
-    returnHomeAt: toYmdJst(placement?.returnHomeAt),
-    entryPlannedAt: toYmdJst(placement?.entryPlannedAt),
-    entryAt: toYmdJst(placement?.entryAt),
-    joinPlannedAt: toYmdJst(placement?.joinPlannedAt),
-    joinAt: toYmdJst(placement?.joinAt),
-    sixMonthStatus: placement?.sixMonthStatus ?? null,
-    consultation: placement?.consultation ?? null,
-    currentAction: placement?.currentAction ?? null,
-  };
+  // カンバンで動かしたときの日付 (進捗 / 日程が空のときの候補)
+  const kanbanDates = kanbanDatesOf(person.dealCandidates);
+  const placementData = toPlacementData(placement);
 
   // ── 事前面談の準備 ステータスを計算 ──
   const rp = person.resumeProfile;

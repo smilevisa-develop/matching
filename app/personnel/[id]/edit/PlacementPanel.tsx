@@ -387,7 +387,7 @@ export default function PlacementPanel({
   );
 }
 
-type StageField =
+export type StageField =
   | "acceptedAt"
   | "preInterviewAt"
   | "companyInterviewAt"
@@ -398,7 +398,7 @@ type StageField =
   | "applicationResultAt";
 
 /** 内定承諾より前〜申請結果までの段階 (一時帰国より後は内定者管理で入れる) */
-const STAGES: { field: StageField; label: string }[] = [
+export const STAGES: { field: StageField; label: string }[] = [
   { field: "acceptedAt", label: "求人受付" },
   { field: "preInterviewAt", label: "事前面談" },
   { field: "companyInterviewAt", label: "企業面談" },
@@ -410,7 +410,7 @@ const STAGES: { field: StageField; label: string }[] = [
 ];
 
 /** カンバンの日付のうち、後ろの段階の日付より後になっていないものだけ候補にする (順番が合わない日付は入れさせない) */
-function usableHints(placement: PlacementData, kanbanDates: Partial<Record<string, string>>) {
+export function usableHints(placement: PlacementData, kanbanDates: Partial<Record<string, string>>) {
   const out: Partial<Record<string, string>> = {};
   STAGES.forEach((st, i) => {
     const hint = kanbanDates[st.field];
@@ -419,7 +419,7 @@ function usableHints(placement: PlacementData, kanbanDates: Partial<Record<strin
   return out;
 }
 
-const slash = (ymd: string | null | undefined) => (ymd ? ymd.slice(0, 10).replaceAll("-", "/") : "");
+export const slash = (ymd: string | null | undefined) => (ymd ? ymd.slice(0, 10).replaceAll("-", "/") : "");
 const todayYmd = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
 /**
@@ -514,7 +514,7 @@ function StageTrack({
 }
 
 /** 段階の日付を入れるポップ。前の段階で日付が空のものも一緒に入れる (すべて埋める) */
-function StageDateModal({
+export function StageDateModal({
   index,
   placement,
   kanbanDates,
@@ -637,7 +637,7 @@ function StageDateModal({
 }
 
 /** 一時帰国より後 (内定者管理のカードで、内定者管理の担当が入れる)。ここでは見るだけ */
-function AfterReturnSummary({ placement, cardId }: { placement: PlacementData; cardId: number | null }) {
+export function AfterReturnSummary({ placement, cardId }: { placement: PlacementData; cardId: number | null }) {
   const items: [string, string][] = [
     ["一時帰国", placement.returnHomeFlag ?? ""],
     ["一時帰国日", slash(placement.returnHomeAt)],
