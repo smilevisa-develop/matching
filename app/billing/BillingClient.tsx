@@ -1,71 +1,127 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-export type BillingTaskRow = {
-  id: number;
-  placementId: number;
-  step: string;
-  title: string;
-  dueAt: string;
+export type LedgerStep = {
+  /** 押したときに完了にするタスク (まとめた段階は、終わっていない方だけ) */
+  taskIds: number[];
+  /** 取り消すときに戻すタスク */
+  allTaskIds: number[];
+  due: string;
   done: boolean;
   doneAt: string;
   doneBy: string;
   owner: string;
+  overdue: boolean;
+  inMonth: boolean;
+};
+
+export type LedgerRow = {
+  placementId: number;
   personName: string;
   companyName: string;
   partnerName: string;
   joinAt: string;
-  overdue: boolean;
+  invoiceAmount: number | null;
+  costAmount: number | null;
+  steps: {
+    invoice: LedgerStep | null;
+    payment: LedgerStep | null;
+    partnerInvoice: LedgerStep | null;
+    partnerPayment: LedgerStep | null;
+  };
 };
 
-type Step = { key: string; label: string; role: string; partnerOnly: boolean };
+type StepKey = keyof LedgerRow["steps"];
 
-const ROLE_LABEL: Record<string, string> = { accounting: "経理担当", recruiter: "採用担当" };
-const slash = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "");
+const COLUMNS: { key: StepKey; label: string; role: string }[] = [
+  { key: "invoice", label: "① 請求", role: "経理" },
+  { key: "payment", label: "② 入金", role: "経理" },
+  { key: "partnerInvoice", label: "③ PA請求書", role: "採用担当" },
+  { key: "partnerPayment", label: "④ PA支払", role: "経理" },
+];
 
-/** 請求管理: 月ごとのやることを、流れの順 (請求 → 入金確認 → パートナーへ依頼 → 受け取り → 支払い) に並べる */
+const md = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "");
+const yen = (n: number | null) => (n == null ? "" : `¥${Math.round(n).toLocaleString("ja-JP")}`);
+const GRID = "grid grid-cols-[minmax(0,1.7fr)_0.6fr_repeat(4,minmax(0,0.85fr))] items-center gap-2";
+
+/**
+ * 請求管理の台帳。1 人 1 行で、4 つの段階を色の丸で並べる (灰 = 予定 / 赤 = 期限切れ / 緑 = 済)。
+ * 丸を押すと済になり、企業データベースの請求管理に日付・状況が入る。もう一度押すと取り消す。
+ */
 export default function BillingClient({
   rows: initial,
-  steps,
   me,
   staff,
   billingOwnerId,
   accountingOwner,
 }: {
-  rows: BillingTaskRow[];
-  steps: Step[];
+  rows: LedgerRow[];
   me: string;
   staff: { id: number; name: string }[];
   billingOwnerId: number | null;
   accountingOwner: string;
 }) {
   const [rows, setRows] = useState(initial);
-  const [mine, setMine] = useState(false);
-  const [ownerId, setOwnerId] = useState(billingOwnerId ? String(billingOwnerId) : "");
+  const [filter, setFilter] = useState<"all" | "mine" | "overdue">("all");
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const visible = rows.filter((r) => !mine || r.owner === me);
-  const overdue = visible.filter((r) => r.overdue);
-  const thisMonth = visible.filter((r) => !r.overdue);
-  const left = thisMonth.filter((r) => !r.done).length;
+  const stepsOf = (r: LedgerRow) => Object.values(r.steps).filter((s): s is LedgerStep => !!s);
+  const visible = rows.filter((r) => {
+    if (filter === "overdue") return stepsOf(r).some((s) => s.overdue);
+    if (filter === "mine") return stepsOf(r).some((s) => !s.done && s.owner === me);
+    return true;
+  });
 
-  const toggle = async (row: BillingTaskRow) => {
-    const done = !row.done;
-    setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, done } : r)));
-    const res = await fetch(`/api/onboarding/tasks/${row.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ done }),
-    });
-    if (!res.ok) {
-      setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, done: row.done } : r)));
+  const summary = useMemo(() => {
+    const sum = (list: LedgerRow[], pick: (r: LedgerRow) => number | null) => list.reduce((t, r) => t + (pick(r) ?? 0), 0);
+    const invoices = rows.filter((r) => r.steps.invoice?.inMonth);
+    const payments = rows.filter((r) => r.steps.payment?.inMonth);
+    const partnerPays = rows.filter((r) => r.steps.partnerPayment?.inMonth);
+    return {
+      invoiceCount: invoices.length,
+      invoiceTotal: sum(invoices, (r) => r.invoiceAmount),
+      paymentTotal: sum(payments, (r) => r.invoiceAmount),
+      paidTotal: sum(payments.filter((r) => r.steps.payment?.done), (r) => r.invoiceAmount),
+      partnerTotal: sum(partnerPays, (r) => r.costAmount),
+      partnerCount: partnerPays.length,
+      overdue: rows.filter((r) => stepsOf(r).some((s) => s.overdue)).length,
+    };
+  }, [rows]);
+
+  const toggle = async (row: LedgerRow, key: StepKey) => {
+    const step = row.steps[key];
+    if (!step || busy) return;
+    const done = !step.done;
+    if (!done && !window.confirm("「済」を取り消しますか？ (請求管理シートに書いた値は戻りません。シートは手で直してください)")) return;
+    setBusy(`${row.placementId}-${key}`);
+    const ids = done ? step.taskIds : step.allTaskIds;
+    try {
+      for (const id of ids) {
+        const res = await fetch(`/api/onboarding/tasks/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ done }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+      }
+      const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      setRows((prev) =>
+        prev.map((r) =>
+          r.placementId === row.placementId
+            ? { ...r, steps: { ...r.steps, [key]: { ...step, done, overdue: done ? false : step.overdue, doneAt: done ? today : "", doneBy: done ? me : "" } } }
+            : r,
+        ),
+      );
+    } catch {
       alert("保存に失敗しました");
+    } finally {
+      setBusy(null);
     }
   };
 
   const saveOwner = async (value: string) => {
-    setOwnerId(value);
     const res = await fetch("/api/billing/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -75,54 +131,125 @@ export default function BillingClient({
     else window.location.reload();
   };
 
-  const table = (list: BillingTaskRow[]) => (
-    <ul className="divide-y divide-gray-100">
-      {list.map((r) => (
-        <li key={r.id} className="flex flex-wrap items-center gap-3 py-2.5">
-          <button
-            type="button"
-            onClick={() => void toggle(r)}
-            aria-pressed={r.done}
-            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
-              r.done ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white" : "border-gray-300 bg-white"
-            }`}
-          >
-            {r.done ? (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            ) : null}
-          </button>
-          <span className={`w-14 shrink-0 text-sm font-semibold tabular-nums ${r.overdue ? "text-red-600" : "text-gray-700"}`}>{slash(r.dueAt)}</span>
-          <Link
-            href={`/onboarding?open=${r.placementId}`}
-            className={`min-w-0 flex-1 text-sm ${r.done ? "text-gray-400 line-through" : "text-[var(--color-text-dark)]"} hover:underline`}
-          >
-            <span className="font-semibold">{r.personName}</span>
-            <span className="ml-2 text-xs text-gray-500">
-              {[r.companyName, r.joinAt ? `${slash(r.joinAt)} 入社` : "", r.partnerName ? `パートナー: ${r.partnerName}` : ""].filter(Boolean).join(" ・ ")}
-            </span>
-          </Link>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${r.owner === me ? "bg-[var(--color-light)] font-semibold text-[var(--color-primary)]" : "bg-gray-100 text-gray-600"}`}>
-            {r.owner || "担当未定"}
-          </span>
-          {r.done && r.doneBy ? <span className="shrink-0 text-[11px] text-gray-400">{slash(r.doneAt)} {r.doneBy}</span> : null}
-        </li>
-      ))}
-    </ul>
+  const cell = (row: LedgerRow, key: StepKey) => {
+    const s = row.steps[key];
+    if (!s) return <span className="text-xs text-gray-300">—</span>;
+    const color = s.done ? "text-emerald-600" : s.overdue ? "text-red-600" : "text-gray-400";
+    const title = s.done
+      ? `済 ${md(s.doneAt)}${s.doneBy ? ` ${s.doneBy}` : ""} (押すと取り消し)`
+      : `${s.overdue ? "期限切れ" : "予定"} ${md(s.due)} ・ 担当 ${s.owner || "未定"} (押すと済)`;
+    return (
+      <button
+        type="button"
+        onClick={() => void toggle(row, key)}
+        disabled={busy === `${row.placementId}-${key}`}
+        title={title}
+        className={`flex items-center gap-1 rounded-md px-1 py-0.5 text-left text-sm tabular-nums hover:bg-gray-100 disabled:opacity-50 ${color}`}
+      >
+        <span aria-hidden>●</span>
+        <span className={s.done ? "text-emerald-700" : s.overdue ? "font-semibold text-red-700" : "text-gray-700"}>{md(s.done ? s.doneAt : s.due)}</span>
+      </button>
+    );
+  };
+
+  const chip = (value: typeof filter, label: string, tone = "") => (
+    <button
+      type="button"
+      onClick={() => setFilter(value)}
+      className={`rounded-lg border px-3 py-1 text-sm ${filter === value ? "border-gray-400 bg-gray-100 font-semibold" : "border-gray-200 bg-white"} ${tone}`}
+    >
+      {label}
+    </button>
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm">
-        <span className="font-semibold text-[var(--color-text-dark)]">今月の残り {left} 件</span>
-        <label className="flex items-center gap-1.5 text-gray-600">
-          <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />
-          自分の分だけ
-        </label>
-        <label className="ml-auto flex items-center gap-2 text-xs text-gray-500">
-          経理担当 (請求書・入金確認・パートナーへの支払い)
-          <select value={ownerId} onChange={(e) => void saveOwner(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-800">
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="rounded-xl bg-white p-3 shadow-sm">
+          <p className="text-xs text-gray-500">今月の請求</p>
+          <p className="text-xl font-bold text-[var(--color-text-dark)]">
+            {summary.invoiceCount}件 <span className="text-base">{yen(summary.invoiceTotal)}</span>
+          </p>
+        </div>
+        <div className="rounded-xl bg-white p-3 shadow-sm">
+          <p className="text-xs text-gray-500">入金予定 (今月末)</p>
+          <p className="text-xl font-bold text-[var(--color-text-dark)]">{yen(summary.paymentTotal) || "¥0"}</p>
+          <p className="text-xs text-emerald-600">入金済 {yen(summary.paidTotal) || "¥0"}</p>
+        </div>
+        <div className="rounded-xl bg-white p-3 shadow-sm">
+          <p className="text-xs text-gray-500">パートナー支払予定</p>
+          <p className="text-xl font-bold text-[var(--color-text-dark)]">
+            {summary.partnerCount}件 <span className="text-base">{yen(summary.partnerTotal)}</span>
+          </p>
+        </div>
+        <div className={`rounded-xl p-3 shadow-sm ${summary.overdue > 0 ? "bg-red-50" : "bg-white"}`}>
+          <p className={`text-xs ${summary.overdue > 0 ? "text-red-600" : "text-gray-500"}`}>期限切れ</p>
+          <p className={`text-xl font-bold ${summary.overdue > 0 ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>{summary.overdue}件</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {chip("all", "すべて")}
+        {chip("mine", "自分の担当")}
+        {chip("overdue", "期限切れだけ", "text-red-700")}
+        <span className="ml-auto flex items-center gap-3 text-xs text-gray-500">
+          <span>
+            <span className="text-gray-400">●</span> 予定
+          </span>
+          <span>
+            <span className="text-red-600">●</span> 期限切れ
+          </span>
+          <span>
+            <span className="text-emerald-600">●</span> 済
+          </span>
+        </span>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+        <div className={`${GRID} bg-gray-50 px-4 py-2 text-xs text-gray-500`}>
+          <span>内定者 ・ 企業</span>
+          <span>入社</span>
+          {COLUMNS.map((c) => (
+            <span key={c.key}>
+              {c.label}
+              <br />
+              <span className="text-[10px] text-gray-400">{c.role}</span>
+            </span>
+          ))}
+        </div>
+        {visible.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-gray-400">
+            この月の請求はありません。内定者管理でカードを「請求」に移すと、ここに出ます。
+          </p>
+        ) : (
+          visible.map((r) => (
+            <div key={r.placementId} className={`${GRID} border-t border-gray-100 px-4 py-2.5 ${stepsOf(r).some((s) => s.overdue) ? "bg-red-50/60" : ""}`}>
+              <Link href={`/onboarding?open=${r.placementId}`} className="min-w-0 hover:underline">
+                <p className="truncate text-sm font-semibold text-[var(--color-text-dark)]">{r.personName}</p>
+                <p className="truncate text-xs text-gray-500">
+                  {[r.companyName, yen(r.invoiceAmount), r.partnerName ? `PA: ${r.partnerName}${r.costAmount ? ` ${yen(r.costAmount)}` : ""}` : ""]
+                    .filter(Boolean)
+                    .join(" ・ ")}
+                </p>
+              </Link>
+              <span className="text-sm tabular-nums text-gray-700">{md(r.joinAt)}</span>
+              {COLUMNS.map((c) => (
+                <span key={c.key}>{cell(r, c.key)}</span>
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+        <span>丸を押すと「済」になり、日付が企業データベースの請求管理に入ります。名前を押すと内定者カードが開きます。</span>
+        <label className="flex items-center gap-2">
+          経理担当
+          <select
+            defaultValue={billingOwnerId ? String(billingOwnerId) : ""}
+            onChange={(e) => void saveOwner(e.target.value)}
+            className="rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-800"
+          >
             <option value="">管理者 ({accountingOwner || "-"})</option>
             {staff.map((s) => (
               <option key={s.id} value={s.id}>
@@ -132,33 +259,6 @@ export default function BillingClient({
           </select>
         </label>
       </div>
-      <p className="text-xs text-gray-500">
-        流れ: 入社 → 翌月 1 日に企業へ請求 → その月末に入金 → 入金を確認したらパートナーに請求書を依頼 → 入金の翌月末までにパートナーへ支払い。
-        パートナーへの依頼・受け取りは採用担当 (求人の担当者)。終えたら企業データベースの請求管理に日付・状況が入ります。
-      </p>
-
-      {overdue.length > 0 ? (
-        <section className="rounded-2xl border border-red-200 bg-red-50 p-4">
-          <h2 className="text-sm font-semibold text-red-700">期限が過ぎて終わっていないもの ({overdue.length})</h2>
-          {table(overdue)}
-        </section>
-      ) : null}
-
-      {steps.map((step) => {
-        const list = thisMonth.filter((r) => r.step === step.key);
-        return (
-          <section key={step.key} className="rounded-2xl border border-gray-200 bg-white p-4">
-            <h2 className="flex items-baseline gap-2 text-sm font-semibold text-[var(--color-text-dark)]">
-              {step.label}
-              <span className="text-xs font-normal text-gray-500">{ROLE_LABEL[step.role]}</span>
-              <span className="text-xs font-normal text-gray-400">
-                {list.filter((r) => r.done).length} / {list.length}
-              </span>
-            </h2>
-            {list.length > 0 ? table(list) : <p className="py-2 text-xs text-gray-400">この月はありません</p>}
-          </section>
-        );
-      })}
     </div>
   );
 }

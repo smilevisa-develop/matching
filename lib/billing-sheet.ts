@@ -107,3 +107,26 @@ export async function readBillingDoneSteps(personId: number): Promise<Set<Billin
   if (v("支払い有無") === "支払済") done.add("pa-payment");
   return done;
 }
+
+/** 請求管理の行から、請求金額と仕入高 (パートナーへの支払い) を読む。キーは候補者ID (数値) */
+export async function readBillingAmounts(): Promise<Map<number, { invoiceAmount: number | null; costAmount: number | null }>> {
+  const out = new Map<number, { invoiceAmount: number | null; costAmount: number | null }>();
+  const spreadsheetId = resolveCompanyMasterSpreadsheetId();
+  if (!spreadsheetId) return out;
+  const sheets = await getSheetsClient();
+  const rows = ((await sheets.spreadsheets.values.get({ spreadsheetId, range: `${quote(TAB)}!A1:AZ2005` })).data.values ?? []).map((r) =>
+    r.map((c) => String(c ?? "").trim()),
+  );
+  const header = rows[0] ?? [];
+  const iAmount = header.findIndex((h) => h === "請求金額");
+  const iCost = header.findIndex((h) => h === "仕入高");
+  const yen = (v: string | undefined) => {
+    const n = Number((v ?? "").replace(/[^0-9.-]/g, ""));
+    return v && Number.isFinite(n) && n !== 0 ? n : null;
+  };
+  for (const r of rows.slice(1)) {
+    if (!/^\d+$/.test(r[0] ?? "")) continue;
+    out.set(Number(r[0]), { invoiceAmount: iAmount >= 0 ? yen(r[iAmount]) : null, costAmount: iCost >= 0 ? yen(r[iCost]) : null });
+  }
+  return out;
+}
