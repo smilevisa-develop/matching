@@ -34,6 +34,8 @@ export default async function OnboardingPage() {
             resumeProfile: { select: { visaExpiryDate: true } },
             nationality: true,
             photoUrl: true,
+            contactUrl: true,
+            channel: true,
             partner: { select: { name: true } },
             onboarding: { select: { englishName: true } },
             dealCandidates: {
@@ -79,6 +81,9 @@ export default async function OnboardingPage() {
       external: !p.person,
       documentsOnly: p.documentsOnly,
       driveFolderUrl: p.driveFolderUrl ?? null,
+      // 本人の SNS の連絡先 (候補者詳細の「SNS の連絡先」)
+      contactUrl: p.person?.contactUrl?.trim() || null,
+      channel: p.person?.channel && p.person.channel !== "未設定" && p.person.channel !== "mail" ? p.person.channel : null,
       // 委託管理の企業と人材紹介会社の内定者はボードに出さない
       outsourced: company?.supportType === "委託管理" || company?.companyKind === "人材紹介会社",
       ownerId: p.followUpOwnerId,

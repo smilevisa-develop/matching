@@ -65,6 +65,10 @@ export type OnboardingCard = {
   documentsOnly: boolean;
   /** 内定者の Drive フォルダ (企業フォルダ / 内定者 / 英語名)。まだ無ければ null */
   driveFolderUrl: string | null;
+  /** 本人の SNS の連絡先 URL (LINE / Messenger など)。未登録なら null */
+  contactUrl?: string | null;
+  /** 連絡手段 (LINE / Messenger / WhatsApp)。未設定なら null */
+  channel?: string | null;
   /** 委託管理の企業の内定者 (ボードには出さない) */
   outsourced: boolean;
   ownerId: number | null;
@@ -647,6 +651,41 @@ function BoardHoverCard({ card, rect, next, done, total }: { card: OnboardingCar
   );
 }
 
+/** 本人の SNS (LINE / Facebook など) を開くボタン。未登録なら薄く出して、押せない */
+const SNS_COLORS: Record<string, string> = { LINE: "#06C755", Messenger: "#0866FF", Facebook: "#0866FF", WhatsApp: "#25D366" };
+function SnsButton({ card }: { card: OnboardingCard }) {
+  const url = card.contactUrl ?? null;
+  const color = url ? SNS_COLORS[card.channel ?? ""] ?? "var(--color-primary)" : undefined;
+  const icon = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.6-.7L3 21l1.8-4.6A8.4 8.4 0 1 1 21 11.5z" />
+    </svg>
+  );
+  if (!url) {
+    return (
+      <span
+        title={card.personId ? "SNS の連絡先が未登録です (候補者詳細の「連絡手段」で登録できます)" : "SNS の連絡先は未登録です"}
+        className="shrink-0 cursor-not-allowed rounded-md p-1 text-gray-300"
+      >
+        {icon}
+      </span>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`本人の SNS を開く${card.channel ? ` (${card.channel})` : ""}`}
+      aria-label="本人の SNS を開く"
+      className="shrink-0 rounded-md p-1 hover:bg-gray-100"
+      style={{ color }}
+    >
+      {icon}
+    </a>
+  );
+}
+
 /** 内定者の Drive フォルダを開くボタン (企業フォルダ / 内定者 / 英語名)。まだ無ければ作ってから開く */
 function FolderButton({ card, onLocal }: { card: OnboardingCard; onLocal: (patch: Partial<OnboardingCard>) => void }) {
   const [busy, setBusy] = useState(false);
@@ -843,6 +882,7 @@ function CardDrawer({
                 <p className="text-lg font-bold text-[var(--color-text-dark)]">{card.personName}</p>
               )}
               <FolderButton card={card} onLocal={onLocal} />
+              <SnsButton card={card} />
               </div>
               {card.personId ? null : (
                 <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-normal text-gray-500">候補者とは別</span>
