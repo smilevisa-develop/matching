@@ -67,8 +67,11 @@ export async function ensurePlacementFolder(placementId: number): Promise<{ fold
   }
   if (!company) return { folderUrl: null, reason: "企業が分からないのでフォルダを作れません (企業名をシステムの企業名と同じにしてください)" };
 
+  // 企業の「Drive フォルダ」にスプシなどフォルダ以外のリンクが入っていることがある。そのときは使わず、
+  // 企業ID で始まるフォルダを探す (無ければ作る)。入っているリンクは書き換えない
+  const isFolderUrl = /\/folders\//.test(company.driveFolderUrl ?? "");
   const companyFolder = await ensureCompanyDriveFolder({
-    existingFolderUrl: company.driveFolderUrl,
+    existingFolderUrl: isFolderUrl ? company.driveFolderUrl : null,
     externalId: company.externalId,
     companyName: company.name,
   });
