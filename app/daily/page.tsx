@@ -129,9 +129,9 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
         visaExpiryDate: p.person.resumeProfile?.visaExpiryDate ?? null,
         stageChangedAt: p.stageChangedAt,
       });
-      // 入社・請求の工程にいる人は入社済みなので、予定日超過や滞留では要対応にしない (在留期限だけ見る)
+      // 「入社」「請求」の工程にいる人は入社済みなので、予定日超過や滞留では要対応にしない (在留期限だけ見る)
       const reasons =
-        resolveStage(p) === "joined" ? urgency.reasons.filter((r) => r.startsWith("在留期限")) : urgency.reasons;
+        ["joined", "billing"].includes(resolveStage(p)) ? urgency.reasons.filter((r) => r.startsWith("在留期限")) : urgency.reasons;
       const level = reasons.length === 0 ? "normal" : urgency.level;
       return {
         personId: p.person.id,

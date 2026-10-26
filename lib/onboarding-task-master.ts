@@ -25,6 +25,7 @@ export const TASK_PHASES = [
   "8. 渡航・入国",
   "9. 住居・生活",
   "10. 入社前後",
+  "11. 請求",
 ] as const;
 
 export type TaskPhase = (typeof TASK_PHASES)[number];
@@ -697,7 +698,7 @@ export const MASTER_TASKS: MasterTask[] = [
     evidence: "フォロー記録",
   },
   {
-    phase: "10. 入社前後",
+    phase: "11. 請求",
     title: "請求対応を実施する",
     dueDays: 67,
     owner: "人材チーム（採用）",

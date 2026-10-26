@@ -187,7 +187,7 @@ export async function removeUntouchedOnboardingCard(personId: number): Promise<{
 /**
  * カンバンで「入社待ち」「入社済み」にしたときの日付を、内定者カードにも入れる。
  * - 入社待ち: 入社予定日
- * - 入社済み: 入社日 (カードの工程も「入社・請求」まで進める。戻しはしない)
+ * - 入社済み: 入社日 (カードの工程も「入社」まで進める。請求などの後ろの工程からは戻さない)
  * 内定承諾を飛ばしてここまで動かした人はカードが無いので、先に内定承諾と同じ手順でカードを作る。
  */
 async function onJoinStage(personId: number, stage: string, dateYmd?: string | null): Promise<{ created: boolean }> {
@@ -200,7 +200,7 @@ async function onJoinStage(personId: number, stage: string, dateYmd?: string | n
     await prisma.personPlacement.update({ where: { personId }, data: { joinPlannedAt: date } });
   } else {
     // 保留・キャンセル・内定辞退のカードは工程を動かさない (日付だけ入れる)
-    const movable = !["hold", "card_cancelled", "declined", "joined"].includes(card.stage ?? "");
+    const movable = !["hold", "card_cancelled", "declined", "joined", "billing"].includes(card.stage ?? "");
     await prisma.personPlacement.update({
       where: { personId },
       data: { joinAt: date, ...(movable ? { stage: "joined", stageChangedAt: new Date() } : {}) },

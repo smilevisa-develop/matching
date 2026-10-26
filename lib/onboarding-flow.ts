@@ -81,10 +81,17 @@ export const ONBOARDING_STAGES = [
   },
   {
     id: "joined",
-    label: "入社・請求",
-    hint: "入社前確認、当日連絡、1週間後フォロー、請求",
+    label: "入社",
+    hint: "入社前確認、当日連絡、1週間後フォロー",
     targetDays: 30,
     phases: ["10. 入社前後"],
+  },
+  {
+    id: "billing",
+    label: "請求",
+    hint: "入社した人の請求対応 (2026/10 に「入社・請求」から分けた)",
+    targetDays: 30,
+    phases: ["11. 請求"],
   },
   {
     id: "declined",
@@ -133,6 +140,7 @@ export const NEXT_STAGE: Partial<Record<OnboardingStageId, OnboardingStageId>> =
   card_processing: "card_issued",
   card_issued: "support",
   support: "joined",
+  joined: "billing",
 };
 
 /** サポート工程のタスクが属する工程名 */

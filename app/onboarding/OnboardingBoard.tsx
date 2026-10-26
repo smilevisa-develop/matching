@@ -112,7 +112,8 @@ const COLUMNS: { id: OnboardingStageId; label: string }[] = [
   { id: "card_issued", label: "発行完了" },
   { id: "card_cancelled", label: "キャンセル" },
   { id: "support", label: "サポート" },
-  { id: "joined", label: "入社・請求" },
+  { id: "joined", label: "入社" },
+  { id: "billing", label: "請求" },
   { id: "hold", label: "保留" },
 ];
 
