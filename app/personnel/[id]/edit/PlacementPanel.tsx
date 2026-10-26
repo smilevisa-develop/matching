@@ -57,7 +57,10 @@ export default function PlacementPanel({
   deals,
   kanbanDates,
   cardId,
+  demo = false,
 }: {
+  /** お試し (仮のデータ)。保存しない・請求の欄は出さない */
+  demo?: boolean;
   personId: number;
   personName: string;
   initialPlacement: PlacementData;
@@ -73,6 +76,7 @@ export default function PlacementPanel({
   const [invoices, setInvoices] = useState<InvoiceData[]>(initialInvoices);
 
   const persist = async (patch: Partial<PlacementData>) => {
+    if (demo) return true;
     const res = await fetch(`/api/personnel/${personId}/placement`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -91,7 +95,7 @@ export default function PlacementPanel({
       return;
     }
     // 内定承諾・申請を入れると内定者管理にカードができるので、読み直す
-    if (!cardId && (patch.offerAcceptedAt || patch.applicationPlannedAt || patch.applicationAt || patch.applicationResultAt)) {
+    if (!demo && !cardId && (patch.offerAcceptedAt || patch.applicationPlannedAt || patch.applicationAt || patch.applicationResultAt)) {
       window.location.reload();
     }
   };
@@ -208,7 +212,7 @@ export default function PlacementPanel({
           <p className="mt-1 text-xs text-gray-500">列を押す (カードを動かす) と、その日付を入れます。すべての段階に日付を入れてください。</p>
         </div>
         <StageTrack personName={personName} placement={placement} kanbanDates={kanbanDates} onSave={saveStage} />
-        <AfterReturnSummary placement={placement} cardId={cardId} />
+        <AfterReturnSummary placement={placement} cardId={demo ? null : cardId} />
         <div className="grid gap-3 md:grid-cols-2">
           <TextareaField
             label="6か月後の状況"
@@ -232,6 +236,7 @@ export default function PlacementPanel({
         </div>
       </section>
 
+      {demo ? null : (
       <section className="space-y-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -377,6 +382,7 @@ export default function PlacementPanel({
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }
