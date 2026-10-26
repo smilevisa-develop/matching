@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
-import { readSupports, resolveStage } from "@/lib/onboarding-flow";
+import { HIDDEN_BOARD_STAGES, readSupports, resolveStage } from "@/lib/onboarding-flow";
 import OnboardingBoard, { type OnboardingCard } from "./OnboardingBoard";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +25,8 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
 
   const [placements, staff] = await Promise.all([
     prisma.personPlacement.findMany({
-      // 内定辞退の人はボードに出さない
-      where: { OR: [{ stage: null }, { stage: { not: "declined" } }] },
+      // 内定辞退の人・内定承諾より前の人はボードに出さない
+      where: { OR: [{ stage: null }, { stage: { notIn: HIDDEN_BOARD_STAGES } }] },
       include: {
         followUpOwner: { select: { name: true } },
         person: {
@@ -96,6 +96,9 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
       holdReason: p.holdReason ?? "",
       cancelReason: p.cancelReason ?? "",
       applicationAt: ymd(p.applicationAt),
+      returnHomeFlag: p.returnHomeFlag ?? "",
+      returnHomeAt: ymd(p.returnHomeAt),
+      entryPlannedAt: ymd(p.entryPlannedAt),
       entryAt: ymd(p.entryAt),
       joinPlannedAt: ymd(p.joinPlannedAt),
       joinAt: ymd(p.joinAt),

@@ -114,6 +114,13 @@ export type OnboardingStageId = (typeof ONBOARDING_STAGES)[number]["id"];
 export const HOLD_STAGE: OnboardingStageId = "hold";
 /** 内定辞退 (ボードから消える。カンバンの候補者も「内定辞退」になる) */
 export const DECLINED_STAGE: OnboardingStageId = "declined";
+/**
+ * 内定承諾より前 (候補者詳細の「進捗 / 日程」で面談日などだけ入れた人)。
+ * 日付を持つためのレコードで、内定者管理ボードには出さない。内定承諾でボードのカード (内定) になる
+ */
+export const PRE_OFFER_STAGE = "pre";
+/** ボードに出さない工程 (内定辞退・内定承諾より前) */
+export const HIDDEN_BOARD_STAGES = ["declined", PRE_OFFER_STAGE];
 
 /** 旧ステージ (入社進捗ページ) からの読み替え */
 const LEGACY_STAGE_MAP: Record<string, OnboardingStageId> = {

@@ -25,6 +25,8 @@ export type LedgerRow = {
   joinAt: string;
   invoiceAmount: number | null;
   costAmount: number | null;
+  /** 企業 (求人) の担当者。請求・入金確認・パートナーへの支払いまで全部この人 */
+  owner: string;
   steps: {
     invoice: LedgerStep | null;
     payment: LedgerStep | null;
@@ -35,11 +37,11 @@ export type LedgerRow = {
 
 type StepKey = keyof LedgerRow["steps"];
 
-const COLUMNS: { key: StepKey; label: string; role: string }[] = [
-  { key: "invoice", label: "① 請求", role: "経理" },
-  { key: "payment", label: "② 入金", role: "経理" },
-  { key: "partnerInvoice", label: "③ PA請求書", role: "採用担当" },
-  { key: "partnerPayment", label: "④ PA支払", role: "経理" },
+const COLUMNS: { key: StepKey; label: string }[] = [
+  { key: "invoice", label: "① 請求" },
+  { key: "payment", label: "② 入金" },
+  { key: "partnerInvoice", label: "③ PA請求書" },
+  { key: "partnerPayment", label: "④ PA支払" },
 ];
 
 const md = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "");
@@ -53,18 +55,12 @@ const GRID = "grid grid-cols-[minmax(0,1.7fr)_0.6fr_repeat(4,minmax(0,0.85fr))] 
 export default function BillingClient({
   rows: initial,
   me,
-  staff,
-  billingOwnerId,
-  accountingOwner,
   demo = false,
 }: {
   /** お試し (仮のデータ)。押しても保存しない・シートに書かない */
   demo?: boolean;
   rows: LedgerRow[];
   me: string;
-  staff: { id: number; name: string }[];
-  billingOwnerId: number | null;
-  accountingOwner: string;
 }) {
   const [rows, setRows] = useState(initial);
   const [filter, setFilter] = useState<"all" | "mine" | "overdue">("all");
@@ -73,7 +69,7 @@ export default function BillingClient({
   const stepsOf = (r: LedgerRow) => Object.values(r.steps).filter((s): s is LedgerStep => !!s);
   const visible = rows.filter((r) => {
     if (filter === "overdue") return stepsOf(r).some((s) => s.overdue);
-    if (filter === "mine") return stepsOf(r).some((s) => !s.done && s.owner === me);
+    if (filter === "mine") return r.owner === me || stepsOf(r).some((s) => !s.done && s.owner === me);
     return true;
   });
 
@@ -122,17 +118,6 @@ export default function BillingClient({
     } finally {
       setBusy(null);
     }
-  };
-
-  const saveOwner = async (value: string) => {
-    if (demo) return;
-    const res = await fetch("/api/billing/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ billingOwnerId: value ? Number(value) : null }),
-    });
-    if (!res.ok) alert("保存に失敗しました");
-    else window.location.reload();
   };
 
   const cell = (row: LedgerRow, key: StepKey) => {
@@ -216,8 +201,6 @@ export default function BillingClient({
           {COLUMNS.map((c) => (
             <span key={c.key}>
               {c.label}
-              <br />
-              <span className="text-[10px] text-gray-400">{c.role}</span>
             </span>
           ))}
         </div>
@@ -231,7 +214,7 @@ export default function BillingClient({
               <Link href={demo ? "#" : `/onboarding?open=${r.placementId}`} onClick={(e) => demo && e.preventDefault()} className="min-w-0 hover:underline">
                 <p className="truncate text-sm font-semibold text-[var(--color-text-dark)]">{r.personName}</p>
                 <p className="truncate text-xs text-gray-500">
-                  {[r.companyName, yen(r.invoiceAmount), r.partnerName ? `PA: ${r.partnerName}${r.costAmount ? ` ${yen(r.costAmount)}` : ""}` : ""]
+                  {[r.companyName, `担当 ${r.owner || "未定"}`, yen(r.invoiceAmount), r.partnerName ? `PA: ${r.partnerName}${r.costAmount ? ` ${yen(r.costAmount)}` : ""}` : ""]
                     .filter(Boolean)
                     .join(" ・ ")}
                 </p>
@@ -245,7 +228,7 @@ export default function BillingClient({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+      <div className="text-xs text-gray-500">
         <span>
           丸を押すと「済」になり、日付が企業データベースの請求管理に入ります。名前を押すと内定者カードが開きます。
           {demo ? null : (
@@ -254,21 +237,6 @@ export default function BillingClient({
             </Link>
           )}
         </span>
-        <label className="flex items-center gap-2">
-          経理担当
-          <select
-            defaultValue={billingOwnerId ? String(billingOwnerId) : ""}
-            onChange={(e) => void saveOwner(e.target.value)}
-            className="rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-800"
-          >
-            <option value="">管理者 ({accountingOwner || "-"})</option>
-            {staff.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
     </div>
   );

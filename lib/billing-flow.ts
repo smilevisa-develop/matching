@@ -7,9 +7,8 @@
  * 例: 10/15 入社 → 11/1 請求 → 11/30 入金 → 12 月初めにパートナーへ依頼 → 12/31 までに支払い
  *
  * 内定者管理の「請求」の列に入れたときに、入社日からこの 5 つのタスクを期限つきで作る (紹介パートナーがいなければ前の 2 つだけ)。
- * 担当は 2 つに分ける:
- *   経理担当 … 請求書の送付・入金確認・パートナーへの支払い (請求管理ページで選ぶ。未設定なら管理者)
- *   採用担当 … パートナーへの請求書の依頼・受け取り (その求人の担当者)
+ * 担当は全部その企業 (求人) の担当者 (トゥイ・チンディ)。2026/10/26 土田さん:
+ *   内定までと入社後の請求・パートナーへの支払いは企業の担当者、内定〜入社 (内定者管理) はグェット
  */
 
 import { prisma } from "@/lib/prisma";
@@ -17,18 +16,15 @@ import { prisma } from "@/lib/prisma";
 export const BILLING_PHASE = "11. 請求";
 export const BILLING_STAGE = "billing";
 
-export type BillingRole = "accounting" | "recruiter";
 export type BillingStepKey = "invoice" | "payment" | "pa-request" | "pa-invoice" | "pa-payment";
 
-export const BILLING_ROLE_LABELS: Record<BillingRole, string> = { accounting: "経理担当", recruiter: "採用担当" };
-
 /** 段階の名前 (請求管理ページの見出し) */
-export const BILLING_STEPS: { key: BillingStepKey; label: string; role: BillingRole; partnerOnly: boolean }[] = [
-  { key: "invoice", label: "企業へ請求書を送る", role: "accounting", partnerOnly: false },
-  { key: "payment", label: "企業からの入金を確認する", role: "accounting", partnerOnly: false },
-  { key: "pa-request", label: "パートナーに請求書の作成を依頼する", role: "recruiter", partnerOnly: true },
-  { key: "pa-invoice", label: "パートナーの請求書を受け取る", role: "recruiter", partnerOnly: true },
-  { key: "pa-payment", label: "パートナーへ支払う", role: "accounting", partnerOnly: true },
+export const BILLING_STEPS: { key: BillingStepKey; label: string; partnerOnly: boolean }[] = [
+  { key: "invoice", label: "企業へ請求書を送る", partnerOnly: false },
+  { key: "payment", label: "企業からの入金を確認する", partnerOnly: false },
+  { key: "pa-request", label: "パートナーに請求書の作成を依頼する", partnerOnly: true },
+  { key: "pa-invoice", label: "パートナーの請求書を受け取る", partnerOnly: true },
+  { key: "pa-payment", label: "パートナーへ支払う", partnerOnly: true },
 ];
 
 /** 日本時間の日付 → その日 0 時 (JST) */
@@ -59,8 +55,8 @@ export function billingSchedule(joinYmd: string) {
 export function buildBillingTasks(args: {
   joinYmd: string;
   partnerName: string | null;
-  accountingOwner: string | null;
-  recruiterOwner: string | null;
+  /** 企業 (求人) の担当者 */
+  owner: string | null;
 }) {
   const s = billingSchedule(args.joinYmd);
   const tasks: { billingStep: BillingStepKey; title: string; dueAt: Date; owner: string | null; note: string }[] = [
@@ -68,14 +64,14 @@ export function buildBillingTasks(args: {
       billingStep: "invoice",
       title: `【${s.invoice.label}】企業へ請求書を送る（${s.joinMonth}月入社分）`,
       dueAt: s.invoice.date,
-      owner: args.accountingOwner,
+      owner: args.owner,
       note: "入社の翌月 1 日に送る。送ったら企業データベースの請求管理に請求日・入金期日・「発行済」が入ります",
     },
     {
       billingStep: "payment",
       title: `【${s.payment.label}まで】企業からの入金を確認する`,
       dueAt: s.payment.date,
-      owner: args.accountingOwner,
+      owner: args.owner,
       note: "請求した月の月末が入金期日。確認したら請求管理の請求ステータスが「入金済」になります",
     },
   ];
@@ -85,35 +81,26 @@ export function buildBillingTasks(args: {
         billingStep: "pa-request",
         title: `【${s.paRequest.label}まで】入金を確認したら、パートナー（${args.partnerName}）に請求書の作成を依頼する`,
         dueAt: s.paRequest.date,
-        owner: args.recruiterOwner,
+        owner: args.owner,
         note: "企業からの入金を確認してから依頼する",
       },
       {
         billingStep: "pa-invoice",
         title: `【${s.paInvoice.label}まで】パートナーの請求書を受け取る`,
         dueAt: s.paInvoice.date,
-        owner: args.recruiterOwner,
+        owner: args.owner,
         note: "受け取ったら請求管理の「PAからの請求書」が「受領済」になります",
       },
       {
         billingStep: "pa-payment",
         title: `【${s.paPayment.label}まで】パートナーへ支払う`,
         dueAt: s.paPayment.date,
-        owner: args.accountingOwner,
+        owner: args.owner,
         note: "入金の翌月末までに支払う。支払ったら請求管理の支払い有無が「支払済」、支払日が入ります",
       },
     );
   }
   return tasks;
-}
-
-/** 経理担当の名前 (請求管理ページで選んだ人。未設定なら管理者) */
-export async function accountingOwnerName(): Promise<string | null> {
-  const settings = await prisma.coreSettings.findUnique({ where: { id: 1 }, select: { billingOwnerId: true } });
-  const owner = settings?.billingOwnerId
-    ? await prisma.staffAccount.findUnique({ where: { id: settings.billingOwnerId }, select: { name: true } })
-    : await prisma.staffAccount.findFirst({ where: { role: "admin" }, orderBy: { id: "asc" }, select: { name: true } });
-  return owner?.name ?? null;
 }
 
 const ymdJst = (d: Date) => new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -128,7 +115,6 @@ export async function ensureBillingTasks(placementId: number): Promise<{ created
     select: {
       joinAt: true,
       personId: true,
-      followUpOwner: { select: { name: true } },
       person: {
         select: {
           partner: { select: { name: true } },
@@ -150,8 +136,7 @@ export async function ensureBillingTasks(placementId: number): Promise<{ created
   const tasks = buildBillingTasks({
     joinYmd: ymdJst(p.joinAt),
     partnerName: p.person?.partner?.name ?? null,
-    accountingOwner: await accountingOwnerName(),
-    recruiterOwner: p.person?.dealCandidates[0]?.deal.owner?.name ?? p.followUpOwner?.name ?? null,
+    owner: p.person?.dealCandidates[0]?.deal.owner?.name ?? null,
   }).filter((t) => !done.has(t.billingStep));
   // 企業データベースの請求管理で終わっている段階 (発行済・入金済・支払済など) は、最初から完了にする
   let sheetDone = new Set<BillingStepKey>();

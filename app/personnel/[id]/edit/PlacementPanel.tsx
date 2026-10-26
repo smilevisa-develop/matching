@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import SearchableSelect from "@/app/components/SearchableSelect";
+import { APPLICATION_TYPES } from "@/lib/onboarding-flow";
 
 export type PlacementData = {
   acceptedAt: string | null;
@@ -53,10 +55,16 @@ export default function PlacementPanel({
   initialInvoices,
   partners,
   deals,
+  kanbanDates,
+  cardId,
 }: {
   personId: number;
   personName: string;
   initialPlacement: PlacementData;
+  /** カンバンで動かしたときの日付 (空の段階の候補) */
+  kanbanDates: Partial<Record<string, string>>;
+  /** 内定者管理のカード (無ければ null) */
+  cardId: number | null;
   initialInvoices: InvoiceData[];
   partners: { id: number; name: string }[];
   deals: { id: number; title: string; companyName: string }[];
@@ -64,16 +72,28 @@ export default function PlacementPanel({
   const [placement, setPlacement] = useState<PlacementData>(initialPlacement);
   const [invoices, setInvoices] = useState<InvoiceData[]>(initialInvoices);
 
-  const setDate = (key: keyof PlacementData, value: string) => {
-    setPlacement((prev) => ({ ...prev, [key]: value || null }));
-  };
-
   const persist = async (patch: Partial<PlacementData>) => {
-    await fetch(`/api/personnel/${personId}/placement`, {
+    const res = await fetch(`/api/personnel/${personId}/placement`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
+    return res.ok;
+  };
+
+  /** 段階の日付 (と申請種別・申請者) を保存する */
+  const saveStage = async (patch: Partial<PlacementData>) => {
+    const before = placement;
+    setPlacement((prev) => ({ ...prev, ...patch }));
+    if (!(await persist(patch))) {
+      setPlacement(before);
+      alert("保存に失敗しました");
+      return;
+    }
+    // 内定承諾・申請を入れると内定者管理にカードができるので、読み直す
+    if (!cardId && (patch.offerAcceptedAt || patch.applicationPlannedAt || patch.applicationAt || patch.applicationResultAt)) {
+      window.location.reload();
+    }
   };
 
   const addInvoice = async () => {
@@ -185,43 +205,10 @@ export default function PlacementPanel({
       <section className="space-y-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
         <div>
           <h3 className="text-base font-semibold text-[var(--color-text-dark)]">進捗 / 日程</h3>
-          <p className="mt-1 text-xs text-gray-500">{personName} さんの内定後の手続き日程を管理します。</p>
+          <p className="mt-1 text-xs text-gray-500">列を押す (カードを動かす) と、その日付を入れます。すべての段階に日付を入れてください。</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <DateField label="求人受付日" value={placement.acceptedAt} onChange={(v) => { setDate("acceptedAt", v); void persist({ acceptedAt: v || null }); }} />
-          <DateField label="事前面談日" value={placement.preInterviewAt} onChange={(v) => { setDate("preInterviewAt", v); void persist({ preInterviewAt: v || null }); }} />
-          <DateField label="企業面談日" value={placement.companyInterviewAt} onChange={(v) => { setDate("companyInterviewAt", v); void persist({ companyInterviewAt: v || null }); }} />
-          <DateField label="内定日" value={placement.offerAt} onChange={(v) => { setDate("offerAt", v); void persist({ offerAt: v || null }); }} />
-          <DateField label="内定承諾日" value={placement.offerAcceptedAt} onChange={(v) => { setDate("offerAcceptedAt", v); void persist({ offerAcceptedAt: v || null }); }} />
-          <DateField label="申請予定日" value={placement.applicationPlannedAt} onChange={(v) => { setDate("applicationPlannedAt", v); void persist({ applicationPlannedAt: v || null }); }} />
-          <DateField label="申請日" value={placement.applicationAt} onChange={(v) => { setDate("applicationAt", v); void persist({ applicationAt: v || null }); }} />
-          <DateField label="申請結果受け取り" value={placement.applicationResultAt} onChange={(v) => { setDate("applicationResultAt", v); void persist({ applicationResultAt: v || null }); }} />
-          <TextField
-            label="申請種別"
-            value={placement.applicationType ?? ""}
-            onChange={(v) => { setPlacement((p) => ({ ...p, applicationType: v })); }}
-            onBlur={(v) => void persist({ applicationType: v || null })}
-            placeholder="在留資格変更 / 認定証明書 など"
-          />
-          <TextField
-            label="申請者"
-            value={placement.applicantName ?? ""}
-            onChange={(v) => { setPlacement((p) => ({ ...p, applicantName: v })); }}
-            onBlur={(v) => void persist({ applicantName: v || null })}
-          />
-          <TextField
-            label="一時帰国"
-            value={placement.returnHomeFlag ?? ""}
-            onChange={(v) => { setPlacement((p) => ({ ...p, returnHomeFlag: v })); }}
-            onBlur={(v) => void persist({ returnHomeFlag: v || null })}
-            placeholder="有 / 無"
-          />
-          <DateField label="一時帰国日" value={placement.returnHomeAt} onChange={(v) => { setDate("returnHomeAt", v); void persist({ returnHomeAt: v || null }); }} />
-          <DateField label="入国予定日" value={placement.entryPlannedAt} onChange={(v) => { setDate("entryPlannedAt", v); void persist({ entryPlannedAt: v || null }); }} />
-          <DateField label="入国日" value={placement.entryAt} onChange={(v) => { setDate("entryAt", v); void persist({ entryAt: v || null }); }} />
-          <DateField label="入社予定日" value={placement.joinPlannedAt} onChange={(v) => { setDate("joinPlannedAt", v); void persist({ joinPlannedAt: v || null }); }} />
-          <DateField label="入社日" value={placement.joinAt} onChange={(v) => { setDate("joinAt", v); void persist({ joinAt: v || null }); }} />
-        </div>
+        <StageTrack personName={personName} placement={placement} kanbanDates={kanbanDates} onSave={saveStage} />
+        <AfterReturnSummary placement={placement} cardId={cardId} />
         <div className="grid gap-3 md:grid-cols-2">
           <TextareaField
             label="6か月後の状況"
@@ -390,6 +377,276 @@ export default function PlacementPanel({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+type StageField =
+  | "acceptedAt"
+  | "preInterviewAt"
+  | "companyInterviewAt"
+  | "offerAt"
+  | "offerAcceptedAt"
+  | "applicationPlannedAt"
+  | "applicationAt"
+  | "applicationResultAt";
+
+/** 内定承諾より前〜申請結果までの段階 (一時帰国より後は内定者管理で入れる) */
+const STAGES: { field: StageField; label: string }[] = [
+  { field: "acceptedAt", label: "求人受付" },
+  { field: "preInterviewAt", label: "事前面談" },
+  { field: "companyInterviewAt", label: "企業面談" },
+  { field: "offerAt", label: "内定" },
+  { field: "offerAcceptedAt", label: "内定承諾" },
+  { field: "applicationPlannedAt", label: "申請予定" },
+  { field: "applicationAt", label: "申請" },
+  { field: "applicationResultAt", label: "申請結果受け取り" },
+];
+
+const slash = (ymd: string | null | undefined) => (ymd ? ymd.slice(0, 10).replaceAll("-", "/") : "");
+const todayYmd = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+
+/**
+ * 進捗をカンバンの形で出す (内定者管理と同じ見た目)。カードは日付が入っている一番後ろの段階に置く。
+ * 列を押す・カードを列に落とすと、その段階の日付を入れるポップが出る。
+ */
+function StageTrack({
+  personName,
+  placement,
+  kanbanDates,
+  onSave,
+}: {
+  personName: string;
+  placement: PlacementData;
+  kanbanDates: Partial<Record<string, string>>;
+  onSave: (patch: Partial<PlacementData>) => Promise<void>;
+}) {
+  const [target, setTarget] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const current = STAGES.reduce((last, st, i) => (placement[st.field] ? i : last), -1);
+  const cardAt = Math.max(current, 0);
+
+  return (
+    <>
+      <div className="overflow-x-auto pb-1">
+        <div className="grid min-w-[900px] grid-cols-8 gap-2">
+          {STAGES.map((st, i) => {
+            const date = placement[st.field];
+            const missing = !date && i < current;
+            const hint = date ? undefined : kanbanDates[st.field];
+            return (
+              <div
+                key={st.field}
+                role="button"
+                tabIndex={0}
+                onClick={() => setTarget(i)}
+                onKeyDown={(e) => e.key === "Enter" && setTarget(i)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setOver(i);
+                }}
+                onDragLeave={() => setOver((v) => (v === i ? null : v))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setOver(null);
+                  if (i !== cardAt || !date) setTarget(i);
+                }}
+                title={`${st.label}の日付を入れる`}
+                className={`flex min-h-28 cursor-pointer flex-col rounded-xl border p-2 transition-colors hover:border-[var(--color-primary)] ${
+                  over === i
+                    ? "border-[var(--color-primary)] bg-[var(--color-light)]"
+                    : missing
+                      ? "border-amber-300 bg-amber-50"
+                      : i === cardAt && date
+                        ? "border-[var(--color-primary)]/40 bg-[var(--color-light)]"
+                        : "border-gray-200 bg-gray-50"
+                }`}
+              >
+                <span className="text-xs font-semibold text-gray-600">{st.label}</span>
+                <span className={`mt-1 text-xs tabular-nums ${date ? "text-gray-800" : missing ? "font-semibold text-amber-700" : "text-gray-400"}`}>
+                  {date ? slash(date) : missing ? "日付が未入力" : hint ? `カンバン ${slash(hint)}` : "—"}
+                </span>
+                {i === cardAt ? (
+                  <span
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData("text/plain", "placement")}
+                    className="mt-auto cursor-grab truncate rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-[var(--color-text-dark)] shadow-sm"
+                  >
+                    {personName}
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {target !== null ? (
+        <StageDateModal
+          index={target}
+          placement={placement}
+          kanbanDates={kanbanDates}
+          onClose={() => setTarget(null)}
+          onSave={async (patch) => {
+            setTarget(null);
+            await onSave(patch);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** 段階の日付を入れるポップ。前の段階で日付が空のものも一緒に入れる (すべて埋める) */
+function StageDateModal({
+  index,
+  placement,
+  kanbanDates,
+  onClose,
+  onSave,
+}: {
+  index: number;
+  placement: PlacementData;
+  kanbanDates: Partial<Record<string, string>>;
+  onClose: () => void;
+  onSave: (patch: Partial<PlacementData>) => Promise<void>;
+}) {
+  const stage = STAGES[index];
+  const existing = placement[stage.field];
+  const skipped = STAGES.slice(0, index).filter((st) => !placement[st.field]);
+  const isApplication = stage.field === "applicationAt";
+  const [dates, setDates] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      [...skipped, stage].map((st) => [st.field, placement[st.field]?.slice(0, 10) || kanbanDates[st.field] || (st === stage ? todayYmd() : "")]),
+    ),
+  );
+  const [applicationType, setApplicationType] = useState(placement.applicationType ?? "");
+  const [applicantName, setApplicantName] = useState(placement.applicantName ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const complete =
+    [...skipped, stage].every((st) => /^\d{4}-\d{2}-\d{2}$/.test(dates[st.field] ?? "")) &&
+    (!isApplication || (applicationType.trim() && applicantName.trim()));
+
+  const save = async () => {
+    if (!complete || saving) return;
+    setSaving(true);
+    const patch: Partial<PlacementData> = Object.fromEntries([...skipped, stage].map((st) => [st.field, dates[st.field]]));
+    if (isApplication) {
+      patch.applicationType = applicationType.trim();
+      patch.applicantName = applicantName.trim();
+    }
+    await onSave(patch);
+  };
+
+  const input = (st: (typeof STAGES)[number]) => (
+    <label key={st.field} className="block">
+      <span className="mb-1 block text-xs font-medium text-gray-500">{st.label}の日付</span>
+      <input
+        type="date"
+        value={dates[st.field] ?? ""}
+        onChange={(e) => setDates((d) => ({ ...d, [st.field]: e.target.value }))}
+        className={INPUT}
+      />
+    </label>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <p className="text-sm font-semibold text-[var(--color-text-dark)]">「{stage.label}」の日付</p>
+        {input(stage)}
+        {isApplication ? (
+          <>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-gray-500">申請種別</span>
+              <select value={applicationType} onChange={(e) => setApplicationType(e.target.value)} className={INPUT}>
+                <option value="">選んでください</option>
+                {APPLICATION_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+                {applicationType && !(APPLICATION_TYPES as readonly string[]).includes(applicationType) ? (
+                  <option value={applicationType}>{applicationType}</option>
+                ) : null}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-gray-500">申請者</span>
+              <input value={applicantName} onChange={(e) => setApplicantName(e.target.value)} className={INPUT} />
+            </label>
+          </>
+        ) : null}
+        {skipped.length > 0 ? (
+          <div className="space-y-2 rounded-xl bg-amber-50 p-3">
+            <p className="text-xs text-amber-800">前の段階に日付が入っていません。一緒に入れてください。</p>
+            {skipped.map(input)}
+          </div>
+        ) : null}
+        {stage.field === "offerAcceptedAt" ? (
+          <p className="text-xs text-gray-500">内定承諾を入れると、内定者管理にカードができます (担当: グェット)。</p>
+        ) : null}
+        <div className="flex items-center gap-2 pt-1">
+          {existing ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                setSaving(true);
+                void onSave({ [stage.field]: null });
+              }}
+              className="text-xs text-red-500 hover:underline disabled:opacity-50"
+            >
+              日付を消す
+            </button>
+          ) : null}
+          <button type="button" onClick={onClose} className="ml-auto rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700">
+            キャンセル
+          </button>
+          <button
+            type="button"
+            disabled={!complete || saving}
+            onClick={() => void save()}
+            className="rounded-lg bg-[var(--color-primary)] px-4 py-1.5 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-40"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 一時帰国より後 (内定者管理のカードで、内定者管理の担当が入れる)。ここでは見るだけ */
+function AfterReturnSummary({ placement, cardId }: { placement: PlacementData; cardId: number | null }) {
+  const items: [string, string][] = [
+    ["一時帰国", placement.returnHomeFlag ?? ""],
+    ["一時帰国日", slash(placement.returnHomeAt)],
+    ["入国予定日", slash(placement.entryPlannedAt)],
+    ["入国日", slash(placement.entryAt)],
+    ["入社予定日", slash(placement.joinPlannedAt)],
+    ["入社日", slash(placement.joinAt)],
+  ];
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-gray-600">一時帰国・入国・入社 (内定者管理で入力)</p>
+        {cardId ? (
+          <Link href={`/onboarding?open=${cardId}`} className="text-xs text-[var(--color-primary)] underline">
+            内定者管理で開く
+          </Link>
+        ) : (
+          <span className="text-xs text-gray-400">内定承諾を入れると内定者管理にカードができます</span>
+        )}
+      </div>
+      <dl className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {items.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-[11px] text-gray-500">{label}</dt>
+            <dd className={`text-sm tabular-nums ${value ? "text-gray-800" : "text-gray-300"}`}>{value || "—"}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }

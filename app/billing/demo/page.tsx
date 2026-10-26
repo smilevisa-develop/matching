@@ -64,13 +64,13 @@ export default async function BillingDemoPage({ searchParams }: { searchParams: 
         inMonth: dates.some((d) => d >= range.gte && d < range.lt),
       };
     };
-    const accounting = me || "経理担当";
-    const recruiter = i % 2 === 0 ? "トゥイ" : "チンディ";
+    // 担当は企業の担当者 (トゥイ・チンディ) が最後まで持つ
+    const owner = i % 2 === 0 ? "トゥイ" : "チンディ";
     const steps = {
-      invoice: mk(["invoice"], [sch.invoice.date], accounting),
-      payment: mk(["payment"], [sch.payment.date], accounting),
-      partnerInvoice: s.partner ? mk(["pa-request", "pa-invoice"], [sch.paRequest.date, sch.paInvoice.date], recruiter) : null,
-      partnerPayment: s.partner ? mk(["pa-payment"], [sch.paPayment.date], accounting) : null,
+      invoice: mk(["invoice"], [sch.invoice.date], owner),
+      payment: mk(["payment"], [sch.payment.date], owner),
+      partnerInvoice: s.partner ? mk(["pa-request", "pa-invoice"], [sch.paRequest.date, sch.paInvoice.date], owner) : null,
+      partnerPayment: s.partner ? mk(["pa-payment"], [sch.paPayment.date], owner) : null,
     };
     const all = Object.values(steps).filter((x): x is LedgerStep => !!x);
     if (!all.some((x) => x.inMonth || x.overdue)) return;
@@ -82,6 +82,7 @@ export default async function BillingDemoPage({ searchParams }: { searchParams: 
       joinAt: joinYmd,
       invoiceAmount: s.amount,
       costAmount: s.cost,
+      owner,
       steps,
     });
   });
@@ -116,7 +117,7 @@ export default async function BillingDemoPage({ searchParams }: { searchParams: 
           </Link>
         </nav>
       </div>
-      <BillingClient key={month} demo rows={rows} me={me} staff={[]} billingOwnerId={null} accountingOwner={me} />
+      <BillingClient key={month} demo rows={rows} me={me} />
     </div>
   );
 }

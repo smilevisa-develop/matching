@@ -2,7 +2,6 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
 import { currentMonthJst, isMonthKey, monthRangeJst, shiftMonth } from "@/lib/month-stats";
-import { accountingOwnerName } from "@/lib/billing-flow";
 import { readBillingAmounts } from "@/lib/billing-sheet";
 import BillingClient, { type LedgerRow, type LedgerStep } from "./BillingClient";
 
@@ -23,7 +22,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const range = monthRangeJst(month);
   const now = new Date();
 
-  const [placements, staff, settings, ownerName, amounts] = await Promise.all([
+  const [placements, amounts] = await Promise.all([
     prisma.personPlacement.findMany({
       where: { tasks: { some: { billingStep: { not: null } } } },
       select: {
@@ -37,7 +36,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
             name: true,
             onboarding: { select: { englishName: true } },
             partner: { select: { name: true } },
-            dealCandidates: { orderBy: { updatedAt: "desc" }, take: 1, select: { deal: { select: { company: { select: { name: true } } } } } },
+            dealCandidates: { orderBy: { updatedAt: "desc" }, take: 1, select: { deal: { select: { company: { select: { name: true } }, owner: { select: { name: true } } } } } },
           },
         },
         tasks: {
@@ -46,9 +45,6 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         },
       },
     }),
-    prisma.staffAccount.findMany({ select: { id: true, name: true }, orderBy: { id: "asc" } }),
-    prisma.coreSettings.findUnique({ where: { id: 1 }, select: { billingOwnerId: true } }),
-    accountingOwnerName(),
     readBillingAmounts().catch(() => new Map<number, { invoiceAmount: number | null; costAmount: number | null }>()),
   ]);
 
@@ -93,6 +89,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       joinAt: ymd(p.joinAt),
       invoiceAmount: a?.invoiceAmount ?? null,
       costAmount: a?.costAmount ?? null,
+      owner: p.person?.dealCandidates[0]?.deal.owner?.name ?? all.find((s) => s.owner)?.owner ?? "",
       steps,
     });
   }
@@ -122,13 +119,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           </Link>
         </nav>
       </div>
-      <BillingClient
-        rows={rows}
-        me={account.name ?? ""}
-        staff={staff}
-        billingOwnerId={settings?.billingOwnerId ?? null}
-        accountingOwner={ownerName ?? ""}
-      />
+      <BillingClient rows={rows} me={account.name ?? ""} />
     </div>
   );
 }

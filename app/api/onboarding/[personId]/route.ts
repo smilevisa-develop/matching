@@ -20,6 +20,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { moveDealCandidateStage } from "@/lib/deal-candidate-move";
 import { ensurePlacementFolder } from "@/lib/placement-folder";
+import { rebuildFlowTasksForType } from "@/lib/onboarding-autolink";
 import { BILLING_STAGE, ensureBillingTasks } from "@/lib/billing-flow";
 import { todayJst } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
@@ -48,6 +49,7 @@ export const dynamic = "force-dynamic";
 
 const DATE_FIELDS = [
   "offerAcceptedAt",
+  "returnHomeAt",
   "applicationPlannedAt",
   "applicationAt",
   "applicationResultAt",
@@ -116,6 +118,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
     if (body.holdReason !== undefined && data.holdReason === undefined) data.holdReason = str(body.holdReason);
     if (body.applicationType !== undefined) data.applicationType = str(body.applicationType);
     if (body.applicationMethod !== undefined) data.applicationMethod = str(body.applicationMethod);
+    if (body.returnHomeFlag !== undefined) data.returnHomeFlag = str(body.returnHomeFlag);
     if (typeof body.documentsOnly === "boolean") data.documentsOnly = body.documentsOnly;
     if (body.externalName !== undefined && !placement.personId) data.externalName = str(body.externalName);
     if (body.externalCompanyName !== undefined && !placement.personId) data.externalCompanyName = str(body.externalCompanyName);
@@ -148,15 +151,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
     // 申請種別が変わったら、未完了タスクをその種別の内容で作り直す (完了済みは残す)
     let rebuiltTasks = false;
     if (data.applicationType !== undefined && data.applicationType !== placement.applicationType) {
-      await prisma.placementTask.deleteMany({ where: { placementId: placement.id, doneAt: null } });
-      const base = updated.offerAcceptedAt ?? updated.offerAt ?? null;
-      const doneTitles = new Set(
-        (await prisma.placementTask.findMany({ where: { placementId: placement.id }, select: { title: true } })).map((t) => t.title),
-      );
-      const tasks = buildFlowTasks(updated.applicationType, base).filter((t) => !doneTitles.has(t.title));
-      if (tasks.length > 0) {
-        await prisma.placementTask.createMany({ data: tasks.map((t) => ({ ...t, placementId: placement.id })) });
-      }
+      await rebuildFlowTasksForType(placement.id);
       rebuiltTasks = true;
     }
 

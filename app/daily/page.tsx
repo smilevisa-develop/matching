@@ -5,7 +5,7 @@ import { getCoreSettings } from "@/lib/app-settings";
 import RefreshOnFocus from "@/app/components/RefreshOnFocus";
 import { normalizeDealStatus, readStageDates } from "@/lib/deal-stages";
 import { isTestCompany } from "@/lib/test-companies";
-import { calcUrgency, resolveStage } from "@/lib/onboarding-flow";
+import { calcUrgency, HIDDEN_BOARD_STAGES, resolveStage } from "@/lib/onboarding-flow";
 import { computeMonthStats, currentMonthJst, isMonthKey, shiftMonth } from "@/lib/month-stats";
 import DailyClient, { type DailyDeal } from "./DailyClient";
 
@@ -84,7 +84,7 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
 
   // 内定者フォローの要対応 (内定者管理ボードと同じ判定。チェックリスト・問題記録は今は使っていないので数えない)
   const placements = await prisma.personPlacement.findMany({
-    where: { OR: [{ stage: null }, { stage: { not: "declined" } }] },
+    where: { OR: [{ stage: null }, { stage: { notIn: HIDDEN_BOARD_STAGES } }] },
     select: {
       stage: true,
       stageChangedAt: true,

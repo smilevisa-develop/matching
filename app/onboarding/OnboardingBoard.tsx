@@ -34,7 +34,7 @@ export type OnboardingTask = {
   done: boolean;
   /** 手順・エビデンス・過去の問題 */
   note: string;
-  /** 担当者 (請求のタスク: 経理担当 / 採用担当) */
+  /** 担当者 (請求のタスク: 企業の担当者) */
   owner?: string | null;
 };
 
@@ -85,7 +85,11 @@ export type OnboardingCard = {
   /** YYYY-MM-DD (未申請は空) */
   applicationAt: string;
   offerAcceptedAt: string;
-  /** 入国日 / 入社予定日 / 入社日 (YYYY-MM-DD。未入力は空) */
+  /** 一時帰国 (有 / 無。未入力は空) と一時帰国日 */
+  returnHomeFlag?: string;
+  returnHomeAt?: string;
+  /** 入国予定日 / 入国日 / 入社予定日 / 入社日 (YYYY-MM-DD。未入力は空) */
+  entryPlannedAt?: string;
   entryAt: string;
   joinPlannedAt: string;
   joinAt: string;
@@ -231,6 +235,9 @@ export default function OnboardingBoard({
     if (patch.ownerId !== undefined) body.followUpOwnerId = patch.ownerId;
     if (patch.memo !== undefined) body.currentAction = patch.memo;
     if (patch.applicationAt !== undefined) body.applicationAt = patch.applicationAt || null;
+    if (patch.returnHomeFlag !== undefined) body.returnHomeFlag = patch.returnHomeFlag || null;
+    if (patch.returnHomeAt !== undefined) body.returnHomeAt = patch.returnHomeAt || null;
+    if (patch.entryPlannedAt !== undefined) body.entryPlannedAt = patch.entryPlannedAt || null;
     if (patch.entryAt !== undefined) body.entryAt = patch.entryAt || null;
     if (patch.joinPlannedAt !== undefined) body.joinPlannedAt = patch.joinPlannedAt || null;
     if (patch.joinAt !== undefined) body.joinAt = patch.joinAt || null;
@@ -1158,6 +1165,29 @@ function CardDrawer({
               <label className="text-xs text-gray-500">
                 申請日
                 <input type="date" value={card.applicationAt} onChange={(e) => onSave({ applicationAt: e.target.value })} className={`mt-1 w-full ${field}`} />
+              </label>
+              <label className="text-xs text-gray-500">
+                一時帰国
+                <select value={card.returnHomeFlag ?? ""} onChange={(e) => onSave({ returnHomeFlag: e.target.value })} className={`mt-1 w-full ${field}`}>
+                  <option value="">未入力</option>
+                  <option value="有">有</option>
+                  <option value="無">無</option>
+                  {card.returnHomeFlag && !["有", "無"].includes(card.returnHomeFlag) ? <option value={card.returnHomeFlag}>{card.returnHomeFlag}</option> : null}
+                </select>
+              </label>
+              <label className="text-xs text-gray-500">
+                一時帰国日
+                <input
+                  type="date"
+                  value={card.returnHomeAt ?? ""}
+                  disabled={card.returnHomeFlag === "無"}
+                  onChange={(e) => onSave({ returnHomeAt: e.target.value })}
+                  className={`mt-1 w-full ${field} disabled:bg-gray-100 disabled:text-gray-400`}
+                />
+              </label>
+              <label className="text-xs text-gray-500">
+                入国予定日
+                <input type="date" value={card.entryPlannedAt ?? ""} onChange={(e) => onSave({ entryPlannedAt: e.target.value })} className={`mt-1 w-full ${field}`} />
               </label>
               <label className="text-xs text-gray-500">
                 入国日

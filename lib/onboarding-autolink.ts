@@ -15,7 +15,7 @@
  */
 
 import { prisma } from "./prisma";
-import { buildFlowTasks, OFFER_TO_APPLICATION_DAYS, OFFER_TO_JOIN_DAYS } from "./onboarding-flow";
+import { buildFlowTasks, OFFER_TO_APPLICATION_DAYS, OFFER_TO_JOIN_DAYS, PRE_OFFER_STAGE } from "./onboarding-flow";
 import { ensurePlacementFolder } from "./placement-folder";
 
 export const OFFER_STAGE = "内定済み";
@@ -33,28 +33,27 @@ export const FOLLOW_UP_OWNER_LOGIN_ID = "nguyet";
 export async function ensureOnboardingCard(personId: number, baseDate: Date | null) {
   const existing = await prisma.personPlacement.findUnique({
     where: { personId },
-    select: { id: true },
+    select: { id: true, stage: true, offerAt: true, applicationPlannedAt: true, joinPlannedAt: true },
   });
-  if (existing) return { created: false, placementId: existing.id };
+  // 内定承諾より前の日付だけのレコード (候補者詳細の「進捗 / 日程」で作ったもの) は、ここでボードのカードにする
+  if (existing && existing.stage !== PRE_OFFER_STAGE) return { created: false, placementId: existing.id };
 
-  const placement = await prisma.personPlacement.create({
-    data: {
-      personId,
-      stage: "offer",
-      stageChangedAt: new Date(),
-      offerAt: baseDate,
-      // 川村さんの指示: 申請予定日 = 内定受領 +10日 / 入社予定日 = 内定受領 +2か月
-      applicationPlannedAt: baseDate
-        ? new Date(baseDate.getTime() + OFFER_TO_APPLICATION_DAYS * 86_400_000)
-        : null,
-      joinPlannedAt: baseDate
-        ? new Date(baseDate.getTime() + OFFER_TO_JOIN_DAYS * 86_400_000)
-        : null,
-    },
-  });
+  const base = existing?.offerAt ?? baseDate;
+  const card = {
+    stage: "offer",
+    stageChangedAt: new Date(),
+    offerAt: base,
+    // 川村さんの指示: 申請予定日 = 内定受領 +10日 / 入社予定日 = 内定受領 +2か月
+    applicationPlannedAt:
+      existing?.applicationPlannedAt ?? (base ? new Date(base.getTime() + OFFER_TO_APPLICATION_DAYS * 86_400_000) : null),
+    joinPlannedAt: existing?.joinPlannedAt ?? (base ? new Date(base.getTime() + OFFER_TO_JOIN_DAYS * 86_400_000) : null),
+  };
+  const placement = existing
+    ? await prisma.personPlacement.update({ where: { id: existing.id }, data: card })
+    : await prisma.personPlacement.create({ data: { personId, ...card } });
 
   // 申請種別はまだ分からないので、全員共通のタスクだけ入れておく
-  const tasks = buildFlowTasks(null, baseDate);
+  const tasks = buildFlowTasks(null, base);
   if (tasks.length > 0) {
     await prisma.placementTask.createMany({
       data: tasks.map((t) => ({ ...t, placementId: placement.id })),
@@ -168,6 +167,9 @@ export async function removeUntouchedOnboardingCard(personId: number): Promise<{
       applicationAt: true,
       applicationType: true,
       currentAction: true,
+      acceptedAt: true,
+      preInterviewAt: true,
+      companyInterviewAt: true,
       _count: { select: { issues: true, tasks: { where: { doneAt: { not: null } } } } },
     },
   });
@@ -180,6 +182,15 @@ export async function removeUntouchedOnboardingCard(personId: number): Promise<{
     placement._count.issues > 0 ||
     placement._count.tasks > 0;
   if (touched) return { removed: false, reason: "手を付けたカードなので残す" };
+  // 候補者詳細の「進捗 / 日程」で入れた内定より前の日付があれば、レコードは残してボードからだけ外す
+  if (placement.acceptedAt || placement.preInterviewAt || placement.companyInterviewAt) {
+    await prisma.placementTask.deleteMany({ where: { placementId: placement.id } });
+    await prisma.personPlacement.update({
+      where: { id: placement.id },
+      data: { stage: PRE_OFFER_STAGE, stageChangedAt: new Date(), offerAcceptedAt: null },
+    });
+    return { removed: true };
+  }
   await prisma.personPlacement.delete({ where: { id: placement.id } });
   return { removed: true };
 }
@@ -192,8 +203,8 @@ export async function removeUntouchedOnboardingCard(personId: number): Promise<{
  */
 async function onJoinStage(personId: number, stage: string, dateYmd?: string | null): Promise<{ created: boolean }> {
   const date = jstDate(dateYmd) ?? new Date();
-  const existing = await prisma.personPlacement.findUnique({ where: { personId }, select: { id: true } });
-  const created: { created: boolean } = existing ? { created: false } : await onDealCandidateStageChanged(personId, OFFER_ACCEPTED_STAGE, dateYmd);
+  const existing = await prisma.personPlacement.findUnique({ where: { personId }, select: { id: true, stage: true } });
+  const created: { created: boolean } = existing && existing.stage !== PRE_OFFER_STAGE ? { created: false } : await onDealCandidateStageChanged(personId, OFFER_ACCEPTED_STAGE, dateYmd);
   const card = await prisma.personPlacement.findUnique({ where: { personId }, select: { stage: true } });
   if (!card) return created;
   if (stage === JOIN_WAITING_STAGE) {
@@ -207,4 +218,20 @@ async function onJoinStage(personId: number, stage: string, dateYmd?: string | n
     });
   }
   return created;
+}
+
+/** 申請種別が変わったら、未完了タスクをその種別の内容で作り直す (完了済みは残す) */
+export async function rebuildFlowTasksForType(placementId: number) {
+  const p = await prisma.personPlacement.findUniqueOrThrow({
+    where: { id: placementId },
+    select: { applicationType: true, offerAcceptedAt: true, offerAt: true },
+  });
+  await prisma.placementTask.deleteMany({ where: { placementId, doneAt: null } });
+  const doneTitles = new Set(
+    (await prisma.placementTask.findMany({ where: { placementId }, select: { title: true } })).map((t) => t.title),
+  );
+  const tasks = buildFlowTasks(p.applicationType, p.offerAcceptedAt ?? p.offerAt ?? null).filter((t) => !doneTitles.has(t.title));
+  if (tasks.length > 0) {
+    await prisma.placementTask.createMany({ data: tasks.map((t) => ({ ...t, placementId })) });
+  }
 }
