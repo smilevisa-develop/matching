@@ -34,6 +34,8 @@ export type OnboardingTask = {
   done: boolean;
   /** 手順・エビデンス・過去の問題 */
   note: string;
+  /** 担当者 (請求のタスク: 経理担当 / 採用担当) */
+  owner?: string | null;
 };
 
 export type OnboardingIssue = {
@@ -175,21 +177,32 @@ function toTasks(raw: unknown[]): OnboardingTask[] {
       title: String(o.title ?? ""),
       done: Boolean(o.doneAt),
       note: typeof o.note === "string" ? o.note : "",
+      owner: typeof o.owner === "string" ? o.owner : null,
     };
   });
 }
 
-export default function OnboardingBoard({ initialCards, staff }: { initialCards: OnboardingCard[]; staff: Staff[] }) {
+export default function OnboardingBoard({
+  initialCards,
+  staff,
+  initialOpenId = null,
+}: {
+  initialCards: OnboardingCard[];
+  staff: Staff[];
+  initialOpenId?: number | null;
+}) {
   const [cards, setCards] = useState(initialCards);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [overStage, setOverStage] = useState<OnboardingStageId | null>(null);
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(initialOpenId);
   const [showOutsourced, setShowOutsourced] = useState(false);
   const [adding, setAdding] = useState(false);
   // 保留 / サポートに入れるときのポップ (移動先が決まってから保存する)
   const [pendingHold, setPendingHold] = useState<number | null>(null);
   const [pendingCancel, setPendingCancel] = useState<number | null>(null);
   const [pendingDecline, setPendingDecline] = useState<number | null>(null);
+  // 請求の列に入れるとき、入社日が無ければ聞く (入社日から請求のタスクを作るため)
+  const [pendingBilling, setPendingBilling] = useState<number | null>(null);
   const [pendingSupport, setPendingSupport] = useState<number | null>(null);
 
   // 内定辞退にした人はボードから消す
@@ -245,6 +258,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
     if (stage === HOLD_STAGE) setPendingHold(card.id);
     else if (stage === CANCEL_STAGE) setPendingCancel(card.id);
     else if (stage === DECLINED_STAGE) setPendingDecline(card.id);
+    else if (stage === "billing" && !card.joinAt) setPendingBilling(card.id);
     else if (stage === "support") setPendingSupport(card.id);
     else void save(card.id, { stage });
   };
@@ -280,6 +294,7 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
   const holdCard = cards.find((c) => c.id === pendingHold) ?? null;
   const cancelCard = cards.find((c) => c.id === pendingCancel) ?? null;
   const declineCard = cards.find((c) => c.id === pendingDecline) ?? null;
+  const billingCard = cards.find((c) => c.id === pendingBilling) ?? null;
   const supportCard = cards.find((c) => c.id === pendingSupport) ?? null;
 
   const dropHandlers = (stage: OnboardingStageId) => ({
@@ -465,6 +480,17 @@ export default function OnboardingBoard({ initialCards, staff }: { initialCards:
           onConfirm={(reason) => {
             setPendingCancel(null);
             void save(cancelCard.id, { stage: CANCEL_STAGE, cancelReason: reason });
+          }}
+        />
+      ) : null}
+
+      {billingCard ? (
+        <JoinDateModal
+          card={billingCard}
+          onCancel={() => setPendingBilling(null)}
+          onConfirm={(joinAt) => {
+            setPendingBilling(null);
+            void save(billingCard.id, { stage: "billing", joinAt });
           }}
         />
       ) : null}
@@ -1242,7 +1268,10 @@ function TaskRow({
               </svg>
             ) : null}
           </span>
-          <span className={`block min-w-0 flex-1 text-sm leading-snug ${task.done ? "text-gray-400 line-through" : "text-gray-800"}`}>{task.title}</span>
+          <span className={`block min-w-0 flex-1 text-sm leading-snug ${task.done ? "text-gray-400 line-through" : "text-gray-800"}`}>
+            {task.title}
+            {task.owner ? <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-normal text-gray-500 no-underline">{task.owner}</span> : null}
+          </span>
         </button>
         {task.note ? (
           <button type="button" onClick={onNote} className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="手順・エビデンス">
@@ -1296,6 +1325,35 @@ function HoldReasonModal({ card, onCancel, onConfirm }: { card: OnboardingCard; 
           </button>
           <button type="submit" disabled={!reason.trim()} className={BTN_MAIN}>
             保留にする
+          </button>
+        </div>
+      </form>
+    </ModalFrame>
+  );
+}
+
+/** 請求の列に入れるときに入社日を聞くポップ (入社日から、翌月 1 日の請求などのタスクを作る) */
+function JoinDateModal({ card, onCancel, onConfirm }: { card: OnboardingCard; onCancel: () => void; onConfirm: (joinAt: string) => void }) {
+  const [date, setDate] = useState(card.joinPlannedAt || todayYmd());
+  return (
+    <ModalFrame title={`${card.personName} を請求に進める`} onCancel={onCancel}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (date) onConfirm(date);
+        }}
+      >
+        <label className="mt-3 block text-xs text-gray-600">
+          入社日 (確定した日)
+          <input type="date" autoFocus required value={date} onChange={(e) => setDate(e.target.value)} className={MODAL_INPUT} />
+        </label>
+        <p className="mt-2 text-[11px] text-gray-500">入社の翌月 1 日に請求 → その月末に入金 → パートナーへの依頼・支払い、のタスクを作ります。</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onCancel} className={BTN_SUB}>
+            やめる
+          </button>
+          <button type="submit" disabled={!date} className={BTN_MAIN}>
+            請求に進める
           </button>
         </div>
       </form>

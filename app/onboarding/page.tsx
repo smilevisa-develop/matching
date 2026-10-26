@@ -17,7 +17,10 @@ function toYmd(v: string | null | undefined): string {
  * - 委託管理の企業・人材紹介会社 (WILLOF・ADECCO など) の内定者は出さない。件数だけ出して切り替えられる
  * - カードは「誰・どこの企業・次にやること・今の工程の進み具合」だけ。期限は出さない
  */
-export default async function OnboardingPage() {
+export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ open?: string }> }) {
+  // 請求管理などから ?open=内定者ID で来たら、そのカードの詳細を開いた状態で出す
+  const { open } = await searchParams;
+  const openId = Number(open);
   await requireCurrentAccount();
 
   const [placements, staff] = await Promise.all([
@@ -47,7 +50,7 @@ export default async function OnboardingPage() {
         },
         tasks: {
           orderBy: { sortOrder: "asc" },
-          select: { id: true, category: true, title: true, doneAt: true, note: true },
+          select: { id: true, category: true, title: true, doneAt: true, note: true, owner: true },
         },
         issues: {
           orderBy: { createdAt: "desc" },
@@ -106,6 +109,7 @@ export default async function OnboardingPage() {
         title: t.title,
         done: Boolean(t.doneAt),
         note: t.note ?? "",
+        owner: t.owner ?? null,
       })),
       issues: p.issues.map((i) => ({
         id: i.id,
@@ -118,7 +122,7 @@ export default async function OnboardingPage() {
 
   return (
     <div className="space-y-5 p-8">
-      <OnboardingBoard initialCards={cards} staff={staff} />
+      <OnboardingBoard initialCards={cards} staff={staff} initialOpenId={Number.isFinite(openId) && openId > 0 ? openId : null} />
     </div>
   );
 }

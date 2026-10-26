@@ -646,6 +646,8 @@ model CoreSettings {
   recommendationTemplateUrl String?
   /// 新規パートナー向け自己記入フォーム (/partner-intake/[token]) の共有トークン
   partnerIntakeToken        String?
+  /// 請求の経理担当 (請求書の送付・入金確認・パートナーへの支払い)。StaffAccount の id。未設定なら管理者
+  billingOwnerId            Int?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 }
@@ -914,6 +916,10 @@ model PlacementTask {
   doneAt      DateTime?
   doneBy      String?
   note        String?
+  /// 担当者の名前 (請求のタスクで使う。経理担当 / 採用担当)
+  owner       String?
+  /// 請求の流れのどの段階か (lib/billing-flow.ts の BILLING_STEPS の key)。それ以外のタスクは null
+  billingStep String?
   sortOrder   Int            @default(0)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt

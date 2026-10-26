@@ -20,6 +20,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { moveDealCandidateStage } from "@/lib/deal-candidate-move";
 import { ensurePlacementFolder } from "@/lib/placement-folder";
+import { BILLING_STAGE, ensureBillingTasks } from "@/lib/billing-flow";
 import { todayJst } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 import { requestKpiSheetSync } from "@/lib/kpi-sheet-sync";
@@ -157,6 +158,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
         await prisma.placementTask.createMany({ data: tasks.map((t) => ({ ...t, placementId: placement.id })) });
       }
       rebuiltTasks = true;
+    }
+
+    // 請求の列に入れたとき / 請求の列で入社日を変えたときは、入社日から請求のタスク (翌月 1 日に請求 …) を作る
+    const nowBilling = (updated.stage ?? "") === BILLING_STAGE;
+    if (nowBilling && (data.stage === BILLING_STAGE || data.joinAt !== undefined)) {
+      const r = await ensureBillingTasks(placement.id);
+      if (r.created > 0) rebuiltTasks = true;
     }
 
     const tasks = rebuiltTasks ? await listTasks(placement.id) : undefined;

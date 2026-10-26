@@ -150,6 +150,7 @@ const NAV: NavItem[] = [
   // 請求 (企業への請求 / PAへの請求) は使っていないのでメニューから外している。
   // 画面と API は残してあり、URL (/invoices/companies, /invoices/partners) を直接開けば使える。
   { label: "内定者管理", href: "/onboarding", icon: InvoiceIcon },
+  { label: "請求管理", href: "/billing", icon: InvoiceIcon },
   { label: "KPIダッシュボード", href: "/kpi", icon: BroadcastIcon },
   { label: "売上ダッシュボード", href: "/revenue", icon: BroadcastIcon },
   { label: "チャット", href: "/chat", icon: ChatIcon },
