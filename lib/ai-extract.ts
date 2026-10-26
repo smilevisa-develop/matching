@@ -6,6 +6,8 @@ export type ExtractedCandidate = {
   nationality?: string;
   residenceStatus?: string;
   visaExpiryDate?: string;
+  /** visaExpiryDate を読んだ書類の種類。「在留カード」以外なら visaExpiryDate は使わない (検証で消す) */
+  visaExpirySource?: string;
   birthDate?: string;
   gender?: string;
   phoneNumber?: string;
@@ -114,8 +116,14 @@ const EXTRACTION_SCHEMA_DESCRIPTION = `次のJSONスキーマに沿って、読�
 - residenceStatus: "技能実習", "特定技能1号", "特定技能2号", "技術・人文知識・国際業務" のいずれか
   エイリアス: "在留資格", "Status of Residence"
 
-- visaExpiryDate: 在留資格の有効期限 YYYY-MM-DD
-  エイリアス: "在留期限", "ビザ期限", "Date of Expiration"
+- visaExpiryDate: 在留カードに書かれた「有効期限」(在留期間の満了日) YYYY-MM-DD
+  エイリアス: 在留カードの "有効期限", "在留期間(満了日)", "Date of Expiration"
+  ※ **在留カードからだけ** 読むこと。添付に在留カードが無ければ必ず省略。
+  ※ 技能実習の期間 (修了証明書・評価調書の「〜年〜月〜日まで」)、合格証・証明書の日付、パスポートの有効期限、
+    履歴書に本人が書いた期限、ビザ申請の日付は在留期限ではないので使わない。
+  ※ visaExpiryDate を入れたときは visaExpirySource に読んだ書類の種類を入れる ("在留カード" / "その他")。
+
+- visaExpirySource: visaExpiryDate を読んだ書類の種類。在留カードなら "在留カード"、それ以外は "その他"
 
 - birthDate: 生年月日 YYYY-MM-DD
   エイリアス: "生年月日", "誕生日", "Date of Birth", "DOB"
@@ -501,6 +509,14 @@ export async function extractCandidateFromText(text: string): Promise<ExtractedC
 function validateExtractedCandidate(raw: ExtractedCandidate): ExtractedCandidate {
   const warnings: string[] = [];
   const cleaned: ExtractedCandidate = { ...raw };
+
+  // 在留期限は在留カードから読んだときだけ使う (2026/10: 技能実習修了証明書の実習期間を在留期限と取り違えた例があった)
+  const visaSource = (cleaned.visaExpirySource ?? "").trim();
+  if (cleaned.visaExpiryDate && visaSource !== "在留カード") {
+    warnings.push(`visaExpiryDate: "${cleaned.visaExpiryDate}" は在留カード以外 (${visaSource || "不明"}) から読んだため除外`);
+    delete cleaned.visaExpiryDate;
+  }
+  delete cleaned.visaExpirySource;
 
   const isYmd = (v?: string): boolean =>
     typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
