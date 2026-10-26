@@ -56,7 +56,10 @@ export default function BillingClient({
   staff,
   billingOwnerId,
   accountingOwner,
+  demo = false,
 }: {
+  /** お試し (仮のデータ)。押しても保存しない・シートに書かない */
+  demo?: boolean;
   rows: LedgerRow[];
   me: string;
   staff: { id: number; name: string }[];
@@ -94,11 +97,11 @@ export default function BillingClient({
     const step = row.steps[key];
     if (!step || busy) return;
     const done = !step.done;
-    if (!done && !window.confirm("「済」を取り消しますか？ (請求管理シートに書いた値は戻りません。シートは手で直してください)")) return;
+    if (!demo && !done && !window.confirm("「済」を取り消しますか？ (請求管理シートに書いた値は戻りません。シートは手で直してください)")) return;
     setBusy(`${row.placementId}-${key}`);
     const ids = done ? step.taskIds : step.allTaskIds;
     try {
-      for (const id of ids) {
+      for (const id of demo ? [] : ids) {
         const res = await fetch(`/api/onboarding/tasks/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -122,6 +125,7 @@ export default function BillingClient({
   };
 
   const saveOwner = async (value: string) => {
+    if (demo) return;
     const res = await fetch("/api/billing/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -224,7 +228,7 @@ export default function BillingClient({
         ) : (
           visible.map((r) => (
             <div key={r.placementId} className={`${GRID} border-t border-gray-100 px-4 py-2.5 ${stepsOf(r).some((s) => s.overdue) ? "bg-red-50/60" : ""}`}>
-              <Link href={`/onboarding?open=${r.placementId}`} className="min-w-0 hover:underline">
+              <Link href={demo ? "#" : `/onboarding?open=${r.placementId}`} onClick={(e) => demo && e.preventDefault()} className="min-w-0 hover:underline">
                 <p className="truncate text-sm font-semibold text-[var(--color-text-dark)]">{r.personName}</p>
                 <p className="truncate text-xs text-gray-500">
                   {[r.companyName, yen(r.invoiceAmount), r.partnerName ? `PA: ${r.partnerName}${r.costAmount ? ` ${yen(r.costAmount)}` : ""}` : ""]
@@ -242,7 +246,14 @@ export default function BillingClient({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-        <span>丸を押すと「済」になり、日付が企業データベースの請求管理に入ります。名前を押すと内定者カードが開きます。</span>
+        <span>
+          丸を押すと「済」になり、日付が企業データベースの請求管理に入ります。名前を押すと内定者カードが開きます。
+          {demo ? null : (
+            <Link href="/billing/demo" className="ml-2 text-[var(--color-primary)] underline">
+              仮のデータで試す
+            </Link>
+          )}
+        </span>
         <label className="flex items-center gap-2">
           経理担当
           <select
