@@ -144,7 +144,7 @@ export default function ProgressBoard({ initialCards, me, demo = false }: { init
                 if (dragging && columnOf(dragging) !== i) setPending({ personId: dragging.personId, index: i });
                 setDraggingId(null);
               }}
-              className={`flex h-[calc(100vh-15rem)] w-[200px] shrink-0 flex-col rounded-2xl border transition-all duration-150 ${
+              className={`flex h-[calc(100vh-15rem)] min-w-[170px] flex-1 flex-col rounded-2xl border transition-all duration-150 ${
                 isTarget
                   ? "scale-[1.02] border-[var(--color-primary)] bg-[var(--color-light)] shadow-lg ring-2 ring-[var(--color-primary)]"
                   : "border-gray-200 bg-gray-50"
@@ -179,7 +179,8 @@ export default function ProgressBoard({ initialCards, me, demo = false }: { init
                       }`}
                     >
                       <p className="text-sm font-semibold text-[var(--color-text-dark)]">{card.name}</p>
-                      <p className="mt-0.5 truncate text-xs text-gray-500">{[card.companyName, card.ownerName].filter(Boolean).join(" ・ ")}</p>
+                      <p className="mt-0.5 truncate text-xs text-gray-500">{card.companyName}</p>
+                      {card.ownerName ? <p className="truncate text-xs text-gray-500">担当 {card.ownerName}</p> : null}
                       <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px]">
                         {date ? <span className="tabular-nums text-gray-600">{slash(date)}</span> : null}
                         {missing > 0 ? (
