@@ -465,7 +465,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
             placementTabContent={
               <PlacementPanel
                 personId={person.id}
-                personName={person.name}
+                personName={person.onboarding?.englishName?.trim() || person.name}
                 initialPlacement={placementData}
                 kanbanDates={kanbanDates}
                 cardId={placement && placement.stage !== PRE_OFFER_STAGE ? placement.id : null}

@@ -403,6 +403,16 @@ const STAGES: { field: StageField; label: string }[] = [
   { field: "applicationResultAt", label: "申請結果受け取り" },
 ];
 
+/** カンバンの日付のうち、後ろの段階の日付より後になっていないものだけ候補にする (順番が合わない日付は入れさせない) */
+function usableHints(placement: PlacementData, kanbanDates: Partial<Record<string, string>>) {
+  const out: Partial<Record<string, string>> = {};
+  STAGES.forEach((st, i) => {
+    const hint = kanbanDates[st.field];
+    if (hint && STAGES.slice(i + 1).every((later) => !placement[later.field] || placement[later.field]!.slice(0, 10) >= hint)) out[st.field] = hint;
+  });
+  return out;
+}
+
 const slash = (ymd: string | null | undefined) => (ymd ? ymd.slice(0, 10).replaceAll("-", "/") : "");
 const todayYmd = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -424,6 +434,7 @@ function StageTrack({
   const [target, setTarget] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const current = STAGES.reduce((last, st, i) => (placement[st.field] ? i : last), -1);
+  const hints = usableHints(placement, kanbanDates);
   const cardAt = Math.max(current, 0);
 
   return (
@@ -433,7 +444,7 @@ function StageTrack({
           {STAGES.map((st, i) => {
             const date = placement[st.field];
             const missing = !date && i < current;
-            const hint = date ? undefined : kanbanDates[st.field];
+            const hint = date ? undefined : hints[st.field];
             return (
               <div
                 key={st.field}
@@ -484,7 +495,7 @@ function StageTrack({
         <StageDateModal
           index={target}
           placement={placement}
-          kanbanDates={kanbanDates}
+          kanbanDates={hints}
           onClose={() => setTarget(null)}
           onSave={async (patch) => {
             setTarget(null);
@@ -514,9 +525,11 @@ function StageDateModal({
   const existing = placement[stage.field];
   const skipped = STAGES.slice(0, index).filter((st) => !placement[st.field]);
   const isApplication = stage.field === "applicationAt";
+  // 今のカードより後の段階に進めるときだけ「今日」を最初に入れる (前の段階は実際の日付を入れてもらう)
+  const current = STAGES.reduce((last, st, i) => (placement[st.field] ? i : last), -1);
   const [dates, setDates] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      [...skipped, stage].map((st) => [st.field, placement[st.field]?.slice(0, 10) || kanbanDates[st.field] || (st === stage ? todayYmd() : "")]),
+      [...skipped, stage].map((st) => [st.field, placement[st.field]?.slice(0, 10) || kanbanDates[st.field] || (st === stage && index > current ? todayYmd() : "")]),
     ),
   );
   const [applicationType, setApplicationType] = useState(placement.applicationType ?? "");
