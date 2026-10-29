@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { readCompanyContacts } from "@/lib/company-contacts";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
@@ -19,7 +20,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
     prisma.deal.findUnique({
       where: { id: Number(id) },
       include: {
-        company: { select: { id: true, name: true, externalId: true, supportType: true, companyKind: true, supportMethod: true } },
+        company: { select: { id: true, name: true, externalId: true, supportType: true, companyKind: true, supportMethod: true, contacts: true } },
         owner: { select: { id: true, name: true } },
         candidates: {
           include: {
@@ -127,7 +128,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
               id: deal.id,
               title: deal.title,
               field: deal.field,
-              company: deal.company,
+              company: { ...deal.company, contacts: readCompanyContacts(deal.company.contacts) },
               owner: deal.owner,
               status: deal.status,
               unitPrice: deal.unitPrice,

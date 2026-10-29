@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { readCompanyContacts } from "@/lib/company-contacts";
 import { normalizeSupportMethod, writeSupportMethodToMaster } from "@/lib/company-support-method";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { after } from "next/server";
@@ -48,10 +49,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       body.companyKind === "通常" || body.companyKind === "人材紹介会社" ? (body.companyKind as string) : undefined;
     // 支援方法 (企業マスタ E列と同じ選択肢。空欄にもできる)
     const supportMethod = body.supportMethod !== undefined ? normalizeSupportMethod(body.supportMethod) : undefined;
+    // 企業の担当者 (先方の窓口)。空の行は落とす
+    const contacts = body.contacts !== undefined ? readCompanyContacts(body.contacts) : undefined;
     const extra = {
       ...(supportType ? { supportType } : {}),
       ...(companyKind ? { companyKind } : {}),
       ...(supportMethod !== undefined ? { supportMethod } : {}),
+      ...(contacts !== undefined ? { contacts } : {}),
     };
     if (body.externalId === undefined && Object.keys(extra).length > 0) {
       const company = await prisma.company.update({ where: { id: Number(id) }, data: extra });

@@ -102,6 +102,8 @@ model Company {
   supportMethod  String?
   driveFolderUrl String?
   notes          String?
+  /// 企業の担当者 (先方の窓口)。[{ name, method: メール/LINE/Facebook/電話/その他, value: アドレス・リンク・番号 }] (複数人)
+  contacts       Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

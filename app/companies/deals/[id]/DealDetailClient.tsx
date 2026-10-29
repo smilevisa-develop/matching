@@ -13,6 +13,7 @@ import RecommendationsClient from "@/app/recommendations/RecommendationsClient";
 import CloseButton from "@/app/components/CloseButton";
 import { DEAL_STATUSES, normalizeDealStatus } from "@/lib/deal-stages";
 import { SUPPORT_METHODS } from "@/lib/company-options";
+import { CONTACT_METHODS, CONTACT_PLACEHOLDERS, contactHref, type CompanyContact, type ContactMethod } from "@/lib/company-contacts";
 
 const STATUS_OPTIONS = DEAL_STATUSES;
 
@@ -20,7 +21,16 @@ type DealDetail = {
   id: number;
   title: string;
   field: string | null;
-  company: { id: number; name: string; externalId: string | null; supportType: string; companyKind: string; supportMethod: string | null };
+  company: {
+    id: number;
+    name: string;
+    externalId: string | null;
+    supportType: string;
+    companyKind: string;
+    supportMethod: string | null;
+    /** 企業の担当者 (先方の窓口) */
+    contacts: CompanyContact[];
+  };
   owner: { id: number; name: string } | null;
   status: string;
   unitPrice: string | null;
@@ -63,6 +73,8 @@ export default function DealDetailClient({
   const [editing, setEditing] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [recommendationOpen, setRecommendationOpen] = useState(false);
+  // 編集中の企業の担当者 (空なら 1 行出しておく)
+  const [contactsForm, setContactsForm] = useState<CompanyContact[]>([]);
   const [editForm, setEditForm] = useState({
     title: deal.title,
     field: normalizeSswIndustry(deal.field) ?? SSW_INDUSTRIES[0],
@@ -112,6 +124,9 @@ export default function DealDetailClient({
       notes: currentDeal.notes ?? "",
       ownerId: currentDeal.owner ? String(currentDeal.owner.id) : "",
     });
+    setContactsForm(
+      currentDeal.company.contacts.length > 0 ? currentDeal.company.contacts.map((c) => ({ ...c })) : [{ name: "", method: "メール", value: "" }],
+    );
     setEditing(true);
   };
 
@@ -146,7 +161,12 @@ export default function DealDetailClient({
       const nextSupportType = editForm.supportType;
       const nextKind = editForm.companyKind;
       const nextMethod = editForm.supportMethod;
+      const nextContacts = contactsForm
+        .map((c) => ({ ...c, name: c.name.trim(), value: c.value.trim() }))
+        .filter((c) => c.name || c.value);
+      const contactsChanged = JSON.stringify(nextContacts) !== JSON.stringify(currentDeal.company.contacts);
       if (
+        contactsChanged ||
         nextExternalId !== (currentDeal.company.externalId ?? "") ||
         nextSupportType !== currentDeal.company.supportType ||
         nextKind !== currentDeal.company.companyKind ||
@@ -155,11 +175,17 @@ export default function DealDetailClient({
         const res = await fetch(`/api/companies/${currentDeal.company.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ externalId: nextExternalId, supportType: nextSupportType, companyKind: nextKind, supportMethod: nextMethod }),
+          body: JSON.stringify({
+            externalId: nextExternalId,
+            supportType: nextSupportType,
+            companyKind: nextKind,
+            supportMethod: nextMethod,
+            ...(contactsChanged ? { contacts: nextContacts } : {}),
+          }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
-          alert(data.error || "企業IDの更新に失敗しました");
+          alert(data.error || "企業情報の更新に失敗しました");
           return;
         }
       }
@@ -197,6 +223,7 @@ export default function DealDetailClient({
           supportType: nextSupportType,
           companyKind: nextKind,
           supportMethod: nextMethod || null,
+          contacts: nextContacts,
         },
         title: editForm.title,
         field: nextKind === "人材紹介会社" ? prev.field : editForm.field || null,
@@ -312,6 +339,7 @@ export default function DealDetailClient({
                 <InfoRow label="支援" value={currentDeal.company.supportType ?? "自社支援"} />
                 <InfoRow label="区分" value={currentDeal.company.companyKind ?? "通常"} />
                 <InfoRow label="支援方法" value={currentDeal.company.supportMethod ?? "未設定"} />
+                <ContactsRow contacts={currentDeal.company.contacts} />
               </div>
             ) : null}
           </div>
@@ -435,6 +463,7 @@ export default function DealDetailClient({
             <EditField label="受付日">
               <input className={EDIT_INPUT} type="date" value={editForm.acceptedAt} onChange={(e) => setEditForm((c) => ({ ...c, acceptedAt: e.target.value }))} />
             </EditField>
+            <ContactsEditor contacts={contactsForm} onChange={setContactsForm} />
             <EditField label="メモ" className="md:col-span-2">
               <textarea className={`${EDIT_INPUT} min-h-24`} value={editForm.notes} onChange={(e) => setEditForm((c) => ({ ...c, notes: e.target.value }))} />
             </EditField>
@@ -536,6 +565,90 @@ export default function DealDetailClient({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** 企業の担当者 (表示)。1 行に 名前 + 連絡手段 を並べる。押すとメール・リンクを開く */
+function ContactsRow({ contacts }: { contacts: CompanyContact[] }) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-xl bg-[var(--color-light)] px-3 py-2 sm:col-span-2 lg:col-span-3">
+      <span className="shrink-0 text-xs text-gray-500">企業の担当者</span>
+      {contacts.length === 0 ? (
+        <span className="text-sm font-semibold text-[var(--color-text-dark)]">未設定</span>
+      ) : (
+        <span className="flex flex-wrap justify-end gap-x-4 gap-y-1">
+          {contacts.map((c, i) => {
+            const href = contactHref(c);
+            return (
+              <span key={i} className="flex items-center gap-1.5 text-sm">
+                <span className="font-semibold text-[var(--color-text-dark)]">{c.name || "(名前なし)"}</span>
+                {c.value ? (
+                  href ? (
+                    <a
+                      href={href}
+                      target={href.startsWith("http") ? "_blank" : undefined}
+                      rel="noreferrer"
+                      title={c.value}
+                      className="rounded bg-white px-1.5 py-0.5 text-xs text-[var(--color-primary)] hover:underline"
+                    >
+                      {c.method}
+                    </a>
+                  ) : (
+                    <span title={c.value} className="rounded bg-white px-1.5 py-0.5 text-xs text-gray-600">
+                      {c.method}: {c.value}
+                    </span>
+                  )
+                ) : null}
+              </span>
+            );
+          })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** 企業の担当者 (編集)。1 人 1 行で、名前・連絡手段・アドレス/リンクを大きめの欄で入れる */
+function ContactsEditor({ contacts, onChange }: { contacts: CompanyContact[]; onChange: (next: CompanyContact[]) => void }) {
+  const update = (i: number, patch: Partial<CompanyContact>) => onChange(contacts.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  return (
+    <div className="space-y-2 md:col-span-2">
+      <span className="text-sm font-medium text-gray-700">企業の担当者 (複数人入れられます)</span>
+      {contacts.map((c, i) => (
+        <div key={i} className="grid gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 sm:grid-cols-[minmax(0,1fr)_9rem_minmax(0,1.6fr)_auto]">
+          <input className={EDIT_INPUT} value={c.name} onChange={(e) => update(i, { name: e.target.value })} placeholder="担当者の名前 (例: 山田様)" />
+          <select className={EDIT_INPUT} value={c.method} onChange={(e) => update(i, { method: e.target.value as ContactMethod })}>
+            {CONTACT_METHODS.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <input
+            className={EDIT_INPUT}
+            value={c.value}
+            onChange={(e) => update(i, { value: e.target.value })}
+            placeholder={CONTACT_PLACEHOLDERS[c.method]}
+            inputMode={c.method === "メール" ? "email" : c.method === "電話" ? "tel" : "url"}
+          />
+          <button
+            type="button"
+            onClick={() => onChange(contacts.filter((_, j) => j !== i))}
+            className="rounded-lg px-3 py-2 text-sm text-red-500 hover:bg-red-50"
+            aria-label="この担当者を消す"
+          >
+            削除
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...contacts, { name: "", method: "メール", value: "" }])}
+        className="rounded-lg border border-dashed border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+      >
+        + 担当者を追加
+      </button>
     </div>
   );
 }
