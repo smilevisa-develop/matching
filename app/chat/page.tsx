@@ -36,6 +36,9 @@ export default async function ChatPage() {
   const lang = await getChatLanguage(account.id);
   const messages = await loadChatMessages(lang, 500);
 
+  // ピン留めは担当者ごと
+  const pins = await prisma.chatPin.findMany({ where: { accountId: account.id }, select: { partnerId: true } });
+
   // メッセージテンプレートは全アカウント共通
   const templates = await prisma.messageTemplate.findMany({
     orderBy: { name: "asc" },
@@ -58,6 +61,7 @@ export default async function ChatPage() {
       }))}
       initialMessages={messages}
       initialLang={lang}
+      initialPinnedIds={pins.map((p) => p.partnerId)}
       templates={templates.map((t) => ({ id: t.id, name: t.name, content: t.content }))}
     />
   );

@@ -111,6 +111,9 @@ function needsTranslation(m: Message, lang: ChatLang) {
   return src !== lang;
 }
 
+const PIN_ICON =
+  "M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z";
+
 function Icon({ d, className = "h-5 w-5" }: { d: string; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -119,15 +122,18 @@ function Icon({ d, className = "h-5 w-5" }: { d: string; className?: string }) {
   );
 }
 
-export default function ChatClient({ partners, initialMessages, initialLang, templates }: {
+export default function ChatClient({ partners, initialMessages, initialLang, initialPinnedIds, templates }: {
   partners: Partner[];
   initialMessages: Message[];
   initialLang: ChatLang;
+  /** この担当者がピン留めしたトーク (一覧の上に固定) */
+  initialPinnedIds: number[];
   templates: Template[];
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messages, setMessages] = useState(initialMessages);
   const [lang, setLang] = useState<ChatLang>(initialLang);
+  const [pinned, setPinned] = useState<Set<number>>(() => new Set(initialPinnedIds));
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [panel, setPanel] = useState<"templates" | "shortcuts" | null>(null);
@@ -180,8 +186,14 @@ export default function ChatClient({ partners, initialMessages, initialLang, tem
           (v ?? "").toLowerCase().includes(keyword),
         );
       })
-      .sort((a, b) => lastTime(b.id) - lastTime(a.id) || a.name.localeCompare(b.name, "ja"));
-  }, [partners, search, unreadOnly, lastByPartner, unreadByPartner]);
+      // ピン留めしたトークを上に。その中と残りは、新しいメッセージ順
+      .sort(
+        (a, b) =>
+          Number(pinned.has(b.id)) - Number(pinned.has(a.id)) ||
+          lastTime(b.id) - lastTime(a.id) ||
+          a.name.localeCompare(b.name, "ja"),
+      );
+  }, [partners, search, unreadOnly, lastByPartner, unreadByPartner, pinned]);
 
   const selected = partners.find((p) => p.id === selectedId);
   const chat = useMemo(() => messages.filter((m) => m.partnerId === selectedId), [messages, selectedId]);
@@ -291,6 +303,28 @@ export default function ChatClient({ partners, initialMessages, initialLang, tem
     if (id !== selectedId) setUnreadMarker(null);
     setSelectedId(id);
     setPanel(null);
+  };
+
+  const togglePin = async (partnerId: number) => {
+    const next = !pinned.has(partnerId);
+    const apply = (on: boolean) =>
+      setPinned((cur) => {
+        const s = new Set(cur);
+        if (on) s.add(partnerId);
+        else s.delete(partnerId);
+        return s;
+      });
+    apply(next);
+    const res = await fetch("/api/chat/pins", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ partnerId, pinned: next }),
+    }).catch(() => null);
+    const data = await res?.json().catch(() => null);
+    if (!data?.ok) {
+      apply(!next);
+      alert(`ピン留めを${next ? "付け" : "外せ"}ませんでした: ${data?.error ?? "通信エラー"}`);
+    }
   };
 
   const changeLang = async (next: ChatLang) => {
@@ -411,10 +445,15 @@ export default function ChatClient({ partners, initialMessages, initialLang, tem
             const unread = unreadByPartner.get(p.id) ?? 0;
             const name = displayName(p);
             return (
-              <button
+              <div
                 key={p.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => selectPartner(p.id)}
-                className={`flex h-[90px] w-full items-center gap-3 px-4 text-left transition-colors ${
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") selectPartner(p.id);
+                }}
+                className={`group relative flex h-[90px] w-full cursor-pointer items-center gap-3 px-4 text-left transition-colors ${
                   selectedId === p.id ? "bg-[#EBEDF0]" : "hover:bg-[#F6F7F8]"
                 }`}
               >
@@ -427,6 +466,11 @@ export default function ChatClient({ partners, initialMessages, initialLang, tem
                         <span className="ml-1 font-normal">({p.lineGroupMemberCount})</span>
                       ) : null}
                     </p>
+                    {pinned.has(p.id) && (
+                      <span title="ピン留め中" className="shrink-0 text-[#8A8F98]">
+                        <Icon d={PIN_ICON} className="h-3.5 w-3.5" />
+                      </span>
+                    )}
                     {last && <span className="shrink-0 text-[12px] text-[#8A8F98]">{formatListTime(last.sentAt)}</span>}
                   </div>
                   <div className="mt-1 flex items-center gap-2">
@@ -436,9 +480,23 @@ export default function ChatClient({ partners, initialMessages, initialLang, tem
                     {unread > 0 && (
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: LINE_GREEN }} title={`未読 ${unread}件`} />
                     )}
+                    {/* カーソルを乗せたときだけ出す、ピン留めの付け外し */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void togglePin(p.id);
+                      }}
+                      title={pinned.has(p.id) ? "ピン留めを外す" : "ピン留め"}
+                      className={`hidden shrink-0 rounded p-1 group-hover:block hover:bg-black/5 ${
+                        pinned.has(p.id) ? "text-[#111]" : "text-[#8A8F98]"
+                      }`}
+                    >
+                      <Icon d={pinned.has(p.id) ? "M6 6l12 12M18 6 6 18" : PIN_ICON} className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
-              </button>
+              </div>
             );
           })}
           {sortedPartners.length === 0 && (
@@ -475,6 +533,16 @@ export default function ChatClient({ partners, initialMessages, initialLang, tem
                   </p>
                 ) : null}
               </div>
+              <button
+                onClick={() => void togglePin(selected.id)}
+                className={`flex items-center gap-1.5 rounded border px-3 py-1.5 text-[13px] font-medium hover:bg-[#F6F7F8] ${
+                  pinned.has(selected.id) ? "border-[#111] text-[#111]" : "border-[#D5D7DC] text-[#333]"
+                }`}
+                title={pinned.has(selected.id) ? "ピン留めを外す" : "このトークを一覧の上に固定する"}
+              >
+                <Icon d={PIN_ICON} className="h-4 w-4" />
+                {pinned.has(selected.id) ? "ピン留め中" : "ピン留め"}
+              </button>
               <div className="relative">
                 <button
                   onClick={() => setLangOpen((v) => !v)}
