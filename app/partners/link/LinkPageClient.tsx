@@ -27,6 +27,7 @@ type LinkedGroupEntry = {
 export default function LinkPageClient({
   partners,
   unlinkedLineGroups,
+  chatOnlyLineGroups,
   linkedLineGroups,
   unlinkedLine,
   unlinkedMessenger,
@@ -34,6 +35,8 @@ export default function LinkPageClient({
 }: {
   partners: PartnerOption[];
   unlinkedLineGroups: UnlinkedGroupEntry[];
+  /** パートナーではない (内定後のグループなど)。紐づけなしでチャットにだけ出す */
+  chatOnlyLineGroups: LinkedGroupEntry[];
   linkedLineGroups: LinkedGroupEntry[];
   unlinkedLine: LineEntry[];
   unlinkedMessenger: MessengerEntry[];
@@ -78,6 +81,22 @@ export default function LinkPageClient({
     router.refresh();
   };
 
+  // 「パートナーではない」(内定後のグループなど) の付け外し。ON のグループは配信に入らず、チャットにだけ出る
+  const setChatOnly = async (groupId: string, chatOnly: boolean) => {
+    const res = await fetch(`/api/line/groups/${encodeURIComponent(groupId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatOnly }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert(`変更失敗: ${data.error ?? "unknown"}`);
+      return;
+    }
+    alert(chatOnly ? "チャットに追加しました (一斉連絡には入りません)" : "チャットから外しました");
+    router.refresh();
+  };
+
   return (
     <div className="space-y-8">
       {/* === LINE グループ === */}
@@ -97,12 +116,45 @@ export default function LinkPageClient({
             lastSeen={entry.lastSeenAt}
             partners={partners}
             onLink={(partnerId) => linkGroup(entry.id, partnerId)}
+            onChatOnly={() => setChatOnly(entry.groupId, true)}
           />
         ))}
         {unlinkedLineGroups.length === 0 ? (
           <Empty text="未紐づけの LINE グループはありません (Bot がグループに招待されると自動で表示)" />
         ) : null}
       </Section>
+
+      {chatOnlyLineGroups.length > 0 ? (
+        <Section
+          title="パートナー以外のグループ (チャットのみ)"
+          sub="内定後のグループなど。チャット画面に表示されますが、一斉連絡には入りません"
+          badgeColor="bg-[#E0F2FE] text-[#075985] border-[#BAE6FD]"
+          count={chatOnlyLineGroups.length}
+          collapsible
+          defaultOpen={false}
+        >
+          {chatOnlyLineGroups.map((g) => (
+            <div key={g.id} className="flex items-center gap-4 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[var(--color-text-dark)] truncate">
+                  {g.groupName ?? "(名称不明)"}
+                  {g.memberCount ? (
+                    <span className="ml-2 text-[11px] text-gray-400">{g.memberCount} 名</span>
+                  ) : null}
+                </p>
+                <p className="mt-0.5 font-mono text-[10px] text-gray-400 truncate">{g.groupId}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChatOnly(g.groupId, false)}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+              >
+                チャットから外す
+              </button>
+            </div>
+          ))}
+        </Section>
+      ) : null}
 
       {linkedLineGroups.length > 0 ? (
         <Section
@@ -293,6 +345,7 @@ function GroupRow({
   lastSeen,
   partners,
   onLink,
+  onChatOnly,
 }: {
   label: string;
   id: string;
@@ -301,6 +354,8 @@ function GroupRow({
   lastSeen: string;
   partners: PartnerOption[];
   onLink: (partnerId: number) => void;
+  /** 「パートナーではない」: 紐づけなしでチャットにだけ出す */
+  onChatOnly: () => void;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   return (
@@ -330,6 +385,14 @@ function GroupRow({
         className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-primary-hover)]"
       >
         紐づけ
+      </button>
+      <button
+        type="button"
+        onClick={onChatOnly}
+        title="内定後のグループなど。一斉連絡には入れず、チャットにだけ表示する"
+        className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+      >
+        パートナーではない (チャットに追加)
       </button>
     </div>
   );

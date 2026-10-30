@@ -1,4 +1,7 @@
--- チャット画面: パートナーに紐づけていない LINE グループ (内定後のグループなど) もピン留めできるようにする
+-- チャット画面: パートナーではない LINE グループ (内定後のグループなど) を、紐づけなしでチャットにだけ出す・ピン留めできるようにする
+-- AlterTable
+ALTER TABLE "LineGroup" ADD COLUMN     "chatOnly" BOOLEAN NOT NULL DEFAULT false;
+
 -- AlterTable
 ALTER TABLE "ChatPin" ADD COLUMN     "lineGroupId" TEXT,
 ALTER COLUMN "partnerId" DROP NOT NULL;

@@ -4,8 +4,8 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, Fragment } from 
 import { CHAT_LANGUAGES, hasWords, type ChatLang } from "@/lib/chat-languages";
 
 /**
- * トーク (会話)。key は "p:<partnerId>" (パートナー) か "g:<groupId>" (パートナーに紐づけていない
- * LINE グループ = 内定後のグループなど)。後者はパートナーへの一斉連絡の対象には入らない。
+ * トーク (会話)。id は "p:<partnerId>" (パートナー) か "g:<groupId>" (パートナーではない
+ * LINE グループ = 内定後のグループなど。連絡先紐づけで追加)。後者はパートナーへの一斉連絡の対象には入らない。
  */
 type Conversation = {
   id: string;
@@ -305,7 +305,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
         const res = await fetch("/api/messages", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          // パートナーのトークは partnerId、紐づけなしのグループは groupId で既読にする
+          // パートナーのトークは partnerId、パートナーではないグループは groupId で既読にする
           body: JSON.stringify(
             selectedId.startsWith("p:") ? { partnerId: Number(selectedId.slice(2)) } : { groupId: selectedId.slice(2) },
           ),
@@ -374,7 +374,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
     }
     setSending(true);
     try {
-      // パートナーは send-partner、紐づけなしのグループ (内定後など) は send-group
+      // パートナーは send-partner、パートナーではないグループ (内定後など) は send-group
       const res =
         selected.kind === "partner"
           ? await fetch("/api/line/send-partner", {
@@ -528,7 +528,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
               {search || filter !== "all" ? "該当するトークがありません" : "トークがありません"}
               <br />
               <span className="text-[11px]">
-                連絡先が紐づいたパートナーと、Bot が入っている LINE グループが表示されます
+                連絡先が紐づいたパートナーと、連絡先紐づけで「パートナーではない」にした LINE グループが表示されます
               </span>
             </p>
           )}

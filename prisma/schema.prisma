@@ -434,6 +434,9 @@ model LineGroup {
   lastWebhookType String?
   /// 最終アクセス日時
   lastSeenAt      DateTime @default(now())
+  /// パートナーではないグループ (内定後のグループなど) を、パートナーに紐づけずにチャット画面にだけ出す。
+  /// 連絡先紐づけ画面の「パートナーではない」で ON にする。パートナーの一斉連絡の送信先には入らない
+  chatOnly        Boolean  @default(false)
   /// Bot がまだグループに在籍しているか (leave イベントで false に)
   isActive        Boolean  @default(true)
   chatPins        ChatPin[]

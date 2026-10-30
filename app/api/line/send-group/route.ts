@@ -1,5 +1,5 @@
 /**
- * パートナーに紐づけていない LINE グループ (内定後のグループなど) へ 1 件送る (チャット画面から)。
+ * パートナーではない LINE グループ (内定後のグループなど。LineGroup.chatOnly) へ 1 件送る (チャット画面から)。
  * パートナー宛ては send-partner。こちらは {{変数}} の展開も @All のメンションもしない
  * (内定者のグループで毎回全員に通知が飛ばないように)。
  * 本文: { groupId: string, message: string }
@@ -23,6 +23,9 @@ export async function POST(req: Request) {
     }
     if (group.partnerId) {
       return Response.json({ ok: false, error: "パートナーに紐づいたグループです。パートナーのトークから送ってください" }, { status: 400 });
+    }
+    if (!group.chatOnly) {
+      return Response.json({ ok: false, error: "チャットに追加していないグループです (連絡先紐づけで「パートナーではない」にしてください)" }, { status: 400 });
     }
 
     const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;

@@ -5,7 +5,7 @@ import {
   getChatLanguage,
   groupConvKey,
   loadChatMessages,
-  loadUnlinkedLineGroups,
+  loadChatOnlyLineGroups,
   partnerConvKey,
 } from "@/lib/chat-messages";
 import ChatClient from "./ChatClient";
@@ -38,9 +38,9 @@ export default async function ChatPage() {
     orderBy: { name: "asc" },
   });
 
-  // パートナーに紐づけていない LINE グループ (内定後のグループなど)。
+  // パートナーではない LINE グループ (内定後のグループなど。連絡先紐づけ画面で「パートナーではない」にしたもの)。
   // パートナーに紐づけると一斉連絡の送信先に入るので、紐づけないままチャットにだけ出す
-  const groups = await loadUnlinkedLineGroups();
+  const groups = await loadChatOnlyLineGroups();
 
   // 直近 1000 件 (古い順)。担当者の表示言語の訳つき
   const lang = await getChatLanguage(account.id);

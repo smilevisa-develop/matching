@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { reconcileMessagePersonLinks } from "@/lib/message-linking";
 import { getCurrentAccount } from "@/lib/auth";
-import { getChatLanguage, loadChatMessages, loadUnlinkedLineGroups } from "@/lib/chat-messages";
+import { getChatLanguage, loadChatMessages, loadChatOnlyLineGroups } from "@/lib/chat-messages";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +10,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
   if (searchParams.get("summary") === "true") {
-    // Partner / Person / 紐づけなしの LINE グループ (内定後のグループなど) の未読を合算
-    const groupIds = (await loadUnlinkedLineGroups()).map((g) => g.groupId);
+    // Partner / Person / パートナーではない LINE グループ (内定後のグループなど) の未読を合算
+    const groupIds = (await loadChatOnlyLineGroups()).map((g) => g.groupId);
     const unreadInboundCount = await prisma.message.count({
       where: {
         direction: "inbound",
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     return Response.json({ ok: true, unreadInboundCount });
   }
 
-  // 直近 1000 件 (パートナー宛 + 紐づけなしの LINE グループ)。ログイン中の担当者の表示言語の訳つき
+  // 直近 1000 件 (パートナー宛 + パートナーではない LINE グループ)。ログイン中の担当者の表示言語の訳つき
   const account = await getCurrentAccount();
   const lang = await getChatLanguage(account?.id);
   const messages = await loadChatMessages(lang, 1000);
@@ -40,7 +40,7 @@ export async function PATCH(req: Request) {
     const body = await req.json();
     const personId = body?.personId !== undefined ? Number(body.personId) : null;
     const partnerId = body?.partnerId !== undefined ? Number(body.partnerId) : null;
-    // パートナーに紐づけていない LINE グループ (内定後のグループなど) の既読
+    // パートナーではない LINE グループ (内定後のグループなど) の既読
     const groupId = typeof body?.groupId === "string" && body.groupId ? body.groupId : null;
     if (groupId) {
       const now = new Date();

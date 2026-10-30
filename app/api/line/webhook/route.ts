@@ -116,7 +116,7 @@ export async function POST(req: Request) {
         if (messageText) {
           const linked = await prisma.lineGroup.findUnique({
             where: { groupId },
-            select: { partnerId: true },
+            select: { partnerId: true, chatOnly: true },
           });
           // 送信者 (グループメンバー) の userId と表示名を取得
           const senderId = typeof source?.userId === "string" ? source.userId : null;
@@ -133,8 +133,8 @@ export async function POST(req: Request) {
               senderName,
             },
           });
-          // グループの発言はチャット画面に出る (パートナー紐づけなしの内定後グループも) ので、担当者の表示言語に訳しておく
-          after(() => translateForAllStaff(saved.id));
+          // チャット画面に出るグループ (パートナー紐づけ済み / パートナーではない内定後グループなど) だけ、担当者の表示言語に訳しておく
+          if (linked?.partnerId || linked?.chatOnly) after(() => translateForAllStaff(saved.id));
         }
         continue;
       }
