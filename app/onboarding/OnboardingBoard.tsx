@@ -205,8 +205,8 @@ export default function OnboardingBoard({
   const [pendingHold, setPendingHold] = useState<number | null>(null);
   const [pendingCancel, setPendingCancel] = useState<number | null>(null);
   const [pendingDecline, setPendingDecline] = useState<number | null>(null);
-  // 請求の列に入れるとき、入社日が無ければ聞く (入社日から請求のタスクを作るため)
-  const [pendingBilling, setPendingBilling] = useState<number | null>(null);
+  // 入社・請求の列に入れるとき、入社日が無ければ聞く (請求のタスクは入社日から作るため)
+  const [pendingJoin, setPendingJoin] = useState<{ id: number; stage: JoinStage } | null>(null);
   const [pendingSupport, setPendingSupport] = useState<number | null>(null);
 
   // 内定辞退にした人はボードから消す
@@ -265,7 +265,7 @@ export default function OnboardingBoard({
     if (stage === HOLD_STAGE) setPendingHold(card.id);
     else if (stage === CANCEL_STAGE) setPendingCancel(card.id);
     else if (stage === DECLINED_STAGE) setPendingDecline(card.id);
-    else if (stage === "billing" && !card.joinAt) setPendingBilling(card.id);
+    else if ((stage === "joined" || stage === "billing") && !card.joinAt) setPendingJoin({ id: card.id, stage });
     else if (stage === "support") setPendingSupport(card.id);
     else void save(card.id, { stage });
   };
@@ -301,7 +301,7 @@ export default function OnboardingBoard({
   const holdCard = cards.find((c) => c.id === pendingHold) ?? null;
   const cancelCard = cards.find((c) => c.id === pendingCancel) ?? null;
   const declineCard = cards.find((c) => c.id === pendingDecline) ?? null;
-  const billingCard = cards.find((c) => c.id === pendingBilling) ?? null;
+  const joinCard = cards.find((c) => c.id === pendingJoin?.id) ?? null;
   const supportCard = cards.find((c) => c.id === pendingSupport) ?? null;
 
   const dropHandlers = (stage: OnboardingStageId) => ({
@@ -491,13 +491,14 @@ export default function OnboardingBoard({
         />
       ) : null}
 
-      {billingCard ? (
+      {joinCard && pendingJoin ? (
         <JoinDateModal
-          card={billingCard}
-          onCancel={() => setPendingBilling(null)}
+          card={joinCard}
+          stage={pendingJoin.stage}
+          onCancel={() => setPendingJoin(null)}
           onConfirm={(joinAt) => {
-            setPendingBilling(null);
-            void save(billingCard.id, { stage: "billing", joinAt });
+            setPendingJoin(null);
+            void save(joinCard.id, { stage: pendingJoin.stage, joinAt });
           }}
         />
       ) : null}
@@ -1362,11 +1363,24 @@ function HoldReasonModal({ card, onCancel, onConfirm }: { card: OnboardingCard; 
   );
 }
 
-/** 請求の列に入れるときに入社日を聞くポップ (入社日から、翌月 1 日の請求などのタスクを作る) */
-function JoinDateModal({ card, onCancel, onConfirm }: { card: OnboardingCard; onCancel: () => void; onConfirm: (joinAt: string) => void }) {
+type JoinStage = "joined" | "billing";
+
+/** 入社・請求の列に入れるときに入社日を聞くポップ (請求に入れると、入社日から翌月 1 日の請求などのタスクを作る) */
+function JoinDateModal({
+  card,
+  stage,
+  onCancel,
+  onConfirm,
+}: {
+  card: OnboardingCard;
+  stage: JoinStage;
+  onCancel: () => void;
+  onConfirm: (joinAt: string) => void;
+}) {
   const [date, setDate] = useState(card.joinPlannedAt || todayYmd());
+  const label = stage === "billing" ? "請求" : "入社";
   return (
-    <ModalFrame title={`${card.personName} を請求に進める`} onCancel={onCancel}>
+    <ModalFrame title={`${card.personName} を${label}に進める`} onCancel={onCancel}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -1377,13 +1391,15 @@ function JoinDateModal({ card, onCancel, onConfirm }: { card: OnboardingCard; on
           入社日 (確定した日)
           <input type="date" autoFocus required value={date} onChange={(e) => setDate(e.target.value)} className={MODAL_INPUT} />
         </label>
-        <p className="mt-2 text-[11px] text-gray-500">入社の翌月 1 日に請求 → その月末に入金 → パートナーへの依頼・支払い、のタスクを作ります。</p>
+        {stage === "billing" ? (
+          <p className="mt-2 text-[11px] text-gray-500">入社の翌月 1 日に請求 → その月末に入金 → パートナーへの依頼・支払い、のタスクを作ります。</p>
+        ) : null}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onCancel} className={BTN_SUB}>
             やめる
           </button>
           <button type="submit" disabled={!date} className={BTN_MAIN}>
-            請求に進める
+            {label}に進める
           </button>
         </div>
       </form>
