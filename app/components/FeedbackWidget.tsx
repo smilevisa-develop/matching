@@ -110,8 +110,8 @@ export default function FeedbackWidget() {
     }
   };
 
-  // 一覧画面そのものではボタンを出さない
-  if (pathname.startsWith("/feedback")) return null;
+  // 一覧画面そのものと、チャット画面 (右下に送信ボタンがある) ではボタンを出さない
+  if (pathname.startsWith("/feedback") || pathname.startsWith("/chat")) return null;
 
   return (
     <>

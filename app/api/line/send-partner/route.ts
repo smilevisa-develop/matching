@@ -7,6 +7,7 @@
  *
  * (パス名は send-person との対称のために "line" 配下だが、実際は LINE / Messenger 両方扱う)
  */
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildLineTextMessage } from "@/lib/line-message";
 import {
@@ -16,6 +17,7 @@ import {
   URGENT_DEAL_STATUSES,
   type PartnerForBroadcast,
 } from "@/lib/broadcast-variables";
+import { translateForAllStaff } from "@/lib/chat-translate";
 
 /** 配信用の案件スナップショットを 1 回だけ取得 */
 async function loadDealSnapshot() {
@@ -103,7 +105,7 @@ export async function POST(req: Request) {
         );
       }
       const channel = linkedGroup ? "LINE-Group" : "LINE";
-      await prisma.message.create({
+      const saved = await prisma.message.create({
         data: {
           partnerId: partner.id,
           channel,
@@ -112,7 +114,9 @@ export async function POST(req: Request) {
           externalId: lineSendTo,
         },
       });
-      return Response.json({ ok: true, channel, content: expandedMessage });
+      // 他の担当者が自分の言語で読めるように訳しておく
+      after(() => translateForAllStaff(saved.id));
+      return Response.json({ ok: true, channel, content: expandedMessage, id: saved.id });
     }
 
     if (partner.messengerPsid) {
@@ -147,7 +151,7 @@ export async function POST(req: Request) {
           { status: 500 }
         );
       }
-      await prisma.message.create({
+      const saved = await prisma.message.create({
         data: {
           partnerId: partner.id,
           channel: "Messenger",
@@ -156,7 +160,8 @@ export async function POST(req: Request) {
           externalId: partner.messengerPsid,
         },
       });
-      return Response.json({ ok: true, channel: "Messenger", content: expandedMessage });
+      after(() => translateForAllStaff(saved.id));
+      return Response.json({ ok: true, channel: "Messenger", content: expandedMessage, id: saved.id });
     }
 
     return Response.json(

@@ -1,12 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { reconcileMessagePersonLinks } from "@/lib/message-linking";
 import { requireCurrentAccount } from "@/lib/auth";
+import { getChatLanguage, loadChatMessages } from "@/lib/chat-messages";
 import ChatClient from "./ChatClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function ChatPage() {
-  await requireCurrentAccount();
+  const account = await requireCurrentAccount();
   await reconcileMessagePersonLinks();
 
   // 連絡先 ID (LINE グループ / 個人 LINE / Messenger / WhatsApp) のいずれかが
@@ -31,13 +32,9 @@ export default async function ChatPage() {
     orderBy: { name: "asc" },
   });
 
-  // 直近 500 件を取得 (orderBy desc + 結果を時系列に並び替え)
-  const recentMessages = await prisma.message.findMany({
-    where: { partnerId: { not: null } },
-    orderBy: { sentAt: "desc" },
-    take: 500,
-  });
-  const messages = recentMessages.reverse(); // チャット表示用に古い順に
+  // 直近 500 件 (古い順)。担当者の表示言語の訳つき
+  const lang = await getChatLanguage(account.id);
+  const messages = await loadChatMessages(lang, 500);
 
   // メッセージテンプレートは全アカウント共通
   const templates = await prisma.messageTemplate.findMany({
@@ -59,16 +56,8 @@ export default async function ChatPage() {
         messengerPsid: p.messengerPsid,
         whatsappId: p.whatsappId,
       }))}
-      initialMessages={messages.map((m) => ({
-        id: m.id,
-        partnerId: m.partnerId,
-        channel: m.channel,
-        direction: m.direction,
-        content: m.content,
-        senderName: m.senderName,
-        sentAt: m.sentAt.toISOString(),
-        readAt: m.readAt?.toISOString() ?? null,
-      }))}
+      initialMessages={messages}
+      initialLang={lang}
       templates={templates.map((t) => ({ id: t.id, name: t.name, content: t.content }))}
     />
   );
