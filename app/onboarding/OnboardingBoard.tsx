@@ -261,7 +261,8 @@ export default function OnboardingBoard({
 
   /** 列へ移す。保留・キャンセル・サポートは先にポップを出す */
   const moveTo = (card: OnboardingCard, stage: OnboardingStageId) => {
-    if (card.stage === stage) return;
+    // 入社の列にいて入社日が空なら、同じ列に置き直しても入社日を聞く
+    if (card.stage === stage && !(stage === "joined" && !card.joinAt)) return;
     if (stage === HOLD_STAGE) setPendingHold(card.id);
     else if (stage === CANCEL_STAGE) setPendingCancel(card.id);
     else if (stage === DECLINED_STAGE) setPendingDecline(card.id);
@@ -615,6 +616,9 @@ function BoardCard({
       </div>
       <p className="mt-0.5 truncate text-xs text-gray-500">{[card.companyName, card.ownerName].filter(Boolean).join(" ・ ")}</p>
       <VisaBadge ymd={visaOf(card)} />
+      {(card.stage === "joined" || card.stage === "billing") && !card.joinAt ? (
+        <p className="mt-1 text-[11px] font-medium text-red-600">入社日 未入力</p>
+      ) : null}
       {next ? (
         <p className={`mt-1.5 line-clamp-2 text-xs ${
             card.stage === HOLD_STAGE ? "font-medium text-amber-700" : card.stage === CANCEL_STAGE ? "font-medium text-red-700" : "text-gray-700"
