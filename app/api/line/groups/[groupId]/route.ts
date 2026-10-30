@@ -1,5 +1,7 @@
 /**
  * LINE グループの紐づけ / 解除 / 削除。
+ * chatOnly: true で「パートナーではない」(内定後のグループなど) にして、紐づけなしでチャット画面にだけ出す。
+ * パートナーに紐づけると chatOnly は外れる (パートナーのトークとして出る)。
  */
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
@@ -11,7 +13,20 @@ export async function PATCH(
   try {
     await requireApiAccount();
     const { groupId } = await params;
-    const body = (await req.json()) as { partnerId?: number | null; groupName?: string | null };
+    const body = (await req.json()) as {
+      partnerId?: number | null;
+      groupName?: string | null;
+      chatOnly?: boolean;
+    };
+
+    // 「パートナーではない」の付け外しだけ (パートナーの紐づけは外す)
+    if (typeof body.chatOnly === "boolean") {
+      const updated = await prisma.lineGroup.update({
+        where: { groupId },
+        data: { chatOnly: body.chatOnly, ...(body.chatOnly ? { partnerId: null } : {}) },
+      });
+      return Response.json({ ok: true, group: updated });
+    }
 
     const nextPartnerId =
       body.partnerId === null || body.partnerId === undefined ? null : Number(body.partnerId);
@@ -20,6 +35,7 @@ export async function PATCH(
       where: { groupId },
       data: {
         partnerId: nextPartnerId,
+        ...(nextPartnerId ? { chatOnly: false } : {}),
         ...(body.groupName !== undefined ? { groupName: body.groupName } : {}),
       },
     });

@@ -25,7 +25,8 @@ export default async function PartnerLinkPage() {
   const unlinkedLine = lineProfiles.filter((p) => !linkedLineIds.has(p.lineUserId));
   const unlinkedMessenger = messengerProfiles.filter((p) => !linkedPsids.has(p.psid));
   const unlinkedWhatsapp = whatsappProfiles.filter((p) => !linkedWaIds.has(p.waId));
-  const unlinkedLineGroups = lineGroups.filter((g) => !g.partnerId);
+  const unlinkedLineGroups = lineGroups.filter((g) => !g.partnerId && !g.chatOnly);
+  const chatOnlyLineGroups = lineGroups.filter((g) => !g.partnerId && g.chatOnly);
   const linkedLineGroups = lineGroups.filter((g) => g.partnerId);
 
   return (
@@ -35,6 +36,7 @@ export default async function PartnerLinkPage() {
         <p className="mt-1 text-sm text-gray-500">
           パートナー会社の LINE グループ / 個人 LINE / Messenger を紐づけます。
           配信時はパートナーに紐づいた LINE グループへ自動送信されます (グループが無ければ個人 LINE)。
+          内定後のグループなどパートナーではないグループは「パートナーではない」を押すと、配信には入れずにチャットにだけ表示されます。
         </p>
       </div>
 
@@ -47,6 +49,13 @@ export default async function PartnerLinkPage() {
           memberCount: g.memberCount,
           lastMessageText: g.lastMessageText,
           lastSeenAt: g.lastSeenAt.toISOString(),
+        }))}
+        chatOnlyLineGroups={chatOnlyLineGroups.map((g) => ({
+          id: g.id,
+          groupId: g.groupId,
+          groupName: g.groupName,
+          memberCount: g.memberCount,
+          partnerName: null,
         }))}
         linkedLineGroups={linkedLineGroups.map((g) => ({
           id: g.id,

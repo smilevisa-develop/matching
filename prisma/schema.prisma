@@ -434,8 +434,12 @@ model LineGroup {
   lastWebhookType String?
   /// 最終アクセス日時
   lastSeenAt      DateTime @default(now())
+  /// パートナーではないグループ (内定後のグループなど) を、パートナーに紐づけずにチャット画面にだけ出す。
+  /// 連絡先紐づけ画面の「パートナーではない」で ON にする。パートナーの一斉連絡の送信先には入らない
+  chatOnly        Boolean  @default(false)
   /// Bot がまだグループに在籍しているか (leave イベントで false に)
   isActive        Boolean  @default(true)
+  chatPins        ChatPin[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
@@ -486,15 +490,20 @@ model Message {
 }
 
 /// チャット画面でトークを一覧の上に固定する (担当者ごと。LINE のピン留めと同じ)
+/// パートナーのトークは partnerId、パートナーに紐づけていない LINE グループ (内定後のグループなど) は lineGroupId
 model ChatPin {
-  id        Int          @id @default(autoincrement())
-  accountId Int
-  account   StaffAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  partnerId Int
-  partner   Partner      @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  createdAt DateTime     @default(now())
+  id          Int          @id @default(autoincrement())
+  accountId   Int
+  account     StaffAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  partnerId   Int?
+  partner     Partner?     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  /// LINE 側の group ID
+  lineGroupId String?
+  lineGroup   LineGroup?   @relation(fields: [lineGroupId], references: [groupId], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
 
   @@unique([accountId, partnerId])
+  @@unique([accountId, lineGroupId])
 }
 
 /// チャット画面の訳文 (担当者の表示言語ごとに 1 度だけ作って使い回す)
