@@ -1189,7 +1189,7 @@ model FeedbackReport {
   @@index([status, createdAt])
 }
 
-/// 重複していた候補者をまとめた結果の、担当者による確認 (一時的。/duplicates)。まとめた中身は lib/duplicate-merge-records.ts
+/// 重複していた候補者をまとめた結果の、担当者による確認の記録 (2026/10 に確認済み。確認ページは外した)。
 model DuplicateMergeReview {
   id         Int      @id @default(autoincrement())
   /// 残した候補者の ID (まとめた組を表す)
