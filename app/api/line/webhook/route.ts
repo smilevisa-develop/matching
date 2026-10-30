@@ -1,7 +1,9 @@
 export const runtime = "nodejs";
 
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { reconcileMessagePersonLinks } from "@/lib/message-linking";
+import { translateForAllStaff } from "@/lib/chat-translate";
 
 export async function GET() {
   return new Response("LINE webhook endpoint is alive", { status: 200 });
@@ -120,7 +122,7 @@ export async function POST(req: Request) {
           const senderId = typeof source?.userId === "string" ? source.userId : null;
           const senderName =
             senderId && token ? await fetchGroupMemberName(groupId, senderId, token) : null;
-          await prisma.message.create({
+          const saved = await prisma.message.create({
             data: {
               partnerId: linked?.partnerId ?? null,
               channel: "LINE",
@@ -131,6 +133,8 @@ export async function POST(req: Request) {
               senderName,
             },
           });
+          // チャット画面に出るもの (パートナー紐づけ済み) だけ、担当者の表示言語に訳しておく
+          if (saved.partnerId) after(() => translateForAllStaff(saved.id));
         }
         continue;
       }
@@ -162,7 +166,7 @@ export async function POST(req: Request) {
       if (messageText) {
         const partner = await prisma.partner.findFirst({ where: { lineUserId } });
         const person = partner ? null : await prisma.person.findFirst({ where: { lineUserId } });
-        await prisma.message.create({
+        const saved = await prisma.message.create({
           data: {
             partnerId: partner?.id ?? null,
             personId: person?.id ?? null,
@@ -172,6 +176,7 @@ export async function POST(req: Request) {
             externalId: lineUserId,
           },
         });
+        if (saved.partnerId) after(() => translateForAllStaff(saved.id));
       }
     }
 

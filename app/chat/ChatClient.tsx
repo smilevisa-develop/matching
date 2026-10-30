@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, Fragment } from "react";
+import { CHAT_LANGUAGES, hasWords, type ChatLang } from "@/lib/chat-languages";
 
 type Partner = {
   id: number;
@@ -24,32 +25,15 @@ type Message = {
   senderName: string | null;
   sentAt: string;
   readAt: string | null;
+  /** 本文の言語 (AI 判定。未判定は null) */
+  sourceLang: string | null;
+  /** 担当者の表示言語への訳 (同じ言語・未作成なら null) */
+  translation: string | null;
 };
 type Template = { id: number; name: string; content: string };
 
-const CHANNEL_COLOR: Record<string, string> = {
-  "LINE-Group": "bg-emerald-100 text-emerald-700",
-  LINE: "bg-green-100 text-green-700",
-  Messenger: "bg-blue-100 text-blue-700",
-  mail: "bg-yellow-100 text-yellow-700",
-  WhatsApp: "bg-emerald-100 text-emerald-700",
-};
-
-function formatDateLabel(value: string) {
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function Avatar({ name, className }: { name: string; className: string }) {
-  return (
-    <div className={`${className} flex items-center justify-center bg-[var(--color-primary)] text-white font-bold`}>
-      {name[0]}
-    </div>
-  );
-}
+/** LINE の配色 */
+const LINE_GREEN = "#06C755";
 
 /** パートナー向けショートカット文言 */
 const SHORTCUTS: { label: string; text: string }[] = [
@@ -60,149 +44,277 @@ const SHORTCUTS: { label: string; text: string }[] = [
   { label: "お礼", text: "ご紹介いただきありがとうございます。後ほど詳細を確認させていただきます。" },
 ];
 
-export default function ChatClient({ partners, initialMessages, templates }: {
+const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** 一覧の時刻: 今日は 10:41、昨日は「昨日」、それ以前は 10/26 */
+function formatListTime(value: string) {
+  const d = new Date(value);
+  const days = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86400000);
+  if (days === 0) return formatTime(value);
+  if (days === 1) return "昨日";
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/** 日付の区切り: 今日 / 昨日 / 10/26(月) */
+function formatDayLabel(value: string) {
+  const d = new Date(value);
+  const days = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86400000);
+  if (days === 0) return "今日";
+  if (days === 1) return "昨日";
+  const year = d.getFullYear() !== new Date().getFullYear() ? `${d.getFullYear()}/` : "";
+  return `${year}${d.getMonth() + 1}/${d.getDate()}(${WEEKDAYS[d.getDay()]})`;
+}
+
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** かなを含めば日本語 (lib/translate-ja の looksJapanese と同じ判定) */
+function looksJapanese(s: string) {
+  return /[぀-ヿ]/.test(s);
+}
+
+/** 名前から決まる色 (LINE の既定アイコン風に、人ごとに色を変える) */
+const AVATAR_COLORS = ["#F7C948", "#FF6B5B", "#4FC08D", "#5AA9F7", "#A77BF3", "#8D6E63", "#3CC4C0", "#F28AB2"];
+function avatarColor(name: string) {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function Avatar({ name, size }: { name: string; size: number }) {
+  // 【MM】 や [INDO] のような頭の括弧は飛ばして、名前の 1 文字目を出す
+  const label = name.replace(/^[\[【(（].*?[\]】)）]\s*/, "").trim() || name;
+  return (
+    <div
+      className="flex shrink-0 select-none items-center justify-center rounded-full font-semibold text-white"
+      style={{ width: size, height: size, background: avatarColor(name), fontSize: Math.round(size * 0.4) }}
+    >
+      {[...label][0] ?? "?"}
+    </div>
+  );
+}
+
+/** 会話一覧の表示名。LINE グループはグループ名を優先 */
+function displayName(p: Partner) {
+  return p.lineGroupName || p.name;
+}
+
+/** 担当者の表示言語に訳す必要があるか */
+function needsTranslation(m: Message, lang: ChatLang) {
+  if (m.translation || !hasWords(m.content)) return false;
+  const src = m.sourceLang ?? (looksJapanese(m.content) ? "ja" : null);
+  return src !== lang;
+}
+
+function Icon({ d, className = "h-5 w-5" }: { d: string; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d={d} />
+    </svg>
+  );
+}
+
+export default function ChatClient({ partners, initialMessages, initialLang, templates }: {
   partners: Partner[];
   initialMessages: Message[];
+  initialLang: ChatLang;
   templates: Template[];
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messages, setMessages] = useState(initialMessages);
+  const [lang, setLang] = useState<ChatLang>(initialLang);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [reloading, setReloading] = useState(false);
+  const [panel, setPanel] = useState<"templates" | "shortcuts" | null>(null);
   const [search, setSearch] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
+  /** 開いた時点で未読だった最初のメッセージ (「ここから未読メッセージ」の位置) */
+  const [unreadMarker, setUnreadMarker] = useState<{ partnerId: number; messageId: number } | null>(null);
+  /** いま訳を作っているメッセージ */
+  const [translating, setTranslating] = useState<Set<number>>(new Set());
+  const scrollRef = useRef<HTMLDivElement>(null);
   const markingReadRef = useRef<number | null>(null);
+  /** 訳を頼んだメッセージ (同じものを何度も頼まない。言語を変えたら空にする) */
+  const requestedRef = useRef<Set<number>>(new Set());
+  /** 一番下を見ているか (見ているときだけ新着を追いかける) */
+  const stickToBottomRef = useRef(true);
 
-  const getLastMessage = (partnerId: number) =>
-    messages
-      .filter((message) => message.partnerId === partnerId)
-      .sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime())
-      .at(-1);
-
-  const getUnreadCount = (partnerId: number) =>
-    messages.filter(
-      (message) =>
-        message.partnerId === partnerId &&
-        message.direction === "inbound" &&
-        !message.readAt
-    ).length;
-
-  const filteredPartners = partners.filter((partner) => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return true;
-
-    const lastMessage = getLastMessage(partner.id);
-    return (
-      partner.name.toLowerCase().includes(keyword) ||
-      (partner.contactName ?? "").toLowerCase().includes(keyword) ||
-      (partner.country ?? "").toLowerCase().includes(keyword) ||
-      lastMessage?.content.toLowerCase().includes(keyword)
-    );
-  });
-
-  const sortedPartners = [...filteredPartners].sort((a, b) => {
-    const lastMessageA = getLastMessage(a.id);
-    const lastMessageB = getLastMessage(b.id);
-    const lastTimeA = lastMessageA ? new Date(lastMessageA.sentAt).getTime() : 0;
-    const lastTimeB = lastMessageB ? new Date(lastMessageB.sentAt).getTime() : 0;
-
-    if (lastTimeA !== lastTimeB) {
-      return lastTimeB - lastTimeA;
+  const lastByPartner = useMemo(() => {
+    const map = new Map<number, Message>();
+    for (const m of messages) {
+      if (m.partnerId == null) continue;
+      const prev = map.get(m.partnerId);
+      if (!prev || new Date(m.sentAt) >= new Date(prev.sentAt)) map.set(m.partnerId, m);
     }
+    return map;
+  }, [messages]);
 
-    return a.name.localeCompare(b.name, "ja");
-  });
+  const unreadByPartner = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const m of messages) {
+      if (m.partnerId == null || m.direction !== "inbound" || m.readAt) continue;
+      map.set(m.partnerId, (map.get(m.partnerId) ?? 0) + 1);
+    }
+    return map;
+  }, [messages]);
+
+  const sortedPartners = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    const lastTime = (id: number) => {
+      const last = lastByPartner.get(id);
+      return last ? new Date(last.sentAt).getTime() : 0;
+    };
+    return partners
+      .filter((p) => {
+        if (unreadOnly && !unreadByPartner.get(p.id)) return false;
+        if (!keyword) return true;
+        const last = lastByPartner.get(p.id);
+        return [p.name, p.lineGroupName, p.contactName, p.country, last?.content, last?.translation].some((v) =>
+          (v ?? "").toLowerCase().includes(keyword),
+        );
+      })
+      .sort((a, b) => lastTime(b.id) - lastTime(a.id) || a.name.localeCompare(b.name, "ja"));
+  }, [partners, search, unreadOnly, lastByPartner, unreadByPartner]);
 
   const selected = partners.find((p) => p.id === selectedId);
-  const chat = messages.filter((m) => m.partnerId === selectedId);
+  const chat = useMemo(() => messages.filter((m) => m.partnerId === selectedId), [messages, selectedId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chat.length, selectedId]);
-
-  useEffect(() => {
-    if (selectedId && sortedPartners.some((partner) => partner.id === selectedId)) {
-      return;
-    }
+    if (selectedId && partners.some((p) => p.id === selectedId)) return;
     setSelectedId(sortedPartners[0]?.id ?? null);
-  }, [selectedId, sortedPartners]);
+  }, [selectedId, partners, sortedPartners]);
+
+  // 会話を開いたときは一番下へ (アニメーションなし)
+  useLayoutEffect(() => {
+    stickToBottomRef.current = true;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [selectedId]);
+
+  // 新しいメッセージや訳が届いたら、下を見ていたときだけ追いかける
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [chat]);
 
   const reload = async () => {
-    setReloading(true);
-    try {
-      const res = await fetch("/api/messages");
-      const data = await res.json();
-      if (data.ok) setMessages(data.messages);
-    } finally {
-      setReloading(false);
-    }
+    const res = await fetch("/api/messages");
+    const data = await res.json().catch(() => null);
+    if (data?.ok) setMessages(data.messages);
   };
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      void reload();
-    }, 8000);
-
-    const onFocus = () => {
-      void reload();
-    };
-
+    const intervalId = window.setInterval(() => void reload(), 8000);
+    const onFocus = () => void reload();
     window.addEventListener("focus", onFocus);
-
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", onFocus);
     };
   }, []);
 
+  // 開いている会話で訳が無いもの (過去分・失敗分) を、直近 60 件まで訳してもらう
+  useEffect(() => {
+    const ids = chat
+      .filter((m) => needsTranslation(m, lang) && !requestedRef.current.has(m.id))
+      .slice(-60)
+      .map((m) => m.id);
+    if (ids.length === 0) return;
+    ids.forEach((id) => requestedRef.current.add(id));
+    setTranslating((cur) => new Set([...cur, ...ids]));
+    const requestLang = lang;
+    void (async () => {
+      try {
+        const res = await fetch("/api/chat/translations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!data?.ok || data.lang !== requestLang) return;
+        const translations = data.translations as Record<string, string>;
+        const sourceLangs = data.sourceLangs as Record<string, string>;
+        setMessages((cur) =>
+          cur.map((m) =>
+            translations[m.id] || sourceLangs[m.id]
+              ? { ...m, translation: translations[m.id] ?? m.translation, sourceLang: sourceLangs[m.id] ?? m.sourceLang }
+              : m,
+          ),
+        );
+      } finally {
+        setTranslating((cur) => {
+          const next = new Set(cur);
+          ids.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
+    })();
+  }, [chat, lang]);
+
+  // 開いた会話を既読にする (未読の先頭は「ここから未読メッセージ」用に覚えておく)
   useEffect(() => {
     if (!selectedId) return;
+    const unread = messages.filter((m) => m.partnerId === selectedId && m.direction === "inbound" && !m.readAt);
+    if (unread.length === 0 || markingReadRef.current === selectedId) return;
 
-    const unreadMessages = messages.filter(
-      (message) =>
-        message.partnerId === selectedId &&
-        message.direction === "inbound" &&
-        !message.readAt
-    );
-
-    if (unreadMessages.length === 0 || markingReadRef.current === selectedId) return;
-
+    setUnreadMarker((cur) => (cur?.partnerId === selectedId ? cur : { partnerId: selectedId, messageId: unread[0].id }));
     const markRead = async () => {
       markingReadRef.current = selectedId;
       const readAt = new Date().toISOString();
-
       setMessages((current) =>
-        current.map((message) =>
-          message.partnerId === selectedId &&
-          message.direction === "inbound" &&
-          !message.readAt
-            ? { ...message, readAt }
-            : message
-        )
+        current.map((m) =>
+          m.partnerId === selectedId && m.direction === "inbound" && !m.readAt ? { ...m, readAt } : m,
+        ),
       );
-
       try {
         const res = await fetch("/api/messages", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ partnerId: selectedId }),
         });
-
-        if (!res.ok) {
-          await reload();
-        }
+        if (!res.ok) await reload();
       } finally {
         markingReadRef.current = null;
       }
     };
-
     void markRead();
   }, [selectedId, messages]);
 
+  const selectPartner = (id: number) => {
+    if (id !== selectedId) setUnreadMarker(null);
+    setSelectedId(id);
+    setPanel(null);
+  };
+
+  const changeLang = async (next: ChatLang) => {
+    setLangOpen(false);
+    if (next === lang) return;
+    const res = await fetch("/api/chat/language", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lang: next }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!data?.ok) {
+      alert(`表示言語を変えられませんでした: ${data?.error ?? res.status}`);
+      return;
+    }
+    requestedRef.current = new Set();
+    setLang(next);
+    // 前の言語の訳を消してから、新しい言語の訳を読み直す
+    setMessages((cur) => cur.map((m) => ({ ...m, translation: null })));
+    await reload();
+  };
+
   const send = async () => {
-    if (!input.trim() || !selected) return;
+    if (!input.trim() || !selected || sending) return;
     if (!selected.lineGroupId && !selected.lineUserId && !selected.messengerPsid) {
       alert("このパートナーには LINE グループ / 個人 LINE / Messenger ID が登録されていません");
       return;
@@ -216,10 +328,11 @@ export default function ChatClient({ partners, initialMessages, templates }: {
       });
       const data = await res.json();
       if (data.ok) {
+        stickToBottomRef.current = true;
         setMessages((prev) => [
           ...prev,
           {
-            id: Date.now(),
+            id: data.id ?? Date.now(),
             partnerId: selected.id,
             channel: data.channel ?? selected.channel ?? "LINE",
             direction: "outbound",
@@ -228,9 +341,12 @@ export default function ChatClient({ partners, initialMessages, templates }: {
             senderName: null,
             sentAt: new Date().toISOString(),
             readAt: null,
+            sourceLang: null,
+            translation: null,
           },
         ]);
         setInput("");
+        setPanel(null);
       } else {
         alert(`送信失敗: ${data.error}`);
       }
@@ -239,217 +355,302 @@ export default function ChatClient({ partners, initialMessages, templates }: {
     }
   };
 
-  const applyTemplate = (content: string) => {
-    setInput(content);
-    setShowTemplates(false);
-  };
+  const langLabel = CHAT_LANGUAGES.find((l) => l.code === lang)?.label ?? "日本語";
+  const panelItems =
+    panel === "templates"
+      ? templates.map((t) => ({ key: `t${t.id}`, label: t.name, text: t.content }))
+      : SHORTCUTS.map((s) => ({ key: s.label, label: s.label, text: s.text }));
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* 左: パートナー一覧 */}
-      <div className="w-[360px] border-r border-gray-200 bg-white flex flex-col">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-          <span className="font-semibold text-sm text-[var(--color-text-dark)]">パートナーチャット</span>
-          <button
-            onClick={reload}
-            disabled={reloading}
-            className="text-xs text-[var(--color-primary)] hover:underline disabled:opacity-50"
-          >
-            {reloading ? "読込中..." : "メッセージ読み込み"}
-          </button>
-        </div>
-        <div className="border-b border-gray-100 px-4 py-3">
+    <div
+      className="flex h-screen overflow-hidden bg-white text-[#111]"
+      style={{ fontFamily: '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", sans-serif' }}
+    >
+      {/* 左: トーク一覧 */}
+      <div className="flex w-[360px] shrink-0 flex-col border-r border-[#E5E6EA]">
+        <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-[#E5E6EA] px-3">
+          <div className="relative">
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[15px] text-[#111] hover:bg-[#F2F3F5]"
+            >
+              <Icon d="M4 7h16M4 12h16M4 17h16" className="h-4 w-4 text-[#555]" />
+              {unreadOnly ? "未読" : "すべて"}
+            </button>
+            {filterOpen && (
+              <div className="absolute left-0 top-full z-20 mt-1 w-32 overflow-hidden rounded-lg border border-[#E5E6EA] bg-white py-1 shadow-lg">
+                {[
+                  { v: false, label: "すべて" },
+                  { v: true, label: "未読" },
+                ].map((o) => (
+                  <button
+                    key={o.label}
+                    onClick={() => {
+                      setUnreadOnly(o.v);
+                      setFilterOpen(false);
+                    }}
+                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-[#F2F3F5] ${unreadOnly === o.v ? "font-semibold" : ""}`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <input
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="パートナー名 / 国 / 担当者で検索"
-            className="w-full rounded-xl border border-gray-200 bg-[var(--color-light)] px-4 py-2.5 text-sm text-[var(--color-text-dark)] outline-none transition focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10"
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="検索"
+            className="min-w-0 flex-1 rounded-md border border-[#D5D7DC] bg-white px-3 py-2 text-[14px] outline-none placeholder:text-[#A4A8B0] focus:border-[#B8BCC4]"
           />
         </div>
+
         <div className="flex-1 overflow-y-auto">
           {sortedPartners.map((p) => {
-            const lastMsg = getLastMessage(p.id);
-            const unreadCount = getUnreadCount(p.id);
+            const last = lastByPartner.get(p.id);
+            const unread = unreadByPartner.get(p.id) ?? 0;
+            const name = displayName(p);
             return (
               <button
                 key={p.id}
-                onClick={() => setSelectedId(p.id)}
-                className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${
-                  selectedId === p.id ? "bg-[var(--color-light)] border-l-2 border-l-[var(--color-primary)]" : ""
+                onClick={() => selectPartner(p.id)}
+                className={`flex h-[90px] w-full items-center gap-3 px-4 text-left transition-colors ${
+                  selectedId === p.id ? "bg-[#EBEDF0]" : "hover:bg-[#F6F7F8]"
                 }`}
               >
-                <div className="flex items-start gap-3">
-                  <Avatar name={p.name} className="h-10 w-10 shrink-0 rounded-full text-xs" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex items-center gap-1.5">
-                        <p className="text-sm font-medium text-[var(--color-text-dark)] truncate">{p.name}</p>
-                        {p.lineGroupId ? (
-                          <span
-                            title={`LINE グループ${p.lineGroupMemberCount ? ` (${p.lineGroupMemberCount}名)` : ""}`}
-                            className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700"
-                          >
-                            G{p.lineGroupMemberCount ? `·${p.lineGroupMemberCount}` : ""}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {lastMsg && (
-                          <span className="text-[11px] text-gray-400">
-                            {formatDateLabel(lastMsg.sentAt)}
-                          </span>
-                        )}
-                        {unreadCount > 0 && (
-                          <span className="min-w-5 rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-center text-[11px] font-semibold text-white">
-                            {unreadCount}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-gray-500 truncate">
-                      {p.country ?? ""}{p.contactName ? ` ・ ${p.contactName}` : ""}
+                <Avatar name={name} size={48} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-[#111]">
+                      {name}
+                      {p.lineGroupId && p.lineGroupMemberCount ? (
+                        <span className="ml-1 font-normal">({p.lineGroupMemberCount})</span>
+                      ) : null}
                     </p>
-                    <p className="mt-1 text-xs text-gray-400 truncate">{lastMsg?.content ?? "メッセージなし"}</p>
+                    {last && <span className="shrink-0 text-[12px] text-[#8A8F98]">{formatListTime(last.sentAt)}</span>}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className="min-w-0 flex-1 truncate text-[13px] text-[#5D636C]">
+                      {last ? last.translation ?? last.content : "メッセージなし"}
+                    </p>
+                    {unread > 0 && (
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: LINE_GREEN }} title={`未読 ${unread}件`} />
+                    )}
                   </div>
                 </div>
               </button>
             );
           })}
           {sortedPartners.length === 0 && (
-            <p className="p-4 text-sm text-gray-400 text-center">
-              該当パートナーがいません<br />
+            <p className="p-6 text-center text-sm text-[#8A8F98]">
+              {search || unreadOnly ? "該当するトークがありません" : "トークがありません"}
+              <br />
               <span className="text-[11px]">LINE グループ / 個人 LINE / Messenger ID が紐づいたパートナーのみ表示されます</span>
             </p>
           )}
         </div>
       </div>
 
-      {/* 右: チャット画面 */}
-      <div className="flex-1 flex flex-col bg-[var(--color-light)]">
+      {/* 右: トーク画面 */}
+      <div className="flex min-w-0 flex-1 flex-col">
         {selected ? (
           <>
-            {/* ヘッダー */}
-            <div className="bg-white border-b border-gray-200 px-5 py-3 flex items-center gap-3">
-              <Avatar name={selected.name} className="h-11 w-11 rounded-full" />
+            <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-[#E5E6EA] px-4">
+              <Avatar name={displayName(selected)} size={36} />
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-[var(--color-text-dark)] truncate">{selected.name}</p>
-                <div className="mt-0.5 flex items-center gap-2 flex-wrap">
-                  {selected.country ? (
-                    <span className="text-xs text-gray-500">{selected.country}</span>
+                <p className="truncate text-[18px] text-[#111]">
+                  {displayName(selected)}
+                  {selected.lineGroupId && selected.lineGroupMemberCount ? (
+                    <span className="ml-0.5 text-[15px]">({selected.lineGroupMemberCount})</span>
                   ) : null}
-                  {selected.contactName ? (
-                    <span className="text-xs text-gray-500">担当: {selected.contactName}</span>
-                  ) : null}
-                  {selected.lineGroupId ? (
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CHANNEL_COLOR["LINE-Group"]}`}>
-                      LINEグループ
-                      {selected.lineGroupMemberCount ? ` (${selected.lineGroupMemberCount}名)` : ""}
-                    </span>
-                  ) : selected.channel ? (
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CHANNEL_COLOR[selected.channel] ?? "bg-gray-100 text-gray-600"}`}>
-                      {selected.channel}
-                    </span>
-                  ) : null}
-                </div>
-                {selected.lineGroupName ? (
-                  <p className="mt-0.5 text-[11px] text-gray-400 truncate">
-                    {selected.lineGroupName}
+                </p>
+                {(selected.lineGroupName && selected.lineGroupName !== selected.name) || selected.contactName ? (
+                  <p className="-mt-0.5 truncate text-[11px] text-[#8A8F98]">
+                    {[
+                      selected.lineGroupName && selected.lineGroupName !== selected.name ? selected.name : null,
+                      selected.contactName ? `担当: ${selected.contactName}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" ・ ")}
                   </p>
                 ) : null}
               </div>
-            </div>
-
-            {/* メッセージ一覧 */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-              {chat.length === 0 && (
-                <p className="text-center text-sm text-gray-400 mt-10">メッセージはありません</p>
-              )}
-              {chat.map((m) => (
-                <div key={m.id} className={`flex flex-col ${m.direction === "outbound" ? "items-end" : "items-start"}`}>
-                  {/* グループチャットなどで送信者名がある場合は吹き出しの上に表示 */}
-                  {m.direction === "inbound" && m.senderName ? (
-                    <p className="text-[11px] text-gray-500 mb-0.5 ml-2 font-medium">{m.senderName}</p>
-                  ) : null}
-                  <div className={`max-w-xs px-4 py-2 rounded-2xl text-sm shadow-sm ${
-                    m.direction === "outbound"
-                      ? "bg-[var(--color-primary)] text-white rounded-br-sm"
-                      : "bg-white text-[var(--color-text-dark)] border border-gray-200 rounded-bl-sm"
-                  }`}>
-                    <p className="whitespace-pre-wrap">{m.content}</p>
-                    <p className={`text-xs mt-1 ${m.direction === "outbound" ? "text-blue-200" : "text-gray-400"}`}>
-                      {new Date(m.sentAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
-                      {m.direction === "outbound" && " · 送信済み"}
-                      {m.direction === "inbound" && m.readAt && " · 確認済み"}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              <div ref={bottomRef} />
-            </div>
-
-            {/* ショートカットボタン (パートナー向け) */}
-            <div className="bg-white border-t border-gray-100 px-4 py-2 flex gap-2 overflow-x-auto">
               <button
-                onClick={() => setShowTemplates(!showTemplates)}
-                className="shrink-0 text-xs border border-[var(--color-primary)] text-[var(--color-primary)] px-3 py-1.5 rounded-full hover:bg-[var(--color-light)]"
+                onClick={() => window.dispatchEvent(new Event("feedback:open"))}
+                className="flex items-center gap-1.5 rounded border border-[#D5D7DC] px-3 py-1.5 text-[13px] font-medium text-[#333] hover:bg-[#F6F7F8]"
+                title="使いにくいところ・おかしいところ・こうしたいことを送る"
               >
-                テンプレート
+                <Icon d="M4 5h16v11H9l-5 4z" className="h-4 w-4" />
+                修正依頼
               </button>
-              {SHORTCUTS.map((s) => (
+              <div className="relative">
                 <button
-                  key={s.label}
-                  onClick={() => setInput(s.text)}
-                  className="shrink-0 text-xs border border-gray-300 text-gray-600 px-3 py-1.5 rounded-full hover:bg-gray-50"
+                  onClick={() => setLangOpen((v) => !v)}
+                  className="flex items-center gap-1.5 rounded border border-[#D5D7DC] px-3 py-1.5 text-[13px] font-medium text-[#333] hover:bg-[#F6F7F8]"
+                  title="訳を表示する言語"
                 >
-                  {s.label}
+                  <Icon d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-9-9h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" className="h-4 w-4" />
+                  {langLabel}
                 </button>
-              ))}
+                {langOpen && (
+                  <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg border border-[#E5E6EA] bg-white py-1 shadow-lg">
+                    <p className="px-3 pb-1 pt-1.5 text-[11px] text-[#8A8F98]">訳を表示する言語</p>
+                    {CHAT_LANGUAGES.map((l) => (
+                      <button
+                        key={l.code}
+                        onClick={() => void changeLang(l.code)}
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-[#F2F3F5]"
+                      >
+                        {l.label}
+                        {l.code === lang && <Icon d="M5 12.5 10 17l9-10" className="h-4 w-4" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* テンプレートポップアップ */}
-            {showTemplates && (
-              <div className="bg-white border-t border-gray-200 px-4 py-3 max-h-48 overflow-y-auto">
-                <p className="text-xs font-semibold text-gray-400 mb-2">テンプレートを選択</p>
-                {templates.length === 0 && (
-                  <p className="text-sm text-gray-400">テンプレートがありません</p>
-                )}
-                {templates.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => applyTemplate(t.content)}
-                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-[var(--color-light)] text-sm mb-1"
-                  >
-                    <span className="font-medium text-[var(--color-text-dark)]">{t.name}</span>
-                    <span className="text-gray-400 ml-2 text-xs">{t.content.slice(0, 30)}...</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <div
+              ref={scrollRef}
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+              }}
+              className="flex-1 overflow-y-auto px-4 pb-6 pt-2"
+            >
+              {chat.length === 0 && <p className="mt-16 text-center text-sm text-[#8A8F98]">メッセージはありません</p>}
+              {chat.map((m, i) => {
+                const prev = chat[i - 1];
+                const newDay = !prev || startOfDay(new Date(prev.sentAt)) !== startOfDay(new Date(m.sentAt));
+                const isUnreadStart = unreadMarker?.partnerId === selectedId && unreadMarker.messageId === m.id;
+                const outbound = m.direction === "outbound";
+                const sender = m.senderName || displayName(selected);
+                const bubble = (
+                  <Bubble
+                    main={m.translation ?? m.content}
+                    original={m.translation ? m.content : null}
+                    pending={translating.has(m.id)}
+                    outbound={outbound}
+                  />
+                );
+                return (
+                  <Fragment key={m.id}>
+                    {newDay && (
+                      <div className="my-4 flex justify-center">
+                        <span className="rounded-full bg-[#C9CDD3] px-3 py-0.5 text-[12px] text-white">{formatDayLabel(m.sentAt)}</span>
+                      </div>
+                    )}
+                    {isUnreadStart && (
+                      <div className="my-3 rounded-full bg-[#C9CDD3] py-0.5 text-center text-[12px] text-white">ここから未読メッセージ</div>
+                    )}
+                    {outbound ? (
+                      <div className="mt-3 flex items-end justify-end gap-1.5">
+                        <span className="mb-0.5 shrink-0 text-[11px] text-[#8A8F98]">{formatTime(m.sentAt)}</span>
+                        {bubble}
+                      </div>
+                    ) : (
+                      <div className="mt-3 flex items-start gap-2.5">
+                        <Avatar name={sender} size={36} />
+                        <div className="min-w-0">
+                          <p className="mb-1 text-[13px] text-[#5D636C]">{sender}</p>
+                          <div className="flex items-end gap-1.5">
+                            {bubble}
+                            <span className="mb-0.5 shrink-0 text-[11px] text-[#8A8F98]">{formatTime(m.sentAt)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </div>
 
             {/* 入力欄 */}
-            <div className="bg-white border-t border-gray-200 px-4 py-3 flex gap-2">
-              <input
-                className="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30 focus:border-[var(--color-primary)]"
-                placeholder="メッセージを入力..."
+            <div className="relative shrink-0 border-t border-[#E5E6EA]">
+              {panel && (
+                <div className="absolute bottom-full left-0 right-0 max-h-64 overflow-y-auto border-t border-[#E5E6EA] bg-white px-3 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+                  <p className="px-2 pb-1 text-[11px] text-[#8A8F98]">{panel === "templates" ? "テンプレート" : "定型文"}</p>
+                  {panelItems.length === 0 && <p className="px-2 py-2 text-sm text-[#8A8F98]">テンプレートがありません</p>}
+                  {panelItems.map((item) => (
+                    <button
+                      key={item.key}
+                      onClick={() => {
+                        setInput(item.text);
+                        setPanel(null);
+                      }}
+                      className="flex w-full items-baseline gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-[#F2F3F5]"
+                    >
+                      <span className="shrink-0 font-medium">{item.label}</span>
+                      <span className="truncate text-xs text-[#8A8F98]">{item.text}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <textarea
+                className="block h-[92px] w-full resize-none px-4 pt-3 text-[15px] outline-none placeholder:text-[#A4A8B0]"
+                placeholder="Enterで送信 / Shift + Enterで改行"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    void send();
+                  }
+                }}
               />
-              <button
-                onClick={send}
-                disabled={sending || !input.trim()}
-                className="bg-[var(--color-primary)] text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
-              >
-                {sending ? "送信中" : "送信"}
-              </button>
+              <div className="flex items-center gap-1 px-2 pb-2">
+                <button
+                  onClick={() => setPanel((v) => (v === "templates" ? null : "templates"))}
+                  title="テンプレート"
+                  className={`rounded-md p-1.5 hover:bg-[#F2F3F5] ${panel === "templates" ? "text-[#111]" : "text-[#6B7079]"}`}
+                >
+                  <Icon d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" />
+                </button>
+                <button
+                  onClick={() => setPanel((v) => (v === "shortcuts" ? null : "shortcuts"))}
+                  title="定型文"
+                  className={`rounded-md p-1.5 hover:bg-[#F2F3F5] ${panel === "shortcuts" ? "text-[#111]" : "text-[#6B7079]"}`}
+                >
+                  <Icon d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5" />
+                </button>
+                <button
+                  onClick={() => void send()}
+                  disabled={sending || !input.trim()}
+                  className="ml-auto rounded px-5 py-1.5 text-[14px] font-bold text-white transition-opacity disabled:opacity-40"
+                  style={{ background: LINE_GREEN }}
+                >
+                  {sending ? "送信中" : "送信"}
+                </button>
+              </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
-            左からパートナーを選択してください
-          </div>
+          <div className="flex flex-1 items-center justify-center text-sm text-[#8A8F98]">左からトークを選択してください</div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 吹き出し。訳があれば訳を大きく、原文を下に小さく出す */
+function Bubble({ main, original, pending, outbound }: { main: string; original: string | null; pending: boolean; outbound: boolean }) {
+  return (
+    <div
+      className={`max-w-[min(520px,62vw)] rounded-[18px] px-3.5 py-2 text-[14.5px] leading-[1.5] text-[#111] ${
+        outbound ? "bg-[#8DE055]" : "bg-[#EEF0F3]"
+      }`}
+    >
+      <p className="whitespace-pre-wrap break-words">{main}</p>
+      {original && (
+        <p
+          className={`mt-1.5 whitespace-pre-wrap break-words border-t pt-1.5 text-[12px] leading-[1.45] ${
+            outbound ? "border-black/10 text-[#2F5A1C]" : "border-black/[0.07] text-[#7A7F87]"
+          }`}
+        >
+          {original}
+        </p>
+      )}
+      {!original && pending && <p className="mt-1 text-[11px] text-[#8A8F98]">翻訳中…</p>}
     </div>
   );
 }

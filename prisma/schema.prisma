@@ -324,6 +324,8 @@ model StaffAccount {
   name         String
   role         String   @default("member")
   passcodeHash String
+  /// チャット画面で訳を表示する言語 (ja / vi / id)
+  chatLanguage String   @default("ja")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -475,6 +477,23 @@ model Message {
   senderId   String?
   sentAt     DateTime  @default(now())
   readAt     DateTime?
+  /// 本文の言語 (ja / vi / id / en など)。翻訳したときに AI が判定して入れる。未判定は null
+  sourceLang String?
+
+  translations MessageTranslation[]
+}
+
+/// チャット画面の訳文 (担当者の表示言語ごとに 1 度だけ作って使い回す)
+model MessageTranslation {
+  id        Int      @id @default(autoincrement())
+  messageId Int
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  /// 訳した先の言語 (ja / vi / id)
+  lang      String
+  text      String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, lang])
 }
 
 model MessageTemplate {

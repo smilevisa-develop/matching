@@ -110,12 +110,20 @@ export default function FeedbackWidget() {
     }
   };
 
+  // 画面側のボタンから開けるようにする (チャット画面は右下に送信ボタンがあるので、ヘッダーのボタンから開く)
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener("feedback:open", onOpen);
+    return () => window.removeEventListener("feedback:open", onOpen);
+  }, []);
+
   // 一覧画面そのものではボタンを出さない
   if (pathname.startsWith("/feedback")) return null;
+  const hideFloatingButton = pathname.startsWith("/chat");
 
   return (
     <>
-      {!open ? (
+      {!open && !hideFloatingButton ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
