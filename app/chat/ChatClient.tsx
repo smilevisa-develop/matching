@@ -356,14 +356,15 @@ export default function ChatClient({ conversations, initialMessages, initialLang
     setMobileRoom(true);
   };
 
-  /** 訳す言語: 選んだもの → 相手の直近のメッセージの言語 → 国 → (担当者が日本語なら英語、そうでなければ日本語) */
+  /** 訳す言語: 選んだもの → 相手の直近のメッセージの言語 (日本語で書く相手なら日本語) → 国 → 英語 */
   const draftTarget: DraftLang = useMemo(() => {
     if (selectedId && targetByConv[selectedId]) return targetByConv[selectedId];
-    const theirs = [...chat].reverse().find((m) => m.direction === "inbound" && m.sourceLang && m.sourceLang !== lang)?.sourceLang;
+    const last = [...chat].reverse().find((m) => m.direction === "inbound" && hasWords(m.content));
+    const theirs = last ? last.sourceLang ?? (looksJapanese(last.content) ? "ja" : null) : null;
     if (isDraftLang(theirs)) return theirs;
     const byCountry = selected?.country ? COUNTRY_LANG[selected.country] : undefined;
-    return byCountry ?? (lang === "ja" ? "en" : "ja");
-  }, [selectedId, targetByConv, chat, lang, selected]);
+    return byCountry ?? "en";
+  }, [selectedId, targetByConv, chat, selected]);
 
   /** 入力した文を相手の言語に訳して入力欄に入れる (送信はしない) */
   const translateInput = async (target: DraftLang = draftTarget) => {
