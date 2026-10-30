@@ -96,6 +96,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
       holdReason: p.holdReason ?? "",
       cancelReason: p.cancelReason ?? "",
       applicationAt: ymd(p.applicationAt),
+      applicationResultAt: ymd(p.applicationResultAt),
       returnHomeFlag: p.returnHomeFlag ?? "",
       returnHomeAt: ymd(p.returnHomeAt),
       entryPlannedAt: ymd(p.entryPlannedAt),

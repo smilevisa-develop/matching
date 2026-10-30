@@ -84,6 +84,8 @@ export type OnboardingCard = {
   declineReason?: string;
   /** YYYY-MM-DD (未申請は空) */
   applicationAt: string;
+  /** 申請結果を受け取った日 (YYYY-MM-DD。未入力は空) */
+  applicationResultAt?: string;
   offerAcceptedAt: string;
   /** 一時帰国 (有 / 無。未入力は空) と一時帰国日 */
   returnHomeFlag?: string;
@@ -205,8 +207,8 @@ export default function OnboardingBoard({
   const [pendingHold, setPendingHold] = useState<number | null>(null);
   const [pendingCancel, setPendingCancel] = useState<number | null>(null);
   const [pendingDecline, setPendingDecline] = useState<number | null>(null);
-  // 入社の列に入れるときは必ず、請求の列は入社日が無ければ、入社日を聞く (請求のタスクは入社日から作るため)
-  const [pendingJoin, setPendingJoin] = useState<{ id: number; stage: JoinStage } | null>(null);
+  // 先へ進めるとき、その工程までに入れるべき項目 (申請日・入社日など) が空なら聞く
+  const [pendingInfo, setPendingInfo] = useState<{ id: number; stage: OnboardingStageId; fields: InfoField[] } | null>(null);
   const [pendingSupport, setPendingSupport] = useState<number | null>(null);
 
   // 内定辞退にした人はボードから消す
@@ -235,6 +237,7 @@ export default function OnboardingBoard({
     if (patch.ownerId !== undefined) body.followUpOwnerId = patch.ownerId;
     if (patch.memo !== undefined) body.currentAction = patch.memo;
     if (patch.applicationAt !== undefined) body.applicationAt = patch.applicationAt || null;
+    if (patch.applicationResultAt !== undefined) body.applicationResultAt = patch.applicationResultAt || null;
     if (patch.returnHomeFlag !== undefined) body.returnHomeFlag = patch.returnHomeFlag || null;
     if (patch.returnHomeAt !== undefined) body.returnHomeAt = patch.returnHomeAt || null;
     if (patch.entryPlannedAt !== undefined) body.entryPlannedAt = patch.entryPlannedAt || null;
@@ -259,14 +262,15 @@ export default function OnboardingBoard({
     if (Array.isArray(data.tasks)) patchLocal(id, { tasks: toTasks(data.tasks) });
   };
 
-  /** 列へ移す。保留・キャンセル・サポートは先にポップを出す */
+  /** 列へ移す。保留・キャンセル・サポートは先にポップを出す。空いている項目があれば先に聞く */
   const moveTo = (card: OnboardingCard, stage: OnboardingStageId) => {
+    const fields = missingInfo(card, stage);
     // 入社の列にいて入社日が空なら、同じ列に置き直しても入社日を聞く
-    if (card.stage === stage && !(stage === "joined" && !card.joinAt)) return;
+    if (card.stage === stage && !(stage === "joined" && fields.length)) return;
     if (stage === HOLD_STAGE) setPendingHold(card.id);
     else if (stage === CANCEL_STAGE) setPendingCancel(card.id);
     else if (stage === DECLINED_STAGE) setPendingDecline(card.id);
-    else if (stage === "joined" || (stage === "billing" && !card.joinAt)) setPendingJoin({ id: card.id, stage });
+    else if (fields.length) setPendingInfo({ id: card.id, stage, fields });
     else if (stage === "support") setPendingSupport(card.id);
     else void save(card.id, { stage });
   };
@@ -302,7 +306,7 @@ export default function OnboardingBoard({
   const holdCard = cards.find((c) => c.id === pendingHold) ?? null;
   const cancelCard = cards.find((c) => c.id === pendingCancel) ?? null;
   const declineCard = cards.find((c) => c.id === pendingDecline) ?? null;
-  const joinCard = cards.find((c) => c.id === pendingJoin?.id) ?? null;
+  const infoCard = cards.find((c) => c.id === pendingInfo?.id) ?? null;
   const supportCard = cards.find((c) => c.id === pendingSupport) ?? null;
 
   const dropHandlers = (stage: OnboardingStageId) => ({
@@ -492,14 +496,18 @@ export default function OnboardingBoard({
         />
       ) : null}
 
-      {joinCard && pendingJoin ? (
-        <JoinDateModal
-          card={joinCard}
-          stage={pendingJoin.stage}
-          onCancel={() => setPendingJoin(null)}
-          onConfirm={(joinAt) => {
-            setPendingJoin(null);
-            void save(joinCard.id, { stage: pendingJoin.stage, joinAt });
+      {infoCard && pendingInfo ? (
+        <StageInfoModal
+          card={infoCard}
+          stage={pendingInfo.stage}
+          fields={pendingInfo.fields}
+          onCancel={() => setPendingInfo(null)}
+          onConfirm={(values) => {
+            const { id, stage } = pendingInfo;
+            setPendingInfo(null);
+            // サポートは項目を保存してから、サポートを選ぶポップへ
+            if (stage === "support") void save(id, values).then(() => setPendingSupport(id));
+            else void save(id, { stage, ...values });
           }}
         />
       ) : null}
@@ -1172,6 +1180,11 @@ function CardDrawer({
                 <input type="date" value={card.applicationAt} onChange={(e) => onSave({ applicationAt: e.target.value })} className={`mt-1 w-full ${field}`} />
               </label>
               <label className="text-xs text-gray-500">
+                申請結果受け取り日
+                <input type="date" value={card.applicationResultAt ?? ""} onChange={(e) => onSave({ applicationResultAt: e.target.value })} className={`mt-1 w-full ${field}`} />
+              </label>
+              <span />
+              <label className="text-xs text-gray-500">
                 一時帰国
                 <select value={card.returnHomeFlag ?? ""} onChange={(e) => onSave({ returnHomeFlag: e.target.value })} className={`mt-1 w-full ${field}`}>
                   <option value="">未入力</option>
@@ -1367,35 +1380,125 @@ function HoldReasonModal({ card, onCancel, onConfirm }: { card: OnboardingCard; 
   );
 }
 
-type JoinStage = "joined" | "billing";
+type InfoField =
+  | "applicationType"
+  | "applicationAt"
+  | "applicationResultAt"
+  | "returnHomeFlag"
+  | "returnHomeAt"
+  | "entryPlannedAt"
+  | "joinPlannedAt"
+  | "entryAt"
+  | "joinAt";
 
-/** 入社・請求の列に入れるときに入社日を聞くポップ (請求に入れると、入社日から翌月 1 日の請求などのタスクを作る) */
-function JoinDateModal({
+/** 先へ進むときに見る工程の順番 (保留・キャンセル・内定辞退は入らない) */
+const FLOW_ORDER: OnboardingStageId[] = ["offer", "documents", "prepare", "applying", "card_processing", "card_issued", "support", "joined", "billing"];
+
+/** その工程に入れるときに埋まっていてほしい項目 (前の工程の分も一緒に聞く) */
+const STAGE_INFO: Partial<Record<OnboardingStageId, InfoField[]>> = {
+  documents: ["applicationType"],
+  applying: ["applicationAt"],
+  card_processing: ["applicationResultAt"],
+  support: ["returnHomeFlag", "returnHomeAt", "entryPlannedAt", "joinPlannedAt"],
+  joined: ["entryAt", "joinAt"],
+};
+
+const INFO_LABELS: Record<InfoField, string> = {
+  applicationType: "申請種別",
+  applicationAt: "申請日",
+  applicationResultAt: "申請結果受け取り日",
+  returnHomeFlag: "一時帰国",
+  returnHomeAt: "一時帰国日",
+  entryPlannedAt: "入国予定日",
+  joinPlannedAt: "入社予定日",
+  entryAt: "入国日",
+  joinAt: "入社日 (確定した日)",
+};
+
+/** 聞く必要がある項目か (一時帰国日は「有」のときだけ、入国の日付は海外から来る「認定」のときだけ) */
+function infoApplies(field: InfoField, v: Partial<Record<InfoField, string>>): boolean {
+  if (field === "returnHomeAt") return v.returnHomeFlag === "有";
+  if (field === "entryPlannedAt" || field === "entryAt") return v.applicationType === "認定";
+  return true;
+}
+
+function infoValues(card: OnboardingCard): Record<InfoField, string> {
+  return {
+    applicationType: card.applicationType,
+    applicationAt: card.applicationAt,
+    applicationResultAt: card.applicationResultAt ?? "",
+    returnHomeFlag: card.returnHomeFlag ?? "",
+    returnHomeAt: card.returnHomeAt ?? "",
+    entryPlannedAt: card.entryPlannedAt ?? "",
+    joinPlannedAt: card.joinPlannedAt,
+    entryAt: card.entryAt,
+    joinAt: card.joinAt,
+  };
+}
+
+/**
+ * 先の工程へ進めるときに聞く項目。その工程までの項目のうち空いているもの (入社の列は入社日を必ず聞く)。
+ * 前へ戻すときは聞かない。条件つきの項目 (一時帰国日など) もここに入れておき、ポップの中で出し分ける
+ */
+function missingInfo(card: OnboardingCard, stage: OnboardingStageId): InfoField[] {
+  const to = FLOW_ORDER.indexOf(stage);
+  if (to < 0) return [];
+  const from = FLOW_ORDER.indexOf(card.stage);
+  const v = infoValues(card);
+  const fields = FLOW_ORDER.slice(0, to + 1).flatMap((st) => STAGE_INFO[st] ?? []).filter((f) => !v[f]);
+  if (stage === "joined" && !fields.includes("joinAt")) fields.push("joinAt");
+  // 前へ戻す・同じ列 (入社日が空の入社を除く) は聞かない
+  if (to < from || (to === from && !(stage === "joined" && !card.joinAt))) return [];
+  // 条件つきの項目しか残っていなくて、どれも当てはまらないなら聞かない
+  return fields.some((f) => infoApplies(f, v)) ? fields : [];
+}
+
+/** 先の工程へ進めるときに、空いている項目 (申請日・入社日など) をまとめて聞くポップ。すべて入れないと進めない */
+function StageInfoModal({
   card,
   stage,
+  fields,
   onCancel,
   onConfirm,
 }: {
   card: OnboardingCard;
-  stage: JoinStage;
+  stage: OnboardingStageId;
+  fields: InfoField[];
   onCancel: () => void;
-  onConfirm: (joinAt: string) => void;
+  onConfirm: (values: Partial<Record<InfoField, string>>) => void;
 }) {
-  // 入社予定日は入れない (確定した入社日を、その場で入れてもらう)
-  const [date, setDate] = useState(card.joinAt ?? "");
-  const label = stage === "billing" ? "請求" : "入社";
+  // 空の項目は空のまま出す (入社日に入社予定日を入れたりしない。確定した日をその場で入れてもらう)
+  const [values, setValues] = useState(() => infoValues(card));
+  const visible = fields.filter((f) => infoApplies(f, values));
+  const ready = visible.every((f) => values[f]);
+  const label = COLUMNS.find((c) => c.id === stage)?.label ?? "";
+  const set = (f: InfoField, value: string) => setValues((cur) => ({ ...cur, [f]: value }));
   return (
     <ModalFrame title={`${card.personName} を${label}に進める`} onCancel={onCancel}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (date) onConfirm(date);
+          if (ready) onConfirm(Object.fromEntries(visible.map((f) => [f, values[f]])));
         }}
       >
-        <label className="mt-3 block text-xs text-gray-600">
-          入社日 (確定した日)
-          <input type="date" autoFocus required value={date} onChange={(e) => setDate(e.target.value)} className={MODAL_INPUT} />
-        </label>
+        <p className="mt-1 text-xs text-gray-500">空いている項目をすべて入れてください。</p>
+        {visible.map((f, i) => (
+          <label key={f} className="mt-3 block text-xs text-gray-600">
+            {INFO_LABELS[f]}
+            {f === "applicationType" || f === "returnHomeFlag" ? (
+              <select autoFocus={i === 0} required value={values[f]} onChange={(e) => set(f, e.target.value)} className={MODAL_INPUT}>
+                <option value="">選んでください</option>
+                {(f === "applicationType" ? APPLICATION_TYPES : ["有", "無"]).map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input type="date" autoFocus={i === 0} required value={values[f]} onChange={(e) => set(f, e.target.value)} className={MODAL_INPUT} />
+            )}
+          </label>
+        ))}
         {stage === "billing" ? (
           <p className="mt-2 text-[11px] text-gray-500">入社の翌月 1 日に請求 → その月末に入金 → パートナーへの依頼・支払い、のタスクを作ります。</p>
         ) : null}
@@ -1403,8 +1506,8 @@ function JoinDateModal({
           <button type="button" onClick={onCancel} className={BTN_SUB}>
             やめる
           </button>
-          <button type="submit" disabled={!date} className={BTN_MAIN}>
-            {label}に進める
+          <button type="submit" disabled={!ready} className={BTN_MAIN}>
+            {stage === "support" ? "次へ (サポートを選ぶ)" : `${label}に進める`}
           </button>
         </div>
       </form>
