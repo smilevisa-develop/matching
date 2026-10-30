@@ -37,7 +37,8 @@ function extractSerialFromBrokenIso(value: string): number | null {
 
 /**
  * 任意の日付値を ISO "YYYY-MM-DD" に正規化。変換不能なら null。
- *   - Date オブジェクト → そのまま toISOString
+ *   - Date オブジェクト → 近いほうの日付 (日本時間の 0 時の Date を toISOString すると前の日になるため。
+ *     2026/07 のエクセル取り込みで生年月日・在留期限などが 1 日前にずれていた。2026/10/30 に直した)
  *   - number → Excel serial として変換
  *   - "+036926-12" などの broken → serial 抽出して再変換
  *   - "YYYY-MM-DD" / "YYYY/MM/DD" 等の date string → 正規化
@@ -47,7 +48,7 @@ export function normalizeToIsoDate(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) return null;
-    return value.toISOString().slice(0, 10);
+    return new Date(value.getTime() + 12 * 3600_000).toISOString().slice(0, 10);
   }
   if (typeof value === "number") {
     return excelSerialToIsoDate(value);

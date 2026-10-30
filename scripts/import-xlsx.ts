@@ -32,9 +32,10 @@ function d(value: unknown): Date | null {
 }
 
 function dStr(value: unknown): string | null {
-  // 1) Date インスタンス / ISO 文字列ならそのまま
+  // 1) Date インスタンス / ISO 文字列。日本時間の 0 時の Date は toISOString だと前の日になるので、近いほうの日付にする
+  //    (2026/07 の取り込みで生年月日・在留期限などが 1 日前にずれていた。2026/10/30 に直した)
   const date = d(value);
-  if (date) return date.toISOString().slice(0, 10);
+  if (date) return new Date(date.getTime() + 12 * 3600_000).toISOString().slice(0, 10);
   // 2) 「2018年5月」「現在に至る」「2014 năm 08 tháng」等の柔軟パース
   const r = parseFlexibleDate(value);
   if (r && r.type === "iso") return r.value;
