@@ -406,7 +406,7 @@ export const STAGES: { field: StageField; label: string }[] = [
   { field: "offerAcceptedAt", label: "内定承諾" },
   { field: "applicationPlannedAt", label: "申請予定" },
   { field: "applicationAt", label: "申請" },
-  { field: "applicationResultAt", label: "申請結果受け取り" },
+  { field: "applicationResultAt", label: "申請結果日" },
 ];
 
 /** カンバンの日付のうち、後ろの段階の日付より後になっていないものだけ候補にする (順番が合わない日付は入れさせない) */
@@ -639,9 +639,7 @@ export function StageDateModal({
 /** 一時帰国より後 (内定者管理のカードで、内定者管理の担当が入れる)。ここでは見るだけ */
 export function AfterReturnSummary({ placement, cardId }: { placement: PlacementData; cardId: number | null }) {
   const items: [string, string][] = [
-    ["一時帰国", placement.returnHomeFlag ?? ""],
     ["一時帰国日", slash(placement.returnHomeAt)],
-    ["入国予定日", slash(placement.entryPlannedAt)],
     ["入国日", slash(placement.entryAt)],
     ["入社予定日", slash(placement.joinPlannedAt)],
     ["入社日", slash(placement.joinAt)],

@@ -48,6 +48,7 @@ const CANCEL_STAGE = "card_cancelled";
 export const dynamic = "force-dynamic";
 
 const DATE_FIELDS = [
+  "offerAt",
   "offerAcceptedAt",
   "returnHomeAt",
   "applicationPlannedAt",
@@ -118,6 +119,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
     if (body.holdReason !== undefined && data.holdReason === undefined) data.holdReason = str(body.holdReason);
     if (body.applicationType !== undefined) data.applicationType = str(body.applicationType);
     if (body.applicationMethod !== undefined) data.applicationMethod = str(body.applicationMethod);
+    if (body.applicantName !== undefined) data.applicantName = str(body.applicantName);
     if (body.returnHomeFlag !== undefined) data.returnHomeFlag = str(body.returnHomeFlag);
     if (typeof body.documentsOnly === "boolean") data.documentsOnly = body.documentsOnly;
     if (body.externalName !== undefined && !placement.personId) data.externalName = str(body.externalName);
@@ -133,6 +135,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
       if (parsed !== undefined) data[field] = parsed;
     }
     const updated = await prisma.personPlacement.update({ where: { id: placement.id }, data });
+
+    // 在留期日 (申請前) は候補者の在留期限 (履歴書の項目) に入れる (候補者詳細と同じ値を見るため)
+    if (body.visaExpiryDate !== undefined && placement.personId) {
+      const v = typeof body.visaExpiryDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.visaExpiryDate) ? body.visaExpiryDate : null;
+      await prisma.resumeProfile.upsert({
+        where: { personId: placement.personId },
+        create: { personId: placement.personId, visaExpiryDate: v },
+        update: { visaExpiryDate: v },
+      });
+    }
 
     // 内定辞退にしたら、カンバンの候補者 (内定済み・内定承諾・入社待ち) も「内定辞退」にする (内定辞退の人数も 1 増える)
     if (data.stage === DECLINED_STAGE && placement.personId) {

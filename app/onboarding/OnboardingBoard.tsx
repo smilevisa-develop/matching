@@ -82,10 +82,15 @@ export type OnboardingCard = {
   cancelReason: string;
   /** 内定辞退の理由 (内定辞退にするとボードから消える) */
   declineReason?: string;
+  /** 内定日 / 申請予定日 (YYYY-MM-DD。未入力は空) */
+  offerAt?: string;
+  applicationPlannedAt?: string;
   /** YYYY-MM-DD (未申請は空) */
   applicationAt: string;
-  /** 申請結果を受け取った日 (YYYY-MM-DD。未入力は空) */
+  /** 申請結果日 (YYYY-MM-DD。未入力は空) */
   applicationResultAt?: string;
+  /** 申請者 (会社 / 本人 / CROSLAN など) */
+  applicantName?: string;
   offerAcceptedAt: string;
   /** 一時帰国 (有 / 無。未入力は空) と一時帰国日 */
   returnHomeFlag?: string;
@@ -238,6 +243,10 @@ export default function OnboardingBoard({
     if (patch.memo !== undefined) body.currentAction = patch.memo;
     if (patch.applicationAt !== undefined) body.applicationAt = patch.applicationAt || null;
     if (patch.applicationResultAt !== undefined) body.applicationResultAt = patch.applicationResultAt || null;
+    if (patch.offerAt !== undefined) body.offerAt = patch.offerAt || null;
+    if (patch.applicationPlannedAt !== undefined) body.applicationPlannedAt = patch.applicationPlannedAt || null;
+    if (patch.applicantName !== undefined) body.applicantName = patch.applicantName || null;
+    if (patch.visaExpiryDate !== undefined) body.visaExpiryDate = patch.visaExpiryDate || null;
     if (patch.returnHomeFlag !== undefined) body.returnHomeFlag = patch.returnHomeFlag || null;
     if (patch.returnHomeAt !== undefined) body.returnHomeAt = patch.returnHomeAt || null;
     if (patch.entryPlannedAt !== undefined) body.entryPlannedAt = patch.entryPlannedAt || null;
@@ -505,9 +514,10 @@ export default function OnboardingBoard({
           onConfirm={(values) => {
             const { id, stage } = pendingInfo;
             setPendingInfo(null);
+            const patch = infoPatch(infoCard, values);
             // サポートは項目を保存してから、サポートを選ぶポップへ
-            if (stage === "support") void save(id, values).then(() => setPendingSupport(id));
-            else void save(id, { stage, ...values });
+            if (stage === "support") void save(id, patch).then(() => setPendingSupport(id));
+            else void save(id, { stage, ...patch });
           }}
         />
       ) : null}
@@ -821,7 +831,7 @@ function CardDrawer({
   const [memo, setMemo] = useState(card.memo);
   const [holdReason, setHoldReason] = useState(card.holdReason);
   const [cancelReason, setCancelReason] = useState(card.cancelReason);
-  const [method, setMethod] = useState(card.applicationMethod);
+  const [applicant, setApplicant] = useState(card.applicantName ?? "");
   const [busy, setBusy] = useState(false);
   const [showIssues, setShowIssues] = useState(card.issues.some((i) => i.open));
   const [issueText, setIssueText] = useState("");
@@ -986,15 +996,37 @@ function CardDrawer({
                 </select>
               </label>
             ) : null}
-            <label className="flex min-w-[12rem] flex-1 items-center gap-1">
-              申請方法
+            <label className="flex items-center gap-1">
+              申請者
               <input
-                value={method}
-                onChange={(e) => setMethod(e.target.value)}
-                onBlur={() => method.trim() !== card.applicationMethod && onSave({ applicationMethod: method.trim() })}
-                placeholder="例: 本人がオンライン申請"
-                className={`flex-1 ${field}`}
+                list="drawer-applicant-options"
+                value={applicant}
+                onChange={(e) => setApplicant(e.target.value)}
+                onBlur={() =>
+                  applicant.trim() !== (card.applicantName ?? "") &&
+                  onSave({ applicantName: applicant.trim(), applicationMethod: methodText(applicant.trim(), receiveOf(card)) })
+                }
+                placeholder="例: 会社"
+                className={`w-28 ${field}`}
               />
+              <datalist id="drawer-applicant-options">
+                {APPLICANT_OPTIONS.map((o) => (
+                  <option key={o} value={o} />
+                ))}
+              </datalist>
+            </label>
+            <label className="flex items-center gap-1">
+              受取
+              <select
+                value={receiveOf(card)}
+                onChange={(e) => onSave({ applicationMethod: methodText(card.applicantName ?? "", e.target.value) })}
+                className={field}
+              >
+                <option value="">-</option>
+                {RECEIVE_METHODS.map((m) => (
+                  <option key={m}>{m}</option>
+                ))}
+              </select>
             </label>
           </div>
         </div>
@@ -1170,55 +1202,27 @@ function CardDrawer({
                 placeholder="例: アパート手配の見通しを企業と確認"
               />
             </label>
+            {/* 企業データベース「内定者管理」タブの列と同じ項目だけ (赤 = 必須、緑 = 起きたときだけ) */}
             <div className="mt-3 grid grid-cols-2 gap-3">
-              <label className="text-xs text-gray-500">
-                内定承諾日
-                <input type="date" value={card.offerAcceptedAt} onChange={(e) => onSave({ offerAcceptedAt: e.target.value })} className={`mt-1 w-full ${field}`} />
-              </label>
-              <label className="text-xs text-gray-500">
-                申請日
-                <input type="date" value={card.applicationAt} onChange={(e) => onSave({ applicationAt: e.target.value })} className={`mt-1 w-full ${field}`} />
-              </label>
-              <label className="text-xs text-gray-500">
-                申請結果受け取り日
-                <input type="date" value={card.applicationResultAt ?? ""} onChange={(e) => onSave({ applicationResultAt: e.target.value })} className={`mt-1 w-full ${field}`} />
-              </label>
-              <span />
-              <label className="text-xs text-gray-500">
-                一時帰国
-                <select value={card.returnHomeFlag ?? ""} onChange={(e) => onSave({ returnHomeFlag: e.target.value })} className={`mt-1 w-full ${field}`}>
-                  <option value="">未入力</option>
-                  <option value="有">有</option>
-                  <option value="無">無</option>
-                  {card.returnHomeFlag && !["有", "無"].includes(card.returnHomeFlag) ? <option value={card.returnHomeFlag}>{card.returnHomeFlag}</option> : null}
-                </select>
-              </label>
-              <label className="text-xs text-gray-500">
-                一時帰国日
-                <input
-                  type="date"
-                  value={card.returnHomeAt ?? ""}
-                  disabled={card.returnHomeFlag === "無"}
-                  onChange={(e) => onSave({ returnHomeAt: e.target.value })}
-                  className={`mt-1 w-full ${field} disabled:bg-gray-100 disabled:text-gray-400`}
-                />
-              </label>
-              <label className="text-xs text-gray-500">
-                入国予定日
-                <input type="date" value={card.entryPlannedAt ?? ""} onChange={(e) => onSave({ entryPlannedAt: e.target.value })} className={`mt-1 w-full ${field}`} />
-              </label>
-              <label className="text-xs text-gray-500">
-                入国日
-                <input type="date" value={card.entryAt} onChange={(e) => onSave({ entryAt: e.target.value })} className={`mt-1 w-full ${field}`} />
-              </label>
-              <label className="text-xs text-gray-500">
-                入社予定日
-                <input type="date" value={card.joinPlannedAt} onChange={(e) => onSave({ joinPlannedAt: e.target.value })} className={`mt-1 w-full ${field}`} />
-              </label>
-              <label className="text-xs text-gray-500">
-                入社日
-                <input type="date" value={card.joinAt} onChange={(e) => onSave({ joinAt: e.target.value })} className={`mt-1 w-full ${field}`} />
-              </label>
+              {(
+                [
+                  ["offerAt", "内定日"],
+                  ["offerAcceptedAt", "内定承諾日"],
+                  ["applicationPlannedAt", "申請予定日"],
+                  ["applicationAt", "申請日"],
+                  ...(card.personId && card.applicationType !== "認定" ? ([["visaExpiryDate", "在留期日 (申請前)"]] as const) : []),
+                  ["applicationResultAt", "申請結果日"],
+                  ["returnHomeAt", "一時帰国日"],
+                  ["entryAt", "入国日"],
+                  ["joinPlannedAt", "入社予定日"],
+                  ["joinAt", "入社日"],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="text-xs text-gray-500">
+                  {label}
+                  <input type="date" value={card[key] ?? ""} onChange={(e) => onSave({ [key]: e.target.value })} className={`mt-1 w-full ${field}`} />
+                </label>
+              ))}
             </div>
           </section>
 
@@ -1380,13 +1384,22 @@ function HoldReasonModal({ card, onCancel, onConfirm }: { card: OnboardingCard; 
   );
 }
 
+/**
+ * 工程を進めるときに聞く項目。企業データベース「内定者管理」タブの見出しの色に合わせている (2026/10 土田さん)。
+ *   赤 (必ず入れる): 申請種別・申請者・内定日・内定承諾日・申請予定日・申請日・在留期日 (申請前)・申請結果受け取り・入社予定日
+ *   緑 (起きたときだけ): 申請結果日・入国日・入社日 (その工程に進めた = 起きた、として聞く)。一時帰国日は聞かない
+ *   ファイル回収は「書類集め」を終えて先へ進めたことで表す
+ */
 type InfoField =
+  | "offerAt"
+  | "offerAcceptedAt"
   | "applicationType"
+  | "applicationPlannedAt"
+  | "applicantName"
   | "applicationAt"
+  | "visaExpiryDate"
   | "applicationResultAt"
-  | "returnHomeFlag"
-  | "returnHomeAt"
-  | "entryPlannedAt"
+  | "receiveMethod"
   | "joinPlannedAt"
   | "entryAt"
   | "joinAt";
@@ -1396,49 +1409,79 @@ const FLOW_ORDER: OnboardingStageId[] = ["offer", "documents", "prepare", "apply
 
 /** その工程に入れるときに埋まっていてほしい項目 (前の工程の分も一緒に聞く) */
 const STAGE_INFO: Partial<Record<OnboardingStageId, InfoField[]>> = {
-  documents: ["applicationType"],
-  applying: ["applicationAt"],
-  card_processing: ["applicationResultAt"],
-  support: ["returnHomeFlag", "returnHomeAt", "entryPlannedAt", "joinPlannedAt"],
+  documents: ["offerAt", "offerAcceptedAt", "applicationType", "applicationPlannedAt"],
+  applying: ["applicantName", "applicationAt", "visaExpiryDate"],
+  card_processing: ["applicationResultAt", "receiveMethod"],
+  support: ["joinPlannedAt"],
   joined: ["entryAt", "joinAt"],
 };
 
 const INFO_LABELS: Record<InfoField, string> = {
+  offerAt: "内定日",
+  offerAcceptedAt: "内定承諾日",
   applicationType: "申請種別",
+  applicationPlannedAt: "申請予定日",
+  applicantName: "申請者",
   applicationAt: "申請日",
-  applicationResultAt: "申請結果受け取り日",
-  returnHomeFlag: "一時帰国",
-  returnHomeAt: "一時帰国日",
-  entryPlannedAt: "入国予定日",
+  visaExpiryDate: "在留期日 (申請前)",
+  applicationResultAt: "申請結果日",
+  receiveMethod: "申請結果受け取り",
   joinPlannedAt: "入社予定日",
   entryAt: "入国日",
   joinAt: "入社日 (確定した日)",
 };
 
-/** 聞く必要がある項目か (一時帰国日は「有」のときだけ、入国の日付は海外から来る「認定」のときだけ) */
-function infoApplies(field: InfoField, v: Partial<Record<InfoField, string>>): boolean {
-  if (field === "returnHomeAt") return v.returnHomeFlag === "有";
-  if (field === "entryPlannedAt" || field === "entryAt") return v.applicationType === "認定";
+/** 申請者の候補 (自由に入れてもよい) と、在留カードの受け取り方 */
+const APPLICANT_OPTIONS = ["会社", "本人", "CROSLAN", "築山"];
+const RECEIVE_METHODS = ["郵送", "窓口", "空港"];
+
+/** 申請方法の文 (「申請: 会社 / 受取: 郵送」) から受け取り方を読む */
+function receiveOf(card: OnboardingCard): string {
+  return card.applicationMethod.match(/受取[:：]\s*([^/／]+)/)?.[1]?.trim() ?? "";
+}
+
+/** 申請者と受け取り方から、申請方法の文を作る (今までと同じ「申請: 会社 / 受取: 郵送」の形) */
+function methodText(applicant: string, receive: string): string {
+  return [applicant && `申請: ${applicant}`, receive && `受取: ${receive}`].filter(Boolean).join(" / ");
+}
+
+/** 聞く必要がある項目か (在留期日 (申請前) は日本にいる人だけ、入国日は海外から来る「認定」の人だけ) */
+function infoApplies(field: InfoField, v: Partial<Record<InfoField, string>>, card: OnboardingCard): boolean {
+  if (field === "visaExpiryDate") return !!card.personId && v.applicationType !== "認定";
+  if (field === "entryAt") return v.applicationType === "認定";
   return true;
 }
 
 function infoValues(card: OnboardingCard): Record<InfoField, string> {
   return {
+    offerAt: card.offerAt ?? "",
+    offerAcceptedAt: card.offerAcceptedAt,
     applicationType: card.applicationType,
+    applicationPlannedAt: card.applicationPlannedAt ?? "",
+    applicantName: card.applicantName ?? "",
     applicationAt: card.applicationAt,
+    visaExpiryDate: card.visaExpiryDate,
     applicationResultAt: card.applicationResultAt ?? "",
-    returnHomeFlag: card.returnHomeFlag ?? "",
-    returnHomeAt: card.returnHomeAt ?? "",
-    entryPlannedAt: card.entryPlannedAt ?? "",
+    receiveMethod: receiveOf(card),
     joinPlannedAt: card.joinPlannedAt,
     entryAt: card.entryAt,
     joinAt: card.joinAt,
   };
 }
 
+/** ポップで入れた値を保存する形に (申請者・受け取り方は申請方法の文も作り直す) */
+function infoPatch(card: OnboardingCard, values: Partial<Record<InfoField, string>>): Partial<OnboardingCard> {
+  const { receiveMethod, ...rest } = values;
+  const patch: Partial<OnboardingCard> = { ...rest };
+  if (receiveMethod !== undefined || values.applicantName !== undefined) {
+    patch.applicationMethod = methodText(values.applicantName ?? card.applicantName ?? "", receiveMethod ?? receiveOf(card));
+  }
+  return patch;
+}
+
 /**
  * 先の工程へ進めるときに聞く項目。その工程までの項目のうち空いているもの (入社の列は入社日を必ず聞く)。
- * 前へ戻すときは聞かない。条件つきの項目 (一時帰国日など) もここに入れておき、ポップの中で出し分ける
+ * 前へ戻すときは聞かない。条件つきの項目 (入国日など) もここに入れておき、ポップの中で出し分ける
  */
 function missingInfo(card: OnboardingCard, stage: OnboardingStageId): InfoField[] {
   const to = FLOW_ORDER.indexOf(stage);
@@ -1450,7 +1493,7 @@ function missingInfo(card: OnboardingCard, stage: OnboardingStageId): InfoField[
   // 前へ戻す・同じ列 (入社日が空の入社を除く) は聞かない
   if (to < from || (to === from && !(stage === "joined" && !card.joinAt))) return [];
   // 条件つきの項目しか残っていなくて、どれも当てはまらないなら聞かない
-  return fields.some((f) => infoApplies(f, v)) ? fields : [];
+  return fields.some((f) => infoApplies(f, v, card)) ? fields : [];
 }
 
 /** 先の工程へ進めるときに、空いている項目 (申請日・入社日など) をまとめて聞くポップ。すべて入れないと進めない */
@@ -1469,7 +1512,7 @@ function StageInfoModal({
 }) {
   // 空の項目は空のまま出す (入社日に入社予定日を入れたりしない。確定した日をその場で入れてもらう)
   const [values, setValues] = useState(() => infoValues(card));
-  const visible = fields.filter((f) => infoApplies(f, values));
+  const visible = fields.filter((f) => infoApplies(f, values, card));
   const ready = visible.every((f) => values[f]);
   const label = COLUMNS.find((c) => c.id === stage)?.label ?? "";
   const set = (f: InfoField, value: string) => setValues((cur) => ({ ...cur, [f]: value }));
@@ -1485,15 +1528,24 @@ function StageInfoModal({
         {visible.map((f, i) => (
           <label key={f} className="mt-3 block text-xs text-gray-600">
             {INFO_LABELS[f]}
-            {f === "applicationType" || f === "returnHomeFlag" ? (
+            {f === "applicationType" || f === "receiveMethod" ? (
               <select autoFocus={i === 0} required value={values[f]} onChange={(e) => set(f, e.target.value)} className={MODAL_INPUT}>
                 <option value="">選んでください</option>
-                {(f === "applicationType" ? APPLICATION_TYPES : ["有", "無"]).map((o) => (
+                {(f === "applicationType" ? APPLICATION_TYPES : RECEIVE_METHODS).map((o) => (
                   <option key={o} value={o}>
                     {o}
                   </option>
                 ))}
               </select>
+            ) : f === "applicantName" ? (
+              <>
+                <input autoFocus={i === 0} required list="applicant-options" value={values[f]} onChange={(e) => set(f, e.target.value)} placeholder="例: 会社" className={MODAL_INPUT} />
+                <datalist id="applicant-options">
+                  {APPLICANT_OPTIONS.map((o) => (
+                    <option key={o} value={o} />
+                  ))}
+                </datalist>
+              </>
             ) : (
               <input type="date" autoFocus={i === 0} required value={values[f]} onChange={(e) => set(f, e.target.value)} className={MODAL_INPUT} />
             )}
