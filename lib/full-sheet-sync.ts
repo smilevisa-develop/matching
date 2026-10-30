@@ -19,6 +19,7 @@ import {
   upsertCompanyMaster,
 } from "@/lib/company-master-sync";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
+import { requestOnboardingSheetSync } from "@/lib/onboarding-sheet-sync";
 import {
   DEFAULT_COMPANY_ROOT_FOLDER_URL,
   DEFAULT_PERSON_ROOT_FOLDER_URL,
@@ -171,6 +172,8 @@ export async function runFullSheetSync(): Promise<Response> {
     const companies = db.companies;
     const deals = db.error ? { error: db.error } : db.deals;
     const dealSyncError = db.error;
+    // 内定者管理 (アプリ) を企業データベースの「内定者管理」タブへ (保存時にも走るが、取りこぼしの保険)
+    const onboarding = await requestOnboardingSheetSync();
 
     return Response.json({
       ok: true,
@@ -180,6 +183,7 @@ export async function runFullSheetSync(): Promise<Response> {
       companies,
       deals,
       dealSyncError,
+      onboarding: { changed: onboarding.changes.length, error: onboarding.error },
       at: new Date().toISOString(),
     });
   } catch (error) {

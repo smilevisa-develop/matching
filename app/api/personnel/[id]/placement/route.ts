@@ -6,10 +6,12 @@
  * 一時帰国より後 (一時帰国・入国・入社) は内定者管理のカードで入れる。
  */
 
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { PRE_OFFER_STAGE } from "@/lib/onboarding-flow";
 import { ensureOnboardingCard, onDealCandidateStageChanged, rebuildFlowTasksForType } from "@/lib/onboarding-autolink";
+import { requestOnboardingSheetSync } from "@/lib/onboarding-sheet-sync";
 
 type Params = Promise<{ id: string }>;
 
@@ -111,6 +113,8 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
     ) {
       await rebuildFlowTasksForType(placement.id);
     }
+    // 企業データベース (スプシ) の「内定者管理」タブに反映する (アプリが正。応答は待たせない)
+    after(() => requestOnboardingSheetSync());
 
     return Response.json({ ok: true, placement });
   } catch (error) {

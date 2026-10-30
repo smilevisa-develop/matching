@@ -25,6 +25,7 @@ import { BILLING_STAGE, ensureBillingTasks } from "@/lib/billing-flow";
 import { todayJst } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 import { requestKpiSheetSync } from "@/lib/kpi-sheet-sync";
+import { requestOnboardingSheetSync } from "@/lib/onboarding-sheet-sync";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import {
   buildFlowTasks,
@@ -135,6 +136,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
       if (parsed !== undefined) data[field] = parsed;
     }
     const updated = await prisma.personPlacement.update({ where: { id: placement.id }, data });
+    // 企業データベース (スプシ) の「内定者管理」タブに反映する (アプリが正。応答は待たせない)
+    if (placement.personId) after(() => requestOnboardingSheetSync());
 
     // 在留期日 (申請前) は候補者の在留期限 (履歴書の項目) に入れる (候補者詳細と同じ値を見るため)
     if (body.visaExpiryDate !== undefined && placement.personId) {
