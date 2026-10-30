@@ -205,7 +205,7 @@ export default function OnboardingBoard({
   const [pendingHold, setPendingHold] = useState<number | null>(null);
   const [pendingCancel, setPendingCancel] = useState<number | null>(null);
   const [pendingDecline, setPendingDecline] = useState<number | null>(null);
-  // 入社・請求の列に入れるとき、入社日が無ければ聞く (請求のタスクは入社日から作るため)
+  // 入社の列に入れるときは必ず、請求の列は入社日が無ければ、入社日を聞く (請求のタスクは入社日から作るため)
   const [pendingJoin, setPendingJoin] = useState<{ id: number; stage: JoinStage } | null>(null);
   const [pendingSupport, setPendingSupport] = useState<number | null>(null);
 
@@ -265,7 +265,7 @@ export default function OnboardingBoard({
     if (stage === HOLD_STAGE) setPendingHold(card.id);
     else if (stage === CANCEL_STAGE) setPendingCancel(card.id);
     else if (stage === DECLINED_STAGE) setPendingDecline(card.id);
-    else if ((stage === "joined" || stage === "billing") && !card.joinAt) setPendingJoin({ id: card.id, stage });
+    else if (stage === "joined" || (stage === "billing" && !card.joinAt)) setPendingJoin({ id: card.id, stage });
     else if (stage === "support") setPendingSupport(card.id);
     else void save(card.id, { stage });
   };
@@ -1377,7 +1377,8 @@ function JoinDateModal({
   onCancel: () => void;
   onConfirm: (joinAt: string) => void;
 }) {
-  const [date, setDate] = useState(card.joinPlannedAt || todayYmd());
+  // 入社予定日は入れない (確定した入社日を、その場で入れてもらう)
+  const [date, setDate] = useState(card.joinAt ?? "");
   const label = stage === "billing" ? "請求" : "入社";
   return (
     <ModalFrame title={`${card.personName} を${label}に進める`} onCancel={onCancel}>
