@@ -1,7 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { reconcileMessagePersonLinks } from "@/lib/message-linking";
 import { requireCurrentAccount } from "@/lib/auth";
-import { getChatLanguage, loadChatMessages } from "@/lib/chat-messages";
+import {
+  getChatLanguage,
+  groupConvKey,
+  loadChatMessages,
+  loadUnlinkedLineGroups,
+  partnerConvKey,
+} from "@/lib/chat-messages";
 import ChatClient from "./ChatClient";
 
 export const dynamic = "force-dynamic";
@@ -32,12 +38,19 @@ export default async function ChatPage() {
     orderBy: { name: "asc" },
   });
 
-  // 直近 500 件 (古い順)。担当者の表示言語の訳つき
+  // パートナーに紐づけていない LINE グループ (内定後のグループなど)。
+  // パートナーに紐づけると一斉連絡の送信先に入るので、紐づけないままチャットにだけ出す
+  const groups = await loadUnlinkedLineGroups();
+
+  // 直近 1000 件 (古い順)。担当者の表示言語の訳つき
   const lang = await getChatLanguage(account.id);
-  const messages = await loadChatMessages(lang, 500);
+  const messages = await loadChatMessages(lang, 1000, groups.map((g) => g.groupId));
 
   // ピン留めは担当者ごと
-  const pins = await prisma.chatPin.findMany({ where: { accountId: account.id }, select: { partnerId: true } });
+  const pins = await prisma.chatPin.findMany({
+    where: { accountId: account.id },
+    select: { partnerId: true, lineGroupId: true },
+  });
 
   // メッセージテンプレートは全アカウント共通
   const templates = await prisma.messageTemplate.findMany({
@@ -46,22 +59,43 @@ export default async function ChatPage() {
 
   return (
     <ChatClient
-      partners={partners.map((p) => ({
-        id: p.id,
-        name: p.name,
-        country: p.country,
-        channel: p.channel,
-        contactName: p.contactName,
-        lineUserId: p.lineUserId,
-        lineGroupId: p.lineGroups[0]?.groupId ?? null,
-        lineGroupName: p.lineGroups[0]?.groupName ?? null,
-        lineGroupMemberCount: p.lineGroups[0]?.memberCount ?? null,
-        messengerPsid: p.messengerPsid,
-        whatsappId: p.whatsappId,
-      }))}
+      conversations={[
+        ...partners.map((p) => ({
+          id: partnerConvKey(p.id),
+          kind: "partner" as const,
+          partnerId: p.id,
+          name: p.name,
+          country: p.country,
+          channel: p.channel,
+          contactName: p.contactName,
+          lineUserId: p.lineUserId,
+          lineGroupId: p.lineGroups[0]?.groupId ?? null,
+          lineGroupName: p.lineGroups[0]?.groupName ?? null,
+          lineGroupMemberCount: p.lineGroups[0]?.memberCount ?? null,
+          messengerPsid: p.messengerPsid,
+          whatsappId: p.whatsappId,
+        })),
+        ...groups.map((g) => ({
+          id: groupConvKey(g.groupId),
+          kind: "group" as const,
+          partnerId: null,
+          name: g.groupName ?? "LINE グループ",
+          country: null,
+          channel: "LINE-Group",
+          contactName: null,
+          lineUserId: null,
+          lineGroupId: g.groupId,
+          lineGroupName: g.groupName,
+          lineGroupMemberCount: g.memberCount,
+          messengerPsid: null,
+          whatsappId: null,
+        })),
+      ]}
       initialMessages={messages}
       initialLang={lang}
-      initialPinnedIds={pins.map((p) => p.partnerId)}
+      initialPinnedKeys={pins.flatMap((p) =>
+        p.partnerId ? [partnerConvKey(p.partnerId)] : p.lineGroupId ? [groupConvKey(p.lineGroupId)] : [],
+      )}
       templates={templates.map((t) => ({ id: t.id, name: t.name, content: t.content }))}
     />
   );

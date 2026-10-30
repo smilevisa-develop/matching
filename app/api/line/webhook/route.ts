@@ -133,8 +133,8 @@ export async function POST(req: Request) {
               senderName,
             },
           });
-          // チャット画面に出るもの (パートナー紐づけ済み) だけ、担当者の表示言語に訳しておく
-          if (saved.partnerId) after(() => translateForAllStaff(saved.id));
+          // グループの発言はチャット画面に出る (パートナー紐づけなしの内定後グループも) ので、担当者の表示言語に訳しておく
+          after(() => translateForAllStaff(saved.id));
         }
         continue;
       }

@@ -3,8 +3,14 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, Fragment } from "react";
 import { CHAT_LANGUAGES, hasWords, type ChatLang } from "@/lib/chat-languages";
 
-type Partner = {
-  id: number;
+/**
+ * トーク (会話)。key は "p:<partnerId>" (パートナー) か "g:<groupId>" (パートナーに紐づけていない
+ * LINE グループ = 内定後のグループなど)。後者はパートナーへの一斉連絡の対象には入らない。
+ */
+type Conversation = {
+  id: string;
+  kind: "partner" | "group";
+  partnerId: number | null;
   name: string;
   country: string | null;
   channel: string | null;
@@ -18,7 +24,8 @@ type Partner = {
 };
 type Message = {
   id: number;
-  partnerId: number | null;
+  /** どのトークのメッセージか (Conversation.key) */
+  convKey: string;
   channel: string;
   direction: string;
   content: string;
@@ -100,7 +107,7 @@ function Avatar({ name, size }: { name: string; size: number }) {
 }
 
 /** 会話一覧の表示名。LINE グループはグループ名を優先 */
-function displayName(p: Partner) {
+function displayName(p: Conversation) {
   return p.lineGroupName || p.name;
 }
 
@@ -122,64 +129,73 @@ function Icon({ d, className = "h-5 w-5" }: { d: string; className?: string }) {
   );
 }
 
-export default function ChatClient({ partners, initialMessages, initialLang, initialPinnedIds, templates }: {
-  partners: Partner[];
+/** 一覧の絞り込み */
+const FILTERS = [
+  { v: "all", label: "すべて", short: "すべて" },
+  { v: "partner", label: "パートナー", short: "パートナー" },
+  { v: "group", label: "内定者・その他のグループ", short: "内定者など" },
+  { v: "unread", label: "未読", short: "未読" },
+] as const;
+type Filter = (typeof FILTERS)[number]["v"];
+
+export default function ChatClient({ conversations, initialMessages, initialLang, initialPinnedKeys, templates }: {
+  conversations: Conversation[];
   initialMessages: Message[];
   initialLang: ChatLang;
   /** この担当者がピン留めしたトーク (一覧の上に固定) */
-  initialPinnedIds: number[];
+  initialPinnedKeys: string[];
   templates: Template[];
 }) {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState(initialMessages);
   const [lang, setLang] = useState<ChatLang>(initialLang);
-  const [pinned, setPinned] = useState<Set<number>>(() => new Set(initialPinnedIds));
+  const [pinned, setPinned] = useState<Set<string>>(() => new Set(initialPinnedKeys));
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [panel, setPanel] = useState<"templates" | "shortcuts" | null>(null);
   const [search, setSearch] = useState("");
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
   const [filterOpen, setFilterOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   /** 開いた時点で未読だった最初のメッセージ (「ここから未読メッセージ」の位置) */
-  const [unreadMarker, setUnreadMarker] = useState<{ partnerId: number; messageId: number } | null>(null);
+  const [unreadMarker, setUnreadMarker] = useState<{ key: string; messageId: number } | null>(null);
   /** いま訳を作っているメッセージ */
   const [translating, setTranslating] = useState<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
-  const markingReadRef = useRef<number | null>(null);
+  const markingReadRef = useRef<string | null>(null);
   /** 訳を頼んだメッセージ (同じものを何度も頼まない。言語を変えたら空にする) */
   const requestedRef = useRef<Set<number>>(new Set());
   /** 一番下を見ているか (見ているときだけ新着を追いかける) */
   const stickToBottomRef = useRef(true);
 
   const lastByPartner = useMemo(() => {
-    const map = new Map<number, Message>();
+    const map = new Map<string, Message>();
     for (const m of messages) {
-      if (m.partnerId == null) continue;
-      const prev = map.get(m.partnerId);
-      if (!prev || new Date(m.sentAt) >= new Date(prev.sentAt)) map.set(m.partnerId, m);
+      const prev = map.get(m.convKey);
+      if (!prev || new Date(m.sentAt) >= new Date(prev.sentAt)) map.set(m.convKey, m);
     }
     return map;
   }, [messages]);
 
   const unreadByPartner = useMemo(() => {
-    const map = new Map<number, number>();
+    const map = new Map<string, number>();
     for (const m of messages) {
-      if (m.partnerId == null || m.direction !== "inbound" || m.readAt) continue;
-      map.set(m.partnerId, (map.get(m.partnerId) ?? 0) + 1);
+      if (m.direction !== "inbound" || m.readAt) continue;
+      map.set(m.convKey, (map.get(m.convKey) ?? 0) + 1);
     }
     return map;
   }, [messages]);
 
   const sortedPartners = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    const lastTime = (id: number) => {
+    const lastTime = (id: string) => {
       const last = lastByPartner.get(id);
       return last ? new Date(last.sentAt).getTime() : 0;
     };
-    return partners
+    return conversations
       .filter((p) => {
-        if (unreadOnly && !unreadByPartner.get(p.id)) return false;
+        if (filter === "unread" && !unreadByPartner.get(p.id)) return false;
+        if ((filter === "partner" || filter === "group") && p.kind !== filter) return false;
         if (!keyword) return true;
         const last = lastByPartner.get(p.id);
         return [p.name, p.lineGroupName, p.contactName, p.country, last?.content, last?.translation].some((v) =>
@@ -193,15 +209,15 @@ export default function ChatClient({ partners, initialMessages, initialLang, ini
           lastTime(b.id) - lastTime(a.id) ||
           a.name.localeCompare(b.name, "ja"),
       );
-  }, [partners, search, unreadOnly, lastByPartner, unreadByPartner, pinned]);
+  }, [conversations, search, filter, lastByPartner, unreadByPartner, pinned]);
 
-  const selected = partners.find((p) => p.id === selectedId);
-  const chat = useMemo(() => messages.filter((m) => m.partnerId === selectedId), [messages, selectedId]);
+  const selected = conversations.find((p) => p.id === selectedId);
+  const chat = useMemo(() => messages.filter((m) => m.convKey === selectedId), [messages, selectedId]);
 
   useEffect(() => {
-    if (selectedId && partners.some((p) => p.id === selectedId)) return;
+    if (selectedId && conversations.some((p) => p.id === selectedId)) return;
     setSelectedId(sortedPartners[0]?.id ?? null);
-  }, [selectedId, partners, sortedPartners]);
+  }, [selectedId, conversations, sortedPartners]);
 
   // 会話を開いたときは一番下へ (アニメーションなし)
   useLayoutEffect(() => {
@@ -273,23 +289,26 @@ export default function ChatClient({ partners, initialMessages, initialLang, ini
   // 開いた会話を既読にする (未読の先頭は「ここから未読メッセージ」用に覚えておく)
   useEffect(() => {
     if (!selectedId) return;
-    const unread = messages.filter((m) => m.partnerId === selectedId && m.direction === "inbound" && !m.readAt);
+    const unread = messages.filter((m) => m.convKey === selectedId && m.direction === "inbound" && !m.readAt);
     if (unread.length === 0 || markingReadRef.current === selectedId) return;
 
-    setUnreadMarker((cur) => (cur?.partnerId === selectedId ? cur : { partnerId: selectedId, messageId: unread[0].id }));
+    setUnreadMarker((cur) => (cur?.key === selectedId ? cur : { key: selectedId, messageId: unread[0].id }));
     const markRead = async () => {
       markingReadRef.current = selectedId;
       const readAt = new Date().toISOString();
       setMessages((current) =>
         current.map((m) =>
-          m.partnerId === selectedId && m.direction === "inbound" && !m.readAt ? { ...m, readAt } : m,
+          m.convKey === selectedId && m.direction === "inbound" && !m.readAt ? { ...m, readAt } : m,
         ),
       );
       try {
         const res = await fetch("/api/messages", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ partnerId: selectedId }),
+          // パートナーのトークは partnerId、紐づけなしのグループは groupId で既読にする
+          body: JSON.stringify(
+            selectedId.startsWith("p:") ? { partnerId: Number(selectedId.slice(2)) } : { groupId: selectedId.slice(2) },
+          ),
         });
         if (!res.ok) await reload();
       } finally {
@@ -299,26 +318,26 @@ export default function ChatClient({ partners, initialMessages, initialLang, ini
     void markRead();
   }, [selectedId, messages]);
 
-  const selectPartner = (id: number) => {
+  const selectPartner = (id: string) => {
     if (id !== selectedId) setUnreadMarker(null);
     setSelectedId(id);
     setPanel(null);
   };
 
-  const togglePin = async (partnerId: number) => {
-    const next = !pinned.has(partnerId);
+  const togglePin = async (key: string) => {
+    const next = !pinned.has(key);
     const apply = (on: boolean) =>
       setPinned((cur) => {
         const s = new Set(cur);
-        if (on) s.add(partnerId);
-        else s.delete(partnerId);
+        if (on) s.add(key);
+        else s.delete(key);
         return s;
       });
     apply(next);
     const res = await fetch("/api/chat/pins", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ partnerId, pinned: next }),
+      body: JSON.stringify({ key, pinned: next }),
     }).catch(() => null);
     const data = await res?.json().catch(() => null);
     if (!data?.ok) {
@@ -355,11 +374,19 @@ export default function ChatClient({ partners, initialMessages, initialLang, ini
     }
     setSending(true);
     try {
-      const res = await fetch("/api/line/send-partner", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partnerId: selected.id, message: input }),
-      });
+      // パートナーは send-partner、紐づけなしのグループ (内定後など) は send-group
+      const res =
+        selected.kind === "partner"
+          ? await fetch("/api/line/send-partner", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ partnerId: selected.partnerId, message: input }),
+            })
+          : await fetch("/api/line/send-group", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ groupId: selected.lineGroupId, message: input }),
+            });
       const data = await res.json();
       if (data.ok) {
         stickToBottomRef.current = true;
@@ -367,7 +394,7 @@ export default function ChatClient({ partners, initialMessages, initialLang, ini
           ...prev,
           {
             id: data.id ?? Date.now(),
-            partnerId: selected.id,
+            convKey: selected.id,
             channel: data.channel ?? selected.channel ?? "LINE",
             direction: "outbound",
             // サーバが {{変数}} を展開した本文を返すのでそれを表示
@@ -409,21 +436,18 @@ export default function ChatClient({ partners, initialMessages, initialLang, ini
               className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[15px] text-[#111] hover:bg-[#F2F3F5]"
             >
               <Icon d="M4 7h16M4 12h16M4 17h16" className="h-4 w-4 text-[#555]" />
-              {unreadOnly ? "未読" : "すべて"}
+              {FILTERS.find((f) => f.v === filter)?.short}
             </button>
             {filterOpen && (
-              <div className="absolute left-0 top-full z-20 mt-1 w-32 overflow-hidden rounded-lg border border-[#E5E6EA] bg-white py-1 shadow-lg">
-                {[
-                  { v: false, label: "すべて" },
-                  { v: true, label: "未読" },
-                ].map((o) => (
+              <div className="absolute left-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border border-[#E5E6EA] bg-white py-1 shadow-lg">
+                {FILTERS.map((o) => (
                   <button
-                    key={o.label}
+                    key={o.v}
                     onClick={() => {
-                      setUnreadOnly(o.v);
+                      setFilter(o.v);
                       setFilterOpen(false);
                     }}
-                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-[#F2F3F5] ${unreadOnly === o.v ? "font-semibold" : ""}`}
+                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-[#F2F3F5] ${filter === o.v ? "font-semibold" : ""}`}
                   >
                     {o.label}
                   </button>
@@ -501,9 +525,11 @@ export default function ChatClient({ partners, initialMessages, initialLang, ini
           })}
           {sortedPartners.length === 0 && (
             <p className="p-6 text-center text-sm text-[#8A8F98]">
-              {search || unreadOnly ? "該当するトークがありません" : "トークがありません"}
+              {search || filter !== "all" ? "該当するトークがありません" : "トークがありません"}
               <br />
-              <span className="text-[11px]">LINE グループ / 個人 LINE / Messenger ID が紐づいたパートナーのみ表示されます</span>
+              <span className="text-[11px]">
+                連絡先が紐づいたパートナーと、Bot が入っている LINE グループが表示されます
+              </span>
             </p>
           )}
         </div>
@@ -582,7 +608,7 @@ export default function ChatClient({ partners, initialMessages, initialLang, ini
               {chat.map((m, i) => {
                 const prev = chat[i - 1];
                 const newDay = !prev || startOfDay(new Date(prev.sentAt)) !== startOfDay(new Date(m.sentAt));
-                const isUnreadStart = unreadMarker?.partnerId === selectedId && unreadMarker.messageId === m.id;
+                const isUnreadStart = unreadMarker?.key === selectedId && unreadMarker.messageId === m.id;
                 const outbound = m.direction === "outbound";
                 const sender = m.senderName || displayName(selected);
                 const bubble = (
