@@ -22,7 +22,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { looksJapanese } from "@/lib/translate-ja";
-import { CHAT_LANGUAGES, hasWords, isChatLang, type ChatLang } from "@/lib/chat-languages";
+import { CHAT_LANGUAGES, DRAFT_LANGUAGES, hasWords, isChatLang, type ChatLang, type DraftLang } from "@/lib/chat-languages";
 
 export { CHAT_LANGUAGES, isChatLang, type ChatLang } from "@/lib/chat-languages";
 
@@ -152,4 +152,43 @@ export async function translateForAllStaff(messageId: number): Promise<void> {
   for (const lang of langs.length > 0 ? langs : (["ja"] as ChatLang[])) {
     await translateMessages([messageId], lang);
   }
+}
+
+/**
+ * 入力欄の「翻訳」。送る前の文を相手の言語に訳し、確認用に担当者の表示言語へ訳し戻した文も返す
+ * (担当者が読めない言語に訳したときも、意味が合っているか目で確かめてから送れるように)。
+ */
+export async function translateDraft(
+  text: string,
+  target: DraftLang,
+  staffLang: ChatLang,
+): Promise<{ translation: string; back: string | null }> {
+  const anthropic = getClient();
+  if (!anthropic) throw new Error("翻訳の AI キーが未設定です");
+  const targetName = DRAFT_LANGUAGES.find((l) => l.code === target)!.aiName;
+  const staffName = CHAT_LANGUAGES.find((l) => l.code === staffLang)!.aiName;
+
+  const response = await anthropic.messages.create({
+    model: process.env.CHAT_TRANSLATE_MODEL?.trim() || DEFAULT_MODEL,
+    max_tokens: 4000,
+    system: [
+      "You translate a chat message that staff of a Japanese recruiting company are about to send on LINE to candidates or partner agencies abroad.",
+      `Translate it into natural, polite but friendly ${targetName} suitable for a chat message.`,
+      "Keep @mentions, personal names, company names, URLs, numbers, emoji and line breaks as they are. Do not add anything.",
+      `Then translate your translation back into ${staffName} as literally as possible, so the staff can check the meaning.`,
+      'Reply with JSON only: {"translation": "<text>", "back": "<text>"}',
+    ].join("\n"),
+    messages: [{ role: "user", content: text }],
+  });
+  const out = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+  const json = out.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)?.[1] ?? out;
+  const parsed = JSON.parse(json) as { translation?: unknown; back?: unknown };
+  const translation = typeof parsed.translation === "string" ? parsed.translation.trim() : "";
+  if (!translation) throw new Error("翻訳できませんでした");
+  const back = typeof parsed.back === "string" && parsed.back.trim() && target !== staffLang ? parsed.back.trim() : null;
+  return { translation, back };
 }

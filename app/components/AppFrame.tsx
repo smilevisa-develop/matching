@@ -48,14 +48,21 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // チャットだけはスマホでも使う (LINE と同じ画面)。スマホではサイドバーと「修正依頼」を出さない
+  const isChat = pathname === "/chat";
+
   return (
     <body className="h-full flex bg-[var(--color-light)] text-[var(--color-text-dark)]">
-      <Sidebar />
+      <div className={isChat ? "hidden md:contents" : "contents"}>
+        <Sidebar />
+      </div>
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1440px]">{children}</div>
       </main>
       {/* 右下の「修正依頼」ボタン (使いにくいところ・不具合をスクショ付きですぐ送れる) */}
-      <FeedbackWidget />
+      <div className={isChat ? "hidden md:contents" : "contents"}>
+        <FeedbackWidget />
+      </div>
     </body>
   );
 }

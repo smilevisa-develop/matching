@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, Fragment } from "react";
-import { CHAT_LANGUAGES, hasWords, type ChatLang } from "@/lib/chat-languages";
+import Link from "next/link";
+import {
+  CHAT_LANGUAGES,
+  COUNTRY_LANG,
+  DRAFT_LANGUAGES,
+  hasWords,
+  isDraftLang,
+  type ChatLang,
+  type DraftLang,
+} from "@/lib/chat-languages";
 
 /**
  * トーク (会話)。id は "p:<partnerId>" (パートナー) か "g:<groupId>" (パートナーではない
@@ -39,8 +48,10 @@ type Message = {
 };
 type Template = { id: number; name: string; content: string };
 
-/** LINE の配色 */
+/** LINE の配色 (スマホのトーク画面の背景・送った吹き出し) */
 const LINE_GREEN = "#06C755";
+const LINE_BG = "#8CABD8";
+const LINE_SENT = "#8DE055";
 
 /** パートナー向けショートカット文言 */
 const SHORTCUTS: { label: string; text: string }[] = [
@@ -167,6 +178,13 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   const requestedRef = useRef<Set<number>>(new Set());
   /** 一番下を見ているか (見ているときだけ新着を追いかける) */
   const stickToBottomRef = useRef(true);
+  /** スマホでトーク画面を開いているか (スマホは一覧とトーク画面を切り替える。PC は両方出す) */
+  const [mobileRoom, setMobileRoom] = useState(false);
+  /** 入力欄の「翻訳」: 訳す前の文と、確認用の訳し戻し */
+  const [draft, setDraft] = useState<{ original: string; back: string | null; target: DraftLang } | null>(null);
+  const [draftBusy, setDraftBusy] = useState(false);
+  /** トークごとに選んだ「訳す言語」(選んでいなければ相手のメッセージの言語から決める) */
+  const [targetByConv, setTargetByConv] = useState<Record<string, DraftLang>>({});
 
   const lastByPartner = useMemo(() => {
     const map = new Map<string, Message>();
@@ -214,10 +232,20 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   const selected = conversations.find((p) => p.id === selectedId);
   const chat = useMemo(() => messages.filter((m) => m.convKey === selectedId), [messages, selectedId]);
 
+  // PC は一番上のトークを開いておく。スマホは一覧から選ぶまで開かない (開くと既読になるため)
   useEffect(() => {
     if (selectedId && conversations.some((p) => p.id === selectedId)) return;
+    if (!window.matchMedia("(min-width: 768px)").matches) return;
     setSelectedId(sortedPartners[0]?.id ?? null);
   }, [selectedId, conversations, sortedPartners]);
+
+  /** スマホ: トーク一覧へ戻る (トークを閉じる。開いたままだと新着が既読になってしまう) */
+  const backToList = () => {
+    setMobileRoom(false);
+    setSelectedId(null);
+    setDraft(null);
+    setPanel(null);
+  };
 
   // 会話を開いたときは一番下へ (アニメーションなし)
   useLayoutEffect(() => {
@@ -319,9 +347,50 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   }, [selectedId, messages]);
 
   const selectPartner = (id: string) => {
-    if (id !== selectedId) setUnreadMarker(null);
+    if (id !== selectedId) {
+      setUnreadMarker(null);
+      setDraft(null);
+    }
     setSelectedId(id);
     setPanel(null);
+    setMobileRoom(true);
+  };
+
+  /** 訳す言語: 選んだもの → 相手の直近のメッセージの言語 → 国 → (担当者が日本語なら英語、そうでなければ日本語) */
+  const draftTarget: DraftLang = useMemo(() => {
+    if (selectedId && targetByConv[selectedId]) return targetByConv[selectedId];
+    const theirs = [...chat].reverse().find((m) => m.direction === "inbound" && m.sourceLang && m.sourceLang !== lang)?.sourceLang;
+    if (isDraftLang(theirs)) return theirs;
+    const byCountry = selected?.country ? COUNTRY_LANG[selected.country] : undefined;
+    return byCountry ?? (lang === "ja" ? "en" : "ja");
+  }, [selectedId, targetByConv, chat, lang, selected]);
+
+  /** 入力した文を相手の言語に訳して入力欄に入れる (送信はしない) */
+  const translateInput = async (target: DraftLang = draftTarget) => {
+    const source = draft ? draft.original : input;
+    if (!source.trim() || draftBusy) return;
+    setDraftBusy(true);
+    try {
+      const res = await fetch("/api/chat/draft-translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: source, target }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!data?.ok) {
+        alert(`翻訳できませんでした: ${data?.error ?? res.status}`);
+        return;
+      }
+      setDraft({ original: source, back: data.back ?? null, target });
+      setInput(data.translation);
+    } finally {
+      setDraftBusy(false);
+    }
+  };
+
+  const chooseTarget = (target: DraftLang) => {
+    if (selectedId) setTargetByConv((cur) => ({ ...cur, [selectedId]: target }));
+    if (draft) void translateInput(target);
   };
 
   const togglePin = async (key: string) => {
@@ -407,6 +476,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
           },
         ]);
         setInput("");
+        setDraft(null);
         setPanel(null);
       } else {
         alert(`送信失敗: ${data.error}`);
@@ -421,16 +491,40 @@ export default function ChatClient({ conversations, initialMessages, initialLang
     panel === "templates"
       ? templates.map((t) => ({ key: `t${t.id}`, label: t.name, text: t.content }))
       : SHORTCUTS.map((s) => ({ key: s.label, label: s.label, text: s.text }));
+  const targetLabel = DRAFT_LANGUAGES.find((l) => l.code === draftTarget)?.label ?? "";
+
+  /** 訳す言語を選ぶ欄 (PC は入力欄の下、スマホは翻訳した文の上) */
+  const targetSelect = (
+    <select
+      value={draftTarget}
+      onChange={(e) => chooseTarget(e.target.value as DraftLang)}
+      title="翻訳する言語 (送る相手の言語)"
+      className="rounded-md border border-[#D5D7DC] bg-white px-1.5 py-1 text-[12px] text-[#333] outline-none"
+    >
+      {DRAFT_LANGUAGES.map((l) => (
+        <option key={l.code} value={l.code}>
+          {l.label}
+        </option>
+      ))}
+    </select>
+  );
 
   return (
     <div
-      className="flex h-screen overflow-hidden bg-white text-[#111]"
+      className="flex h-[100dvh] overflow-hidden bg-white text-[#111] md:h-screen"
       style={{ fontFamily: '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", sans-serif' }}
     >
-      {/* 左: トーク一覧 */}
-      <div className="flex w-[360px] shrink-0 flex-col border-r border-[#E5E6EA]">
-        <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-[#E5E6EA] px-3">
-          <div className="relative">
+      {/* 左: トーク一覧 (スマホはトーク画面を開いていないときだけ) */}
+      <div className={`${mobileRoom ? "hidden" : "flex"} w-full shrink-0 flex-col border-r border-[#E5E6EA] md:flex md:w-[360px]`}>
+        {/* スマホ: LINE の「トーク」の見出し */}
+        <div className="flex h-[52px] shrink-0 items-center justify-between px-4 pt-[env(safe-area-inset-top)] md:hidden">
+          <p className="text-[22px] font-bold">トーク</p>
+          <Link href="/" className="rounded-full px-2 py-1 text-[13px] text-[#555] active:bg-[#F2F3F5]">
+            メニュー
+          </Link>
+        </div>
+        <div className="flex shrink-0 items-center gap-3 px-4 pb-2 md:h-[60px] md:border-b md:border-[#E5E6EA] md:px-3 md:pb-0">
+          <div className="relative hidden md:block">
             <button
               onClick={() => setFilterOpen((v) => !v)}
               className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[15px] text-[#111] hover:bg-[#F2F3F5]"
@@ -455,15 +549,34 @@ export default function ChatClient({ conversations, initialMessages, initialLang
               </div>
             )}
           </div>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="検索"
-            className="min-w-0 flex-1 rounded-md border border-[#D5D7DC] bg-white px-3 py-2 text-[14px] outline-none placeholder:text-[#A4A8B0] focus:border-[#B8BCC4]"
-          />
+          <div className="relative min-w-0 flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#A4A8B0] md:hidden">
+              <Icon d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Zm5-2 4 4" className="h-4 w-4" />
+            </span>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="検索"
+              className="w-full rounded-full bg-[#F2F3F5] py-2 pl-9 pr-3 text-[16px] outline-none placeholder:text-[#A4A8B0] md:rounded-md md:border md:border-[#D5D7DC] md:bg-white md:px-3 md:text-[14px] md:focus:border-[#B8BCC4]"
+            />
+          </div>
+        </div>
+        {/* スマホ: 絞り込みは LINE のように横並びのボタン */}
+        <div className="flex shrink-0 gap-2 overflow-x-auto px-4 pb-2 md:hidden">
+          {FILTERS.map((o) => (
+            <button
+              key={o.v}
+              onClick={() => setFilter(o.v)}
+              className={`shrink-0 rounded-full border px-3 py-1 text-[13px] ${
+                filter === o.v ? "border-[#111] bg-[#111] text-white" : "border-[#D5D7DC] text-[#333]"
+              }`}
+            >
+              {o.short}
+            </button>
+          ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
           {sortedPartners.map((p) => {
             const last = lastByPartner.get(p.id);
             const unread = unreadByPartner.get(p.id) ?? 0;
@@ -477,14 +590,14 @@ export default function ChatClient({ conversations, initialMessages, initialLang
                 onKeyDown={(e) => {
                   if (e.key === "Enter") selectPartner(p.id);
                 }}
-                className={`group relative flex h-[90px] w-full cursor-pointer items-center gap-3 px-4 text-left transition-colors ${
-                  selectedId === p.id ? "bg-[#EBEDF0]" : "hover:bg-[#F6F7F8]"
+                className={`group relative flex h-[76px] w-full cursor-pointer items-center gap-3 px-4 text-left transition-colors active:bg-[#F2F3F5] md:h-[90px] ${
+                  selectedId === p.id ? "md:bg-[#EBEDF0]" : "md:hover:bg-[#F6F7F8]"
                 }`}
               >
-                <Avatar name={name} size={48} />
+                <Avatar name={name} size={52} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
-                    <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-[#111]">
+                    <p className="min-w-0 flex-1 truncate text-[16px] font-semibold text-[#111] md:text-[15px] md:font-medium">
                       {name}
                       {p.lineGroupId && p.lineGroupMemberCount ? (
                         <span className="ml-1 font-normal">({p.lineGroupMemberCount})</span>
@@ -498,13 +611,26 @@ export default function ChatClient({ conversations, initialMessages, initialLang
                     {last && <span className="shrink-0 text-[12px] text-[#8A8F98]">{formatListTime(last.sentAt)}</span>}
                   </div>
                   <div className="mt-1 flex items-center gap-2">
-                    <p className="min-w-0 flex-1 truncate text-[13px] text-[#5D636C]">
+                    <p className="min-w-0 flex-1 truncate text-[13.5px] text-[#5D636C] md:text-[13px]">
                       {last ? last.translation ?? last.content : "メッセージなし"}
                     </p>
                     {unread > 0 && (
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: LINE_GREEN }} title={`未読 ${unread}件`} />
+                      <>
+                        {/* スマホは LINE と同じく件数の緑の丸、PC は点 */}
+                        <span
+                          className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white md:hidden"
+                          style={{ background: LINE_GREEN }}
+                        >
+                          {unread > 99 ? "99+" : unread}
+                        </span>
+                        <span
+                          className="hidden h-2.5 w-2.5 shrink-0 rounded-full md:block"
+                          style={{ background: LINE_GREEN }}
+                          title={`未読 ${unread}件`}
+                        />
+                      </>
                     )}
-                    {/* カーソルを乗せたときだけ出す、ピン留めの付け外し */}
+                    {/* カーソルを乗せたときだけ出す、ピン留めの付け外し (PC) */}
                     <button
                       type="button"
                       onClick={(e) => {
@@ -512,7 +638,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
                         void togglePin(p.id);
                       }}
                       title={pinned.has(p.id) ? "ピン留めを外す" : "ピン留め"}
-                      className={`hidden shrink-0 rounded p-1 group-hover:block hover:bg-black/5 ${
+                      className={`hidden shrink-0 rounded p-1 hover:bg-black/5 md:group-hover:block ${
                         pinned.has(p.id) ? "text-[#111]" : "text-[#8A8F98]"
                       }`}
                     >
@@ -535,21 +661,33 @@ export default function ChatClient({ conversations, initialMessages, initialLang
         </div>
       </div>
 
-      {/* 右: トーク画面 */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* 右: トーク画面 (スマホは LINE の青い背景) */}
+      <div
+        className={`${mobileRoom ? "flex" : "hidden"} min-w-0 flex-1 flex-col bg-[var(--chat-bg)] md:flex md:bg-white`}
+        style={{ "--chat-bg": LINE_BG } as React.CSSProperties}
+      >
         {selected ? (
           <>
-            <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-[#E5E6EA] px-4">
-              <Avatar name={displayName(selected)} size={36} />
+            <div className="flex h-[52px] shrink-0 items-center gap-2 px-2 pt-[env(safe-area-inset-top)] md:h-[60px] md:gap-3 md:border-b md:border-[#E5E6EA] md:px-4 md:pt-0">
+              <button
+                onClick={backToList}
+                className="rounded-full p-1.5 text-[#111] active:bg-black/10 md:hidden"
+                title="トーク一覧へ戻る"
+              >
+                <Icon d="M15 5l-7 7 7 7" className="h-6 w-6" />
+              </button>
+              <span className="hidden md:block">
+                <Avatar name={displayName(selected)} size={36} />
+              </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[18px] text-[#111]">
+                <p className="truncate text-[17px] font-semibold text-[#111] md:text-[18px] md:font-normal">
                   {displayName(selected)}
                   {selected.lineGroupId && selected.lineGroupMemberCount ? (
                     <span className="ml-0.5 text-[15px]">({selected.lineGroupMemberCount})</span>
                   ) : null}
                 </p>
                 {(selected.lineGroupName && selected.lineGroupName !== selected.name) || selected.contactName ? (
-                  <p className="-mt-0.5 truncate text-[11px] text-[#8A8F98]">
+                  <p className="-mt-0.5 hidden truncate text-[11px] text-[#8A8F98] md:block">
                     {[
                       selected.lineGroupName && selected.lineGroupName !== selected.name ? selected.name : null,
                       selected.contactName ? `担当: ${selected.contactName}` : null,
@@ -561,22 +699,25 @@ export default function ChatClient({ conversations, initialMessages, initialLang
               </div>
               <button
                 onClick={() => void togglePin(selected.id)}
-                className={`flex items-center gap-1.5 rounded border px-3 py-1.5 text-[13px] font-medium hover:bg-[#F6F7F8] ${
-                  pinned.has(selected.id) ? "border-[#111] text-[#111]" : "border-[#D5D7DC] text-[#333]"
+                className={`flex items-center gap-1.5 rounded-full p-1.5 text-[13px] font-medium active:bg-black/10 md:rounded md:border md:px-3 md:py-1.5 md:hover:bg-[#F6F7F8] ${
+                  pinned.has(selected.id) ? "text-[#111] md:border-[#111]" : "text-[#333] md:border-[#D5D7DC]"
                 }`}
                 title={pinned.has(selected.id) ? "ピン留めを外す" : "このトークを一覧の上に固定する"}
               >
-                <Icon d={PIN_ICON} className="h-4 w-4" />
-                {pinned.has(selected.id) ? "ピン留め中" : "ピン留め"}
+                <Icon d={PIN_ICON} className={`h-5 w-5 md:h-4 md:w-4 ${pinned.has(selected.id) ? "" : "opacity-60 md:opacity-100"}`} />
+                <span className="hidden md:inline">{pinned.has(selected.id) ? "ピン留め中" : "ピン留め"}</span>
               </button>
               <div className="relative">
                 <button
                   onClick={() => setLangOpen((v) => !v)}
-                  className="flex items-center gap-1.5 rounded border border-[#D5D7DC] px-3 py-1.5 text-[13px] font-medium text-[#333] hover:bg-[#F6F7F8]"
+                  className="flex items-center gap-1.5 rounded-full p-1.5 text-[13px] font-medium text-[#333] active:bg-black/10 md:rounded md:border md:border-[#D5D7DC] md:px-3 md:py-1.5 md:hover:bg-[#F6F7F8]"
                   title="訳を表示する言語"
                 >
-                  <Icon d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-9-9h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" className="h-4 w-4" />
-                  {langLabel}
+                  <Icon
+                    d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm-9-9h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"
+                    className="h-5 w-5 md:h-4 md:w-4"
+                  />
+                  <span className="hidden md:inline">{langLabel}</span>
                 </button>
                 {langOpen && (
                   <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg border border-[#E5E6EA] bg-white py-1 shadow-lg">
@@ -602,46 +743,49 @@ export default function ChatClient({ conversations, initialMessages, initialLang
                 const el = e.currentTarget;
                 stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
               }}
-              className="flex-1 overflow-y-auto px-4 pb-6 pt-2"
+              className="flex-1 overflow-y-auto px-3 pb-4 pt-1 md:px-4 md:pb-6 md:pt-2"
             >
-              {chat.length === 0 && <p className="mt-16 text-center text-sm text-[#8A8F98]">メッセージはありません</p>}
+              {chat.length === 0 && <p className="mt-16 text-center text-sm text-white md:text-[#8A8F98]">メッセージはありません</p>}
               {chat.map((m, i) => {
                 const prev = chat[i - 1];
                 const newDay = !prev || startOfDay(new Date(prev.sentAt)) !== startOfDay(new Date(m.sentAt));
                 const isUnreadStart = unreadMarker?.key === selectedId && unreadMarker.messageId === m.id;
                 const outbound = m.direction === "outbound";
                 const sender = m.senderName || displayName(selected);
+                // LINE と同じく、同じ人が続けて送ったときは名前・アイコン・吹き出しのしっぽを最初だけ出す
+                const continued = !newDay && !isUnreadStart && prev?.direction === m.direction && (outbound || (prev.senderName || displayName(selected)) === sender);
                 const bubble = (
                   <Bubble
                     main={m.translation ?? m.content}
                     original={m.translation ? m.content : null}
                     pending={translating.has(m.id)}
                     outbound={outbound}
+                    tail={!continued}
                   />
                 );
                 return (
                   <Fragment key={m.id}>
                     {newDay && (
                       <div className="my-4 flex justify-center">
-                        <span className="rounded-full bg-[#C9CDD3] px-3 py-0.5 text-[12px] text-white">{formatDayLabel(m.sentAt)}</span>
+                        <span className="rounded-full bg-black/20 px-3 py-0.5 text-[12px] text-white md:bg-[#C9CDD3]">{formatDayLabel(m.sentAt)}</span>
                       </div>
                     )}
                     {isUnreadStart && (
-                      <div className="my-3 rounded-full bg-[#C9CDD3] py-0.5 text-center text-[12px] text-white">ここから未読メッセージ</div>
+                      <div className="my-3 rounded-full bg-black/20 py-0.5 text-center text-[12px] text-white md:bg-[#C9CDD3]">ここから未読メッセージ</div>
                     )}
                     {outbound ? (
-                      <div className="mt-3 flex items-end justify-end gap-1.5">
-                        <span className="mb-0.5 shrink-0 text-[11px] text-[#8A8F98]">{formatTime(m.sentAt)}</span>
+                      <div className={`${continued ? "mt-1" : "mt-3"} flex items-end justify-end gap-1.5`}>
+                        <span className="mb-0.5 shrink-0 text-[10px] text-[#3B4A63] md:text-[11px] md:text-[#8A8F98]">{formatTime(m.sentAt)}</span>
                         {bubble}
                       </div>
                     ) : (
-                      <div className="mt-3 flex items-start gap-2.5">
-                        <Avatar name={sender} size={36} />
+                      <div className={`${continued ? "mt-1" : "mt-3"} flex items-start gap-2`}>
+                        {continued ? <div className="w-9 shrink-0" /> : <Avatar name={sender} size={36} />}
                         <div className="min-w-0">
-                          <p className="mb-1 text-[13px] text-[#5D636C]">{sender}</p>
+                          {!continued && <p className="mb-1 text-[12px] text-[#3B4A63] md:text-[13px] md:text-[#5D636C]">{sender}</p>}
                           <div className="flex items-end gap-1.5">
                             {bubble}
-                            <span className="mb-0.5 shrink-0 text-[11px] text-[#8A8F98]">{formatTime(m.sentAt)}</span>
+                            <span className="mb-0.5 shrink-0 text-[10px] text-[#3B4A63] md:text-[11px] md:text-[#8A8F98]">{formatTime(m.sentAt)}</span>
                           </div>
                         </div>
                       </div>
@@ -652,16 +796,27 @@ export default function ChatClient({ conversations, initialMessages, initialLang
             </div>
 
             {/* 入力欄 */}
-            <div className="relative shrink-0 border-t border-[#E5E6EA]">
+            <div className="relative shrink-0 bg-white md:border-t md:border-[#E5E6EA]">
               {panel && (
                 <div className="absolute bottom-full left-0 right-0 max-h-64 overflow-y-auto border-t border-[#E5E6EA] bg-white px-3 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
-                  <p className="px-2 pb-1 text-[11px] text-[#8A8F98]">{panel === "templates" ? "テンプレート" : "定型文"}</p>
+                  <div className="flex items-center gap-3 px-2 pb-1">
+                    {(["templates", "shortcuts"] as const).map((k) => (
+                      <button
+                        key={k}
+                        onClick={() => setPanel(k)}
+                        className={`text-[12px] ${panel === k ? "font-semibold text-[#111]" : "text-[#8A8F98]"}`}
+                      >
+                        {k === "templates" ? "テンプレート" : "定型文"}
+                      </button>
+                    ))}
+                  </div>
                   {panelItems.length === 0 && <p className="px-2 py-2 text-sm text-[#8A8F98]">テンプレートがありません</p>}
                   {panelItems.map((item) => (
                     <button
                       key={item.key}
                       onClick={() => {
                         setInput(item.text);
+                        setDraft(null);
                         setPanel(null);
                       }}
                       className="flex w-full items-baseline gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-[#F2F3F5]"
@@ -672,41 +827,112 @@ export default function ChatClient({ conversations, initialMessages, initialLang
                   ))}
                 </div>
               )}
-              <textarea
-                className="block h-[92px] w-full resize-none px-4 pt-3 text-[15px] outline-none placeholder:text-[#A4A8B0]"
-                placeholder="Enterで送信 / Shift + Enterで改行"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    void send();
-                  }
-                }}
-              />
-              <div className="flex items-center gap-1 px-2 pb-2">
+
+              {/* 翻訳したとき: 元の文と、確認用の訳し戻しを出す (目で確かめてから送る) */}
+              {draft && (
+                <div className="border-b border-[#E5E6EA] bg-[#F7F8FA] px-3 py-2 text-[12px] leading-[1.5] text-[#444]">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-[#111]">{targetLabel}に翻訳しました</span>
+                    <span className="md:hidden">{targetSelect}</span>
+                    <button onClick={() => { setInput(draft.original); setDraft(null); }} className="ml-auto text-[#2563EB] underline">
+                      元に戻す
+                    </button>
+                  </div>
+                  {draft.back && (
+                    <p className="mt-1 whitespace-pre-wrap break-words">
+                      <span className="text-[#8A8F98]">確認 (訳し戻し): </span>
+                      {draft.back}
+                    </p>
+                  )}
+                  <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap break-words text-[#8A8F98]">元の文: {draft.original}</p>
+                </div>
+              )}
+
+              {/* スマホ: LINE の入力バー (＋ / 入力 / 翻訳 / 送信)。改行は Enter、送信はボタン */}
+              <div className="flex items-end gap-1.5 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 md:hidden">
                 <button
-                  onClick={() => setPanel((v) => (v === "templates" ? null : "templates"))}
-                  title="テンプレート"
-                  className={`rounded-md p-1.5 hover:bg-[#F2F3F5] ${panel === "templates" ? "text-[#111]" : "text-[#6B7079]"}`}
+                  onClick={() => setPanel((v) => (v ? null : "templates"))}
+                  title="テンプレート・定型文"
+                  className="mb-0.5 rounded-full p-1.5 text-[#333] active:bg-[#F2F3F5]"
                 >
-                  <Icon d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" />
+                  <Icon d={panel ? "M6 6l12 12M18 6 6 18" : "M12 5v14M5 12h14"} className="h-6 w-6" />
                 </button>
+                <textarea
+                  rows={1}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Aa"
+                  className="max-h-32 min-h-[38px] flex-1 resize-none rounded-[19px] bg-[#F2F3F5] px-4 py-2 text-[16px] leading-[22px] outline-none placeholder:text-[#A4A8B0] [field-sizing:content]"
+                />
                 <button
-                  onClick={() => setPanel((v) => (v === "shortcuts" ? null : "shortcuts"))}
-                  title="定型文"
-                  className={`rounded-md p-1.5 hover:bg-[#F2F3F5] ${panel === "shortcuts" ? "text-[#111]" : "text-[#6B7079]"}`}
+                  onClick={() => void translateInput()}
+                  disabled={draftBusy || !(draft ? draft.original : input).trim()}
+                  title={`${targetLabel}に翻訳`}
+                  className="mb-0.5 rounded-full px-2 py-1.5 text-[13px] font-bold text-[#333] active:bg-[#F2F3F5] disabled:opacity-30"
                 >
-                  <Icon d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5" />
+                  {draftBusy ? "…" : "翻訳"}
                 </button>
                 <button
                   onClick={() => void send()}
                   disabled={sending || !input.trim()}
-                  className="ml-auto rounded px-5 py-1.5 text-[14px] font-bold text-white transition-opacity disabled:opacity-40"
-                  style={{ background: LINE_GREEN }}
+                  title="送信"
+                  className="mb-0.5 rounded-full p-1.5 disabled:opacity-30"
+                  style={{ color: LINE_GREEN }}
                 >
-                  {sending ? "送信中" : "送信"}
+                  <svg viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor">
+                    <path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z" />
+                  </svg>
                 </button>
+              </div>
+
+              {/* PC: 今までの入力欄 (Enter で送信) */}
+              <div className="hidden md:block">
+                <textarea
+                  className="block h-[92px] w-full resize-none px-4 pt-3 text-[15px] outline-none placeholder:text-[#A4A8B0]"
+                  placeholder="Enterで送信 / Shift + Enterで改行"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      void send();
+                    }
+                  }}
+                />
+                <div className="flex items-center gap-1 px-2 pb-2">
+                  <button
+                    onClick={() => setPanel((v) => (v === "templates" ? null : "templates"))}
+                    title="テンプレート"
+                    className={`rounded-md p-1.5 hover:bg-[#F2F3F5] ${panel === "templates" ? "text-[#111]" : "text-[#6B7079]"}`}
+                  >
+                    <Icon d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" />
+                  </button>
+                  <button
+                    onClick={() => setPanel((v) => (v === "shortcuts" ? null : "shortcuts"))}
+                    title="定型文"
+                    className={`rounded-md p-1.5 hover:bg-[#F2F3F5] ${panel === "shortcuts" ? "text-[#111]" : "text-[#6B7079]"}`}
+                  >
+                    <Icon d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5" />
+                  </button>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {targetSelect}
+                    <button
+                      onClick={() => void translateInput()}
+                      disabled={draftBusy || !(draft ? draft.original : input).trim()}
+                      className="rounded border border-[#D5D7DC] px-3 py-1.5 text-[13px] font-medium text-[#333] hover:bg-[#F6F7F8] disabled:opacity-40"
+                    >
+                      {draftBusy ? "翻訳中" : "翻訳"}
+                    </button>
+                    <button
+                      onClick={() => void send()}
+                      disabled={sending || !input.trim()}
+                      className="rounded px-5 py-1.5 text-[14px] font-bold text-white transition-opacity disabled:opacity-40"
+                      style={{ background: LINE_GREEN }}
+                    >
+                      {sending ? "送信中" : "送信"}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </>
@@ -718,14 +944,38 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   );
 }
 
-/** 吹き出し。訳があれば訳を大きく、原文を下に小さく出す */
-function Bubble({ main, original, pending, outbound }: { main: string; original: string | null; pending: boolean; outbound: boolean }) {
+/** 吹き出し。訳があれば訳を大きく、原文を下に小さく出す。tail は LINE の吹き出しのしっぽ (続けて送ったときは出さない) */
+function Bubble({
+  main,
+  original,
+  pending,
+  outbound,
+  tail,
+}: {
+  main: string;
+  original: string | null;
+  pending: boolean;
+  outbound: boolean;
+  tail: boolean;
+}) {
+  const color = outbound ? LINE_SENT : undefined;
   return (
     <div
-      className={`max-w-[min(520px,62vw)] rounded-[18px] px-3.5 py-2 text-[14.5px] leading-[1.5] text-[#111] ${
-        outbound ? "bg-[#8DE055]" : "bg-[#EEF0F3]"
+      className={`relative max-w-[72vw] rounded-[18px] px-3.5 py-2 text-[15px] leading-[1.5] text-[#111] md:max-w-[min(520px,62vw)] md:text-[14.5px] ${
+        outbound ? "" : "bg-white md:bg-[#EEF0F3]"
       }`}
+      style={color ? { background: color } : undefined}
     >
+      {tail && (
+        <svg
+          viewBox="0 0 10 12"
+          className={`absolute top-0 h-3 w-2.5 ${outbound ? "-right-1.5" : "-left-1.5 -scale-x-100 text-white md:text-[#EEF0F3]"}`}
+          style={outbound ? { color: LINE_SENT } : undefined}
+          fill="currentColor"
+        >
+          <path d="M0 0h10C7 2 4 6 0 12z" />
+        </svg>
+      )}
       <p className="whitespace-pre-wrap break-words">{main}</p>
       {original && (
         <p
