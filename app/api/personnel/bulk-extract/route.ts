@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import {
   extractCandidateFromFiles,
   extractCandidateFromText,
+  type UncertainField,
   type ExtractedCandidate,
   type SourceFile,
 } from "@/lib/ai-extract";
@@ -37,6 +38,8 @@ type ExtractItem =
       ok: true;
       candidate: ExtractedCandidate;
       warnings: string[];
+      /** 確証がない値 (画面で「要チェック」を付ける) */
+      uncertain: UncertainField[];
       duplicates: Duplicate[];
       uploadedFileId: string;
       mimeType: string;
@@ -185,13 +188,14 @@ export async function POST(req: Request) {
     const items: ExtractItem[] = results.map((r, idx) => {
       const { fileName, mimeType, uploadedFileId } = prepared[idx];
       if (r.status === "fulfilled") {
-        const { _warnings = [], ...rest } = r.value;
+        const { _warnings = [], _uncertain = [], ...rest } = r.value;
         const duplicates = findDuplicates(rest, allPersons);
         return {
           fileName,
           ok: true,
           candidate: rest,
           warnings: _warnings,
+          uncertain: _uncertain,
           duplicates,
           uploadedFileId,
           mimeType,

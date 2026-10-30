@@ -62,9 +62,11 @@ export type ExtractedCandidate = {
   preferenceNote?: string;
   workExperiences?: { companyName?: string; startDate?: string; endDate?: string; reason?: string }[];
   _warnings?: string[];
+  /** 確証がない値 (field はキー名。職歴は "workExperiences") */
+  _uncertain?: { field: string; reason: string }[];
 };
 
-type FieldKey = Exclude<keyof ExtractedCandidate, "workExperiences" | "_warnings">;
+type FieldKey = Exclude<keyof ExtractedCandidate, "workExperiences" | "_warnings" | "_uncertain">;
 
 const FIELD_LABELS: { key: FieldKey; label: string }[] = [
   { key: "name", label: "カナ名" },
@@ -437,6 +439,14 @@ function ExtractModal({
                 衝突しているフィールドはどちらを採用するか選んでから反映してください。
               </div>
 
+              {/* 確証がない値 (各項目にも「要チェック」を付けている) */}
+              {extracted._uncertain && extracted._uncertain.length > 0 ? (
+                <div className="rounded-2xl border border-[#FDBA74] bg-[#FFF7ED] px-4 py-3 text-sm text-[#9A3412]">
+                  <span className="mr-1.5 rounded-full bg-[#EA580C] px-2 py-0.5 text-[11px] font-bold text-white">要チェック</span>
+                  {extracted._uncertain.length} 件は読み取りに確証がありません。書類と見比べてから反映してください。
+                </div>
+              ) : null}
+
               {/* AI が形式不正と判定して除外したフィールドの警告 */}
               {extracted._warnings && extracted._warnings.length > 0 ? (
                 <div className="rounded-2xl border border-[#FCA5A5] bg-[#FEF2F2] px-4 py-3 text-xs text-[#991B1B]">
@@ -559,6 +569,7 @@ function ExtractModal({
                         decision={decisions[field.key] ?? (field.extractedValue ? "extracted" : "existing")}
                         onDecisionChange={(d) => setDecision(field.key, d)}
                         onExtractedChange={(v) => updateExtractedValue(field.key, v)}
+                        check={extracted._uncertain?.find((u) => u.field === field.key)?.reason}
                       />
                     ))}
                   </div>
@@ -567,7 +578,10 @@ function ExtractModal({
 
               {Array.isArray(extracted.workExperiences) && extracted.workExperiences.length > 0 ? (
                 <div>
-                  <p className="mb-2 text-sm font-semibold text-[var(--color-text-dark)]">職歴 ({extracted.workExperiences.length})</p>
+                  <p className="mb-2 text-sm font-semibold text-[var(--color-text-dark)]">
+                    職歴 ({extracted.workExperiences.length})
+                    <CheckMark reason={extracted._uncertain?.find((u) => u.field === "workExperiences")?.reason} />
+                  </p>
                   <div className="space-y-2">
                     {extracted.workExperiences.map((entry, index) => (
                       <div key={index} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
@@ -638,6 +652,7 @@ function FieldComparisonRow({
   decision,
   onDecisionChange,
   onExtractedChange,
+  check,
 }: {
   label: string;
   existingValue: string;
@@ -646,6 +661,8 @@ function FieldComparisonRow({
   decision: Decision;
   onDecisionChange: (d: Decision) => void;
   onExtractedChange: (v: string) => void;
+  /** 確証がない理由 (あれば「要チェック」を付ける) */
+  check?: string;
 }) {
   const hasExtracted = extractedValue.trim().length > 0;
   const hasExisting = existingValue.trim().length > 0;
@@ -662,13 +679,18 @@ function FieldComparisonRow({
   return (
     <div
       className={`rounded-xl border px-3 py-3 ${
-        status === "conflict"
-          ? "border-[#FDE68A] bg-[#FFFBEB]"
-          : "border-gray-200 bg-white"
+        check
+          ? "border-[#FDBA74] bg-[#FFF7ED]"
+          : status === "conflict"
+            ? "border-[#FDE68A] bg-[#FFFBEB]"
+            : "border-gray-200 bg-white"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-gray-600">{label}</span>
+        <span className="text-xs font-semibold text-gray-600">
+          {label}
+          <CheckMark reason={check} />
+        </span>
         {statusLabel ? (
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusLabel.className}`}>{statusLabel.text}</span>
         ) : null}
@@ -779,5 +801,16 @@ function SparkIcon() {
       <path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13z" fill="currentColor" stroke="none" />
       <path d="M5 16l.6 1.6L7.2 18l-1.6.4L5 20l-.6-1.6L2.8 18l1.6-.4L5 16z" fill="currentColor" stroke="none" />
     </svg>
+  );
+}
+
+/** 読み取りに確証がない値に付ける印 (理由も一緒に出す) */
+function CheckMark({ reason }: { reason?: string }) {
+  if (!reason) return null;
+  return (
+    <span className="ml-1.5 inline-flex items-center gap-1 align-middle">
+      <span className="rounded-full bg-[#EA580C] px-1.5 py-0.5 text-[10px] font-bold text-white">要チェック</span>
+      <span className="text-[10px] font-normal text-[#9A3412]">{reason}</span>
+    </span>
   );
 }

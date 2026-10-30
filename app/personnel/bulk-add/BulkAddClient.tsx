@@ -56,6 +56,20 @@ type ExtractedCandidate = {
   }[];
 };
 
+/** 読み取りに確証がない値 (field は ExtractedCandidate のキー。職歴は "workExperiences") */
+type Uncertain = { field: string; reason: string };
+
+/** 要チェックの一覧に出す項目名 */
+const CHECK_LABELS: Record<string, string> = {
+  name: "名前 (カナ)", englishName: "英語名", nationality: "国籍", residenceStatus: "在留資格", visaExpiryDate: "ビザ期限",
+  birthDate: "生年月日", gender: "性別", phoneNumber: "電話", email: "メール", postalCode: "郵便番号", address: "住所",
+  spouseStatus: "配偶者", childrenCount: "子供", japaneseLevel: "日本語レベル", japaneseLevelDate: "日本語検定取得日",
+  licenseName: "免許", licenseExpiryDate: "免許の有効期限", otherQualificationName: "その他の資格",
+  otherQualificationExpiryDate: "その他資格の有効期限", traineeExperience: "実習経験", highSchoolName: "高校名",
+  highSchoolStartDate: "高校入学", highSchoolEndDate: "高校卒業", universityName: "大学名", universityStartDate: "大学入学",
+  universityEndDate: "大学卒業", workExperiences: "職歴", currentJob: "現在の仕事",
+};
+
 type Duplicate = { id: number; name: string; similarity: number; reason: "name" | "email" };
 
 type ExtractItem =
@@ -64,6 +78,7 @@ type ExtractItem =
       ok: true;
       candidate: ExtractedCandidate;
       warnings: string[];
+      uncertain?: Uncertain[];
       duplicates: Duplicate[];
       uploadedFileId: string;
       mimeType: string;
@@ -77,6 +92,7 @@ type CardState = ExtractedCandidate & {
   channel: string;
   include: boolean; // チェック外したらスキップ
   warnings: string[];
+  uncertain: Uncertain[];
   duplicates: Duplicate[];
   uploadedFileId: string;
   mimeType: string;
@@ -177,6 +193,7 @@ export default function BulkAddClient({ partners }: { partners: Partner[] }) {
             // 重複候補があれば初期は除外しておく (誤って登録しないため)
             include: it.duplicates.length === 0,
             warnings: it.warnings,
+            uncertain: it.uncertain ?? [],
             duplicates: it.duplicates,
             uploadedFileId: it.uploadedFileId,
             mimeType: it.mimeType,
@@ -476,6 +493,7 @@ function CandidateCard({
   onChange: (patch: Partial<CardState>) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const chk = (key: string) => card.uncertain.find((u) => u.field === key)?.reason;
   return (
     <div
       className={`bg-white rounded-xl border p-4 shadow-sm space-y-3 ${
@@ -513,6 +531,19 @@ function CandidateCard({
           </ul>
         </div>
       )}
+      {card.uncertain.length > 0 && (
+        <div className="text-[11px] bg-orange-50 border border-orange-300 rounded px-2 py-1.5 text-orange-900">
+          <span className="mr-1 rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold text-white">要チェック</span>
+          読み取りに確証がありません。書類と見比べてください:
+          <ul className="mt-0.5 space-y-0.5">
+            {card.uncertain.map((u) => (
+              <li key={u.field}>
+                ・{CHECK_LABELS[u.field] ?? u.field}: {u.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {card.warnings.length > 0 && (
         <div className="text-[10px] bg-amber-50 border border-amber-200 rounded px-2 py-1 text-amber-800">
           ⚠️ {card.warnings.join(" / ")}
@@ -521,24 +552,26 @@ function CandidateCard({
 
       {/* 主要フィールド (簡易表示時もこれだけは見せる) */}
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <Field label="名前 (カナ) *" value={card.name} onChange={(v) => onChange({ name: v })} required />
-        <Field label="英語名" value={card.englishName} onChange={(v) => onChange({ englishName: v })} />
+        <Field label="名前 (カナ) *" value={card.name} check={chk("name")} onChange={(v) => onChange({ name: v })} required />
+        <Field label="英語名" value={card.englishName} check={chk("englishName")} onChange={(v) => onChange({ englishName: v })} />
         <SelectField
           label="国籍"
           value={card.nationality ?? "その他"}
+          check={chk("nationality")}
           options={[...NATIONALITIES]}
           onChange={(v) => onChange({ nationality: v })}
         />
         <SelectField
           label="在留資格"
           value={card.residenceStatus ?? "不明"}
+          check={chk("residenceStatus")}
           options={[...RESIDENCE_STATUSES]}
           onChange={(v) => onChange({ residenceStatus: v })}
         />
-        <Field label="生年月日 (YYYY-MM-DD)" value={card.birthDate} onChange={(v) => onChange({ birthDate: v })} />
-        <Field label="性別" value={card.gender} onChange={(v) => onChange({ gender: v })} />
-        <Field label="電話" value={card.phoneNumber} onChange={(v) => onChange({ phoneNumber: v })} />
-        <Field label="メール" value={card.email} onChange={(v) => onChange({ email: v })} />
+        <Field label="生年月日 (YYYY-MM-DD)" value={card.birthDate} check={chk("birthDate")} onChange={(v) => onChange({ birthDate: v })} />
+        <Field label="性別" value={card.gender} check={chk("gender")} onChange={(v) => onChange({ gender: v })} />
+        <Field label="電話" value={card.phoneNumber} check={chk("phoneNumber")} onChange={(v) => onChange({ phoneNumber: v })} />
+        <Field label="メール" value={card.email} check={chk("email")} onChange={(v) => onChange({ email: v })} />
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
@@ -573,23 +606,25 @@ function CandidateCard({
       {expanded && (
         <div className="border-t border-gray-100 pt-3 space-y-2">
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <Field label="日本語レベル" value={card.japaneseLevel} onChange={(v) => onChange({ japaneseLevel: v })} />
-            <Field label="郵便番号" value={card.postalCode} onChange={(v) => onChange({ postalCode: v })} />
+            <Field label="日本語レベル" value={card.japaneseLevel} check={chk("japaneseLevel")} onChange={(v) => onChange({ japaneseLevel: v })} />
+            <Field label="郵便番号" value={card.postalCode} check={chk("postalCode")} onChange={(v) => onChange({ postalCode: v })} />
             <Field
               label="住所"
               value={card.address}
+              check={chk("address")}
               onChange={(v) => onChange({ address: v })}
               full
             />
-            <Field label="高校名" value={card.highSchoolName} onChange={(v) => onChange({ highSchoolName: v })} />
-            <Field label="大学名" value={card.universityName} onChange={(v) => onChange({ universityName: v })} />
-            <Field label="ビザ期限" value={card.visaExpiryDate} onChange={(v) => onChange({ visaExpiryDate: v })} />
+            <Field label="高校名" value={card.highSchoolName} check={chk("highSchoolName")} onChange={(v) => onChange({ highSchoolName: v })} />
+            <Field label="大学名" value={card.universityName} check={chk("universityName")} onChange={(v) => onChange({ universityName: v })} />
+            <Field label="ビザ期限" value={card.visaExpiryDate} check={chk("visaExpiryDate")} onChange={(v) => onChange({ visaExpiryDate: v })} />
             <Field
               label="実習経験"
               value={card.traineeExperience}
+              check={chk("traineeExperience")}
               onChange={(v) => onChange({ traineeExperience: v })}
             />
-            <Field label="現在の仕事" value={card.currentJob} onChange={(v) => onChange({ currentJob: v })} />
+            <Field label="現在の仕事" value={card.currentJob} check={chk("currentJob")} onChange={(v) => onChange({ currentJob: v })} />
           </div>
           {card.workExperiences && card.workExperiences.length > 0 && (
             <p className="text-[10px] text-gray-500">職歴 {card.workExperiences.length} 件 (自動取込み)</p>
@@ -606,17 +641,21 @@ function Field({
   onChange,
   required,
   full,
+  check,
 }: {
   label: string;
   value: string | undefined;
   onChange: (v: string) => void;
   required?: boolean;
   full?: boolean;
+  /** 読み取りに確証がない理由 (あれば「要チェック」を付ける) */
+  check?: string;
 }) {
   return (
     <div className={full ? "col-span-2" : ""}>
       <label className="text-[10px] font-medium text-gray-600">
         {label} {required && <span className="text-red-500">*</span>}
+        <CheckMark reason={check} />
       </label>
       <input
         type="text"
@@ -625,7 +664,9 @@ function Field({
         className={`w-full border rounded px-2 py-1 text-xs mt-0.5 ${
           required && !value?.trim()
             ? "border-red-300 bg-red-50"
-            : "border-gray-300"
+            : check
+              ? "border-orange-400 bg-orange-50"
+              : "border-gray-300"
         }`}
       />
     </div>
@@ -637,19 +678,24 @@ function SelectField({
   value,
   options,
   onChange,
+  check,
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (v: string) => void;
+  check?: string;
 }) {
   return (
     <div>
-      <label className="text-[10px] font-medium text-gray-600">{label}</label>
+      <label className="text-[10px] font-medium text-gray-600">
+        {label}
+        <CheckMark reason={check} />
+      </label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full border border-gray-300 rounded px-2 py-1 text-xs mt-0.5"
+        className={`w-full border rounded px-2 py-1 text-xs mt-0.5 ${check ? "border-orange-400 bg-orange-50" : "border-gray-300"}`}
       >
         {options.map((o) => (
           <option key={o} value={o}>
@@ -658,5 +704,15 @@ function SelectField({
         ))}
       </select>
     </div>
+  );
+}
+
+/** 読み取りに確証がない値に付ける印 (理由は触れると出す) */
+function CheckMark({ reason }: { reason?: string }) {
+  if (!reason) return null;
+  return (
+    <span title={reason} className="ml-1 rounded-full bg-orange-600 px-1.5 py-px text-[9px] font-bold text-white">
+      要チェック
+    </span>
   );
 }

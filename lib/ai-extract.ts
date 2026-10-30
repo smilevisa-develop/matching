@@ -43,7 +43,11 @@ export type ExtractedCandidate = {
   preferenceNote?: string;
   /** 抽出時の検証で除外された値や、AI が不確実とした値の警告メッセージ */
   _warnings?: string[];
+  /** 入れたが確証がない値 (読み取り後の画面で「要チェック」を付ける)。field は上のキー名、職歴は "workExperiences" */
+  _uncertain?: UncertainField[];
 };
+
+export type UncertainField = { field: string; reason: string };
 
 export type SourceFile = {
   fileName: string;
@@ -94,12 +98,15 @@ export type ExtractedJobPosting = {
 const EXTRACTION_SCHEMA_DESCRIPTION = `次のJSONスキーマに沿って、読み取れた情報のみを出力してください。
 
 【重要ルール】
-1. 読み取れない / 不確実な項目は **省略** してください (null/undefined/空文字列を含めない)。
+1. 読み取れない項目は **省略** してください (null/undefined/空文字列を含めない)。読めたが確証が持てない値はルール 7 のとおり。
 2. 履歴書のラベルが下記スキーマのキーと完全一致しない場合でも、意味的に明らかに同じなら正しいキーに割り当ててください。エイリアス一覧を後述します。
 3. 意味が曖昧で、複数のフィールドにまたがりうる値は、**省略してください** (推測でデータを入れない)。
 4. 同じ意味の値が複数の書類から見つかったら、公式な書類 (在留カード > パスポート > 履歴書) の値を優先。
 5. 日付は YYYY-MM-DD 形式で正規化。和暦は西暦に変換。月のみで日が不明な場合は YYYY-MM-01 とせず省略。
 6. workExperiences は古い順の配列。
+7. 値は読めたが確証が持てないときは、値を入れたうえで "_uncertain" に {"field": キー名, "reason": 理由 (日本語で短く)} を入れてください。
+   例: 文字がかすれている・手書き・一部が隠れている・書類によって値が違う・和暦から直した・日と月の順番があいまい・推測を含む。
+   職歴は field を "workExperiences" にする。確証があるものは入れない。
 
 【フィールド定義 + エイリアス】
 
@@ -650,10 +657,44 @@ function validateExtractedCandidate(raw: ExtractedCandidate): ExtractedCandidate
     }
   }
 
+  cleaned._uncertain = checkUncertain(raw._uncertain, cleaned);
+  if (cleaned._uncertain.length === 0) delete cleaned._uncertain;
+
   if (warnings.length > 0) {
     cleaned._warnings = warnings;
   }
   return cleaned;
+}
+
+/**
+ * 「要チェック」にする項目をまとめる。AI が確証が無いと言ったもの + ありえない値 (年齢・期限・入学と卒業の順番など)。
+ * 2026/10: 取り込みで日付が 1 日ずれていたのに気づけなかったため、確証のない値は読み取り後の画面で目立たせる
+ */
+function checkUncertain(fromAi: unknown, c: ExtractedCandidate): UncertainField[] {
+  const out = new Map<string, string[]>();
+  const add = (field: string, reason: string) => out.set(field, [...(out.get(field) ?? []), reason]);
+  const has = (field: string) =>
+    field === "workExperiences" ? (c.workExperiences?.length ?? 0) > 0 : !!(c as Record<string, unknown>)[field];
+
+  if (Array.isArray(fromAi)) {
+    for (const u of fromAi) {
+      const field = typeof u?.field === "string" ? u.field.replace(/\[.*$|\..*$/, "") : "";
+      if (field && has(field)) add(field, typeof u.reason === "string" && u.reason.trim() ? u.reason.trim() : "AI が確証なし");
+    }
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (c.birthDate) {
+    const age = Number(today.slice(0, 4)) - Number(c.birthDate.slice(0, 4));
+    if (age < 16 || age > 60) add("birthDate", `${age} 歳になる`);
+  }
+  if (c.visaExpiryDate && c.visaExpiryDate < today) add("visaExpiryDate", "期限が過ぎている");
+  if (c.visaExpiryDate && Number(c.visaExpiryDate.slice(0, 4)) > Number(today.slice(0, 4)) + 10) add("visaExpiryDate", "10 年より先になっている");
+  if (c.highSchoolStartDate && c.highSchoolEndDate && c.highSchoolStartDate > c.highSchoolEndDate) add("highSchoolEndDate", "入学より前になっている");
+  if (c.universityStartDate && c.universityEndDate && c.universityStartDate > c.universityEndDate) add("universityEndDate", "入学より前になっている");
+  if (c.workExperiences?.some((w) => w.startDate && w.endDate && w.startDate > w.endDate)) add("workExperiences", "入社より前に退社している");
+
+  return [...out].map(([field, reasons]) => ({ field, reason: [...new Set(reasons)].join(" / ") }));
 }
 
 export const JOB_POSTING_SCHEMA = `次のJSONスキーマで求人票情報を抽出してください。読み取れない項目は含めない。金額は数字のみ(例: "180000")、期間は文字列のまま(例: "1年")で良い。
