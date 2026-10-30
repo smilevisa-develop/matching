@@ -475,14 +475,6 @@ export default function ChatClient({ partners, initialMessages, initialLang, tem
                   </p>
                 ) : null}
               </div>
-              <button
-                onClick={() => window.dispatchEvent(new Event("feedback:open"))}
-                className="flex items-center gap-1.5 rounded border border-[#D5D7DC] px-3 py-1.5 text-[13px] font-medium text-[#333] hover:bg-[#F6F7F8]"
-                title="使いにくいところ・おかしいところ・こうしたいことを送る"
-              >
-                <Icon d="M4 5h16v11H9l-5 4z" className="h-4 w-4" />
-                修正依頼
-              </button>
               <div className="relative">
                 <button
                   onClick={() => setLangOpen((v) => !v)}
