@@ -22,6 +22,22 @@ let hydrated = false;
 if (typeof window !== "undefined") {
   const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
   if (nav?.type === "back_forward") restoreUntil = Date.now() + RESTORE_WINDOW_MS;
+  // Next.js は popstate の中で画面を描き直すので、それより先に気づくよう読み込み時に capture で登録する
+  window.addEventListener(
+    "popstate",
+    () => {
+      restoreUntil = Date.now() + RESTORE_WINDOW_MS;
+    },
+    true,
+  );
+  // 押して開いたページは「戻る」ではない
+  document.addEventListener(
+    "click",
+    () => {
+      restoreUntil = 0;
+    },
+    true,
+  );
 }
 
 const restoring = () => Date.now() < restoreUntil;
@@ -103,21 +119,6 @@ export default function KeepOnBack() {
 
   useEffect(() => {
     hydrated = true;
-  }, []);
-
-  useEffect(() => {
-    const onPopState = () => {
-      restoreUntil = Date.now() + RESTORE_WINDOW_MS;
-    };
-    const onClick = () => {
-      restoreUntil = 0;
-    };
-    window.addEventListener("popstate", onPopState);
-    document.addEventListener("click", onClick, true);
-    return () => {
-      window.removeEventListener("popstate", onPopState);
-      document.removeEventListener("click", onClick, true);
-    };
   }, []);
 
   useEffect(() => {
