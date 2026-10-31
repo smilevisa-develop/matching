@@ -94,7 +94,6 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           to: lineSendTo,
-          // グループ宛てなら全員メンション (@All) 付き
           messages: [buildLineTextMessage(lineSendTo, expandedMessage)],
         }),
       });

@@ -173,6 +173,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   /** いま訳を作っているメッセージ */
   const [translating, setTranslating] = useState<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const markingReadRef = useRef<string | null>(null);
   /** 訳を頼んだメッセージ (同じものを何度も頼まない。言語を変えたら空にする) */
   const requestedRef = useRef<Set<number>>(new Set());
@@ -259,6 +260,43 @@ export default function ChatClient({ conversations, initialMessages, initialLang
     const el = scrollRef.current;
     if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [chat]);
+
+  // 入力欄や翻訳の表示、キーボードで見える高さが変わっても、見ていた一番下のメッセージを隠さない
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let prevHeight = el.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const height = el.clientHeight;
+      if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+      else el.scrollTop += prevHeight - height;
+      prevHeight = height;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [selectedId]);
+
+  // スマホのキーボードは画面の上に重なるだけで 100dvh は縮まない。見えている範囲に画面を合わせる
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const root = rootRef.current;
+    if (!viewport || !root) return;
+    const desktop = window.matchMedia("(min-width: 768px)");
+    const apply = () => {
+      const zoomed = viewport.scale > 1.01;
+      root.style.height = desktop.matches || zoomed ? "" : `${viewport.height}px`;
+      root.style.transform = desktop.matches || zoomed ? "" : `translateY(${viewport.offsetTop}px)`;
+    };
+    apply();
+    viewport.addEventListener("resize", apply);
+    viewport.addEventListener("scroll", apply);
+    desktop.addEventListener("change", apply);
+    return () => {
+      viewport.removeEventListener("resize", apply);
+      viewport.removeEventListener("scroll", apply);
+      desktop.removeEventListener("change", apply);
+    };
+  }, []);
 
   const reload = async () => {
     const res = await fetch("/api/messages");
@@ -512,7 +550,8 @@ export default function ChatClient({ conversations, initialMessages, initialLang
 
   return (
     <div
-      className="flex h-[100dvh] overflow-hidden bg-white text-[#111] md:h-screen"
+      ref={rootRef}
+      className="fixed inset-x-0 top-0 flex h-[100dvh] overflow-hidden bg-white text-[#111] md:static md:h-screen"
       style={{ fontFamily: '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", sans-serif' }}
     >
       {/* 左: トーク一覧 (スマホはトーク画面を開いていないときだけ) */}
@@ -744,7 +783,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
                 const el = e.currentTarget;
                 stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
               }}
-              className="flex-1 overflow-y-auto px-3 pb-4 pt-1 md:px-4 md:pb-6 md:pt-2"
+              className="flex-1 overflow-y-auto overscroll-contain px-3 pb-4 pt-1 md:px-4 md:pb-6 md:pt-2"
             >
               {chat.length === 0 && <p className="mt-16 text-center text-sm text-white md:text-[#8A8F98]">メッセージはありません</p>}
               {chat.map((m, i) => {

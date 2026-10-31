@@ -1,8 +1,9 @@
 /**
  * LINE Messaging API に送る text メッセージを組み立てる。
  *
- * グループ宛てのときは全員にメンション (@All) を付ける (Text message v2 の substitution)。
+ * 一斉配信のグループ宛てだけ、全員にメンション (@All) を付ける (Text message v2 の substitution)。
  * パートナーは複数のグループに入っていて、メンションが無いと気づかれにくいため (2026/10 採用チームの依頼)。
+ * チャットからの送信には付けない (2026/10 土田さん)。
  * 個人宛て (userId が "U" 始まり) ではメンションは使えないので通常の text で送る。
  *
  * 仕様: https://developers.line.biz/en/reference/messaging-api/#text-message-v2
@@ -21,8 +22,7 @@ function escapeV2Text(text: string): string {
 }
 
 export function buildLineTextMessage(to: string, text: string, opts?: { mentionAll?: boolean }): Record<string, unknown> {
-  const mentionAll = opts?.mentionAll ?? true;
-  if (!mentionAll || !isLineGroupId(to)) return { type: "text", text };
+  if (!opts?.mentionAll || !isLineGroupId(to)) return { type: "text", text };
   return {
     type: "textV2",
     text: `{everyone}\n${escapeV2Text(text)}`,

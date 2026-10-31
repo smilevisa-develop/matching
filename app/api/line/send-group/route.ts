@@ -1,6 +1,6 @@
 /**
  * パートナーではない LINE グループ (内定後のグループなど。LineGroup.chatOnly) へ 1 件送る (チャット画面から)。
- * パートナー宛ては send-partner。こちらは {{変数}} の展開も @All のメンションもしない
+ * パートナー宛ては send-partner。こちらは {{変数}} の展開をしない
  * (内定者のグループで毎回全員に通知が飛ばないように)。
  * 本文: { groupId: string, message: string }
  */
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     const res = await fetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ to: groupId, messages: [buildLineTextMessage(groupId, message, { mentionAll: false })] }),
+      body: JSON.stringify({ to: groupId, messages: [buildLineTextMessage(groupId, message)] }),
     });
     if (!res.ok) {
       return Response.json({ ok: false, error: "LINE 送信に失敗しました", body: await res.text() }, { status: 500 });

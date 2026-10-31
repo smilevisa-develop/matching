@@ -437,7 +437,7 @@ export async function POST(req: Request) {
       const trimmedText = (text ?? "").trim();
       if (trimmedText) {
         // グループ宛てなら全員メンション (@All) 付き (lib/line-message.ts)
-        messages.push(buildLineTextMessage(to, text));
+        messages.push(buildLineTextMessage(to, text, { mentionAll: true }));
       }
       for (const img of images.slice(0, 4)) {
         messages.push({
