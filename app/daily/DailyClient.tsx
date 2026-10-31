@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 import CandidateKanban, {
   confirmRemoveCandidate,
   removeCandidateFromKanban,
@@ -77,7 +78,7 @@ export default function DailyClient({
   const router = useRouter();
   const [openId, setOpenId] = useState<string | null>(null);
   // 過去に終わった人 (前の月までに内定・NG になった人) もカンバンに出すか
-  const [showPast, setShowPast] = useState(false);
+  const [showPast, setShowPast] = useKeptState("showPast", false);
   // ドラッグ直後の見た目用。サーバーの内容 (from) が変わった時点で使われなくなる
   const [moved, setMoved] = useState<Record<number, { from: string; to: string }>>({});
   const stageOf = (c: CandidateCard) => (moved[c.id]?.from === c.stage ? moved[c.id].to : c.stage);

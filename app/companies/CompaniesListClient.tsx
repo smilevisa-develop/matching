@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 
 export type CompanyRow = {
   id: number;
@@ -19,7 +20,7 @@ export default function CompaniesListClient({
   active: CompanyRow[];
   stopped: CompanyRow[];
 }) {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useKeptState("search", "");
 
   const filter = (list: CompanyRow[]) => {
     const q = searchTerm.trim().toLowerCase();

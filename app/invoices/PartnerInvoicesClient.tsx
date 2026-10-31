@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 
 export type PartnerInvoiceRow = {
   id: number;
@@ -30,7 +31,7 @@ export default function PartnerInvoicesClient({
   invoices: PartnerInvoiceRow[];
 }) {
   const [invoices, setInvoices] = useState(initialInvoices);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useKeptState("search", "");
 
   const togglePaid = async (id: number, next: boolean) => {
     const previous = invoices;

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 
 export type LedgerStep = {
   /** 押したときに完了にするタスク (まとめた段階は、終わっていない方だけ) */
@@ -63,7 +64,7 @@ export default function BillingClient({
   me: string;
 }) {
   const [rows, setRows] = useState(initial);
-  const [filter, setFilter] = useState<"all" | "mine" | "overdue">("all");
+  const [filter, setFilter] = useKeptState<"all" | "mine" | "overdue">("filter", "all");
   const [busy, setBusy] = useState<string | null>(null);
 
   const stepsOf = (r: LedgerRow) => Object.values(r.steps).filter((s): s is LedgerStep => !!s);

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 import PersonAvatar from "@/app/components/PersonAvatar";
 import {
   APPLICATION_TYPES,
@@ -205,8 +206,8 @@ export default function OnboardingBoard({
   const [cards, setCards] = useState(initialCards);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [overStage, setOverStage] = useState<OnboardingStageId | null>(null);
-  const [openId, setOpenId] = useState<number | null>(initialOpenId);
-  const [showOutsourced, setShowOutsourced] = useState(false);
+  const [openId, setOpenId] = useKeptState<number | null>("openId", initialOpenId);
+  const [showOutsourced, setShowOutsourced] = useKeptState("showOutsourced", false);
   const [adding, setAdding] = useState(false);
   // 保留 / サポートに入れるときのポップ (移動先が決まってから保存する)
   const [pendingHold, setPendingHold] = useState<number | null>(null);

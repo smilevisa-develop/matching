@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 import { APPLICATION_TYPES } from "@/lib/onboarding-flow";
 import {
   AfterReturnSummary,
@@ -63,9 +64,9 @@ function missingOf(card: ProgressCard) {
 export default function ProgressBoard({ initialCards, me, demo = false }: { initialCards: ProgressCard[]; me: string; demo?: boolean }) {
   const router = useRouter();
   const [cards, setCards] = useState(initialCards);
-  const [filter, setFilter] = useState<"all" | "mine" | "missing">("all");
-  const [showJoined, setShowJoined] = useState(false);
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [filter, setFilter] = useKeptState<"all" | "mine" | "missing">("filter", "all");
+  const [showJoined, setShowJoined] = useKeptState("showJoined", false);
+  const [openId, setOpenId] = useKeptState<number | null>("openId", null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const [pending, setPending] = useState<{ personId: number; index: number } | null>(null);

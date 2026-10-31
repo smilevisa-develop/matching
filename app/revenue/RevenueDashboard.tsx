@@ -15,6 +15,7 @@
  */
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 import UnsavedChangesBar from "@/app/components/UnsavedChangesBar";
 
 type DealRow = {
@@ -75,7 +76,7 @@ export default function RevenueDashboard({
   monthlyTargets: MonthlyTargetEntry[];
 }) {
   const now = new Date();
-  const [selectedMonth, setSelectedMonth] = useState<string>(monthKey(now));
+  const [selectedMonth, setSelectedMonth] = useKeptState<string>("month", monthKey(now));
   const [monthlyTargets, setMonthlyTargets] = useState<MonthlyTargetEntry[]>(initialMonthlyTargets);
 
   // 表示する月リスト (FISCAL_START_MONTH から最新月+残り12 か月分まで or 全部 monthlyTargets 入っている月)

@@ -1,9 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import Sidebar from "./Sidebar";
 import FeedbackWidget from "./FeedbackWidget";
+import KeepOnBack from "./KeepOnBack";
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -63,6 +64,9 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       <div className={isChat ? "hidden md:contents" : "contents"}>
         <FeedbackWidget />
       </div>
+      <Suspense fallback={null}>
+        <KeepOnBack />
+      </Suspense>
     </body>
   );
 }

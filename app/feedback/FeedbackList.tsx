@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 
 export type FeedbackItem = {
   id: number;
@@ -25,7 +26,7 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function FeedbackList({ initial }: { initial: FeedbackItem[] }) {
   const [items, setItems] = useState(initial);
-  const [filter, setFilter] = useState<"open" | "all">("open");
+  const [filter, setFilter] = useKeptState<"open" | "all">("filter", "open");
   const [zoom, setZoom] = useState<string | null>(null);
 
   const shown = filter === "open" ? items.filter((i) => i.status === "未対応" || i.status === "対応中") : items;

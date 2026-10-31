@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 import PersonAvatar from "@/app/components/PersonAvatar";
 import {
   DEFAULT_PERSONNEL_COLUMNS,
@@ -65,10 +66,10 @@ export default function PersonnelTableClient({
   persons: PersonRow[];
   headerExtras?: ReactNode;
 }) {
-  const [selectedColumns, setSelectedColumns] = useState<PersonnelColumnKey[]>(DEFAULT_PERSONNEL_COLUMNS);
-  const [draftColumns, setDraftColumns] = useState<PersonnelColumnKey[]>(DEFAULT_PERSONNEL_COLUMNS);
+  const [selectedColumns, setSelectedColumns] = useKeptState<PersonnelColumnKey[]>("columns", DEFAULT_PERSONNEL_COLUMNS);
+  const [draftColumns, setDraftColumns] = useState<PersonnelColumnKey[]>(selectedColumns);
   const [editingColumns, setEditingColumns] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useKeptState("search", "");
 
   const filteredPersons = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();

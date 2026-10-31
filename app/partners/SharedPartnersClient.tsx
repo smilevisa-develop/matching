@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 import { CHANNELS } from "@/lib/candidate-profile";
 import { parseCsv } from "@/lib/partner-profile";
 import RatingStars from "./RatingStars";
@@ -28,9 +29,9 @@ export default function SharedPartnersClient({
 }: {
   initialPartners: PartnerRow[];
 }) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("active");
-  const [sort, setSort] = useState<SortState>({ key: "rating", dir: "desc" });
+  const [searchTerm, setSearchTerm] = useKeptState("search", "");
+  const [activeFilter, setActiveFilter] = useKeptState<ActiveFilter>("active", "active");
+  const [sort, setSort] = useKeptState<SortState>("sort", { key: "rating", dir: "desc" });
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
