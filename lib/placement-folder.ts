@@ -1,25 +1,31 @@
 /**
  * 内定者ごとの Drive フォルダ (2026/10 採用チームの依頼「内定者管理の改善」)。
  *
- *   企業フォルダ (55sv_株式会社イワタ) / 内定者 / ROHMAT SUTANTO
+ *   企業フォルダ (55sv_株式会社イワタ) / 内定者 / 2026年 / ROHMAT SUTANTO
  *
- * 企業フォルダが無ければ作る (企業ID_企業名)。その中の「内定者」フォルダ、さらに英語名のフォルダを
- * 探して、無ければ作る。名前は空白・アクセント記号・大文字小文字の違いを無視して探す (手で作った既存フォルダを使う)。
+ * 企業フォルダが無ければ作る (企業ID_企業名)。その中の「内定者」フォルダ、年のフォルダ (内定日の年。無ければカードを作った年)、
+ * さらに英語名のフォルダを探して、無ければ作る。名前は空白・アクセント記号・大文字小文字の違いを無視して探す (手で作った既存フォルダを使う)。
+ * 「内定者」の直下に手で作った同じ名前のフォルダがあれば、年のフォルダへ移して使う。
  */
 
 import { prisma } from "@/lib/prisma";
-import { ensureCompanyDriveFolder, getGoogleClients, listChildFolders } from "@/lib/google-docs";
+import { ensureCompanyDriveFolder, getGoogleClients, listChildFolders, moveDriveFile } from "@/lib/google-docs";
 
 const OFFERED_FOLDER_NAME = "内定者";
 
 const normName = (v: string) =>
   v.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[đĐ]/g, "D").toUpperCase().replace(/[\s　_]/g, "");
 
+/** 年のフォルダの名前 ("2026年"。日本時間) */
+const yearFolderName = (d: Date) => `${new Date(d.getTime() + 9 * 3600_000).getUTCFullYear()}年`;
+
+const folderIdOf = (url: string) => url.match(/folders\/([a-zA-Z0-9-_]+)/)?.[1] ?? url;
+
 async function findOrCreateChild(parentUrl: string, name: string): Promise<string> {
   const children = await listChildFolders(parentUrl);
   const hit = children.find((f) => normName(f.name) === normName(name));
   if (hit) return `https://drive.google.com/drive/folders/${hit.id}`;
-  const parentId = parentUrl.match(/folders\/([a-zA-Z0-9-_]+)/)?.[1] ?? parentUrl;
+  const parentId = folderIdOf(parentUrl);
   const { drive } = await getGoogleClients();
   const created = await drive.files.create({
     supportsAllDrives: true,
@@ -36,6 +42,8 @@ export async function ensurePlacementFolder(placementId: number): Promise<{ fold
     where: { id: placementId },
     select: {
       driveFolderUrl: true,
+      offerAt: true,
+      createdAt: true,
       externalName: true,
       externalCompanyName: true,
       person: {
@@ -79,7 +87,10 @@ export async function ensurePlacementFolder(placementId: number): Promise<{ fold
     await prisma.company.update({ where: { id: company.id }, data: { driveFolderUrl: companyFolder.folderUrl } });
   }
   const offeredUrl = await findOrCreateChild(companyFolder.folderUrl, OFFERED_FOLDER_NAME);
-  const personUrl = await findOrCreateChild(offeredUrl, personName);
+  const yearUrl = await findOrCreateChild(offeredUrl, yearFolderName(p.offerAt ?? p.createdAt));
+  const loose = (await listChildFolders(offeredUrl)).find((f) => normName(f.name) === normName(personName));
+  if (loose) await moveDriveFile({ fileId: loose.id, toFolderId: folderIdOf(yearUrl) });
+  const personUrl = loose ? `https://drive.google.com/drive/folders/${loose.id}` : await findOrCreateChild(yearUrl, personName);
   await prisma.personPlacement.update({ where: { id: placementId }, data: { driveFolderUrl: personUrl } });
   return { folderUrl: personUrl };
 }
