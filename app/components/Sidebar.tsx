@@ -4,164 +4,111 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import {
+  BarChartIcon,
+  BoardIcon,
+  BriefcaseIcon,
+  BuildingIcon,
+  CalendarIcon,
+  ChatIcon,
+  ChevronUpDownIcon,
+  CloseIcon,
+  DocumentIcon,
+  FlagIcon,
+  FormIcon,
+  GlobeIcon,
+  GroupIcon,
+  LinkIcon,
+  ListCheckIcon,
+  MegaphoneIcon,
+  MenuIcon,
+  MicIcon,
+  ReceiptIcon,
+  SettingsIcon,
+  StarListIcon,
+  SyncIcon,
+  UserCheckIcon,
+  UsersIcon,
+  YenIcon,
+} from "./ui/icons";
 
+/*
+ * SmileReach のサイドバーと同じ作り (2026/11)。
+ * 行き先 (名詞) だけを置き、「〜を追加」などの動作は各画面の右上のボタンにする。アイコンは項目ごとに別のものを使う。
+ */
 type NavItem = {
   label: string;
   href: string;
-  icon: (props: { active: boolean }) => React.ReactNode;
-  children?: { label: string; href: string }[];
+  icon: (props: { size?: number }) => React.ReactNode;
 };
-
-function PersonnelIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`h-5 w-5 ${active ? "text-white" : "text-white/70"}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
-      <circle cx="9.5" cy="7" r="3" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-
-function ChatIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`h-5 w-5 ${active ? "text-white" : "text-white/70"}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      <path d="M8 9h8" />
-      <path d="M8 13h5" />
-    </svg>
-  );
-}
-
-function BroadcastIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`h-5 w-5 ${active ? "text-white" : "text-white/70"}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 12h10" />
-      <path d="M14 8l6 4-6 4V8z" />
-      <path d="M4 6h6" />
-      <path d="M4 18h6" />
-    </svg>
-  );
-}
-
-function InvoiceIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`h-5 w-5 ${active ? "text-white" : "text-white/70"}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
-      <path d="M14 2v5h5" />
-      <path d="M12 11v8" />
-      <path d="M15 13h-4.5a1.5 1.5 0 1 0 0 3h3a1.5 1.5 0 1 1 0 3H9" />
-    </svg>
-  );
-}
-
-function SettingsIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`h-5 w-5 ${active ? "text-white" : "text-white/70"}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01A1.65 1.65 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
 
 type SyncLine = { label: string; value: string; failed?: boolean };
 
-const NAV: NavItem[] = [
-  // 毎日開く画面なので一番上に置く
-  { label: "進捗管理", href: "/daily", icon: BroadcastIcon },
+const SECTIONS: { heading: string; items: NavItem[] }[] = [
   {
-    label: "候補者",
-    href: "/personnel",
-    icon: PersonnelIcon,
-    children: [
-      { label: "候補者一覧", href: "/personnel" },
-      { label: "候補者を追加", href: "/personnel/new" },
-      { label: "一括登録", href: "/personnel/bulk-add" },
-      { label: "進捗ボード", href: "/personnel/progress" },
-      { label: "AI面接練習の記録", href: "/interview-practice/log" },
+    heading: "毎日の業務",
+    items: [
+      { label: "進捗管理", href: "/daily", icon: ListCheckIcon },
+      { label: "チャット", href: "/chat", icon: ChatIcon },
+      { label: "出勤表", href: "/attendance", icon: CalendarIcon },
     ],
   },
   {
-    label: "企業",
-    href: "/companies",
-    icon: PersonnelIcon,
-  },
-  {
-    label: "パートナー",
-    href: "/partners",
-    icon: PersonnelIcon,
-    children: [
-      { label: "パートナーリスト", href: "/partners" },
-      { label: "連絡先紐づけ", href: "/partners/link" },
-      { label: "一斉連絡", href: "/broadcast" },
-      { label: "連絡テンプレート", href: "/broadcast/templates" },
-      { label: "連絡グループ", href: "/broadcast/groups" },
+    heading: "候補者",
+    items: [
+      { label: "候補者一覧", href: "/personnel", icon: UsersIcon },
+      { label: "進捗ボード", href: "/personnel/progress", icon: BoardIcon },
+      { label: "内定者管理", href: "/onboarding", icon: UserCheckIcon },
+      { label: "AI面接練習の記録", href: "/interview-practice/log", icon: MicIcon },
     ],
   },
   {
-    label: "紹介業務",
-    href: "/resumes",
-    icon: BroadcastIcon,
-    children: [
-      { label: "履歴書作成", href: "/resumes" },
-      { label: "求人票作成", href: "/job-postings" },
-      { label: "推薦リスト", href: "/recommendations" },
+    heading: "企業・紹介",
+    items: [
+      { label: "企業", href: "/companies", icon: BuildingIcon },
+      { label: "履歴書", href: "/resumes", icon: DocumentIcon },
+      { label: "求人票", href: "/job-postings", icon: BriefcaseIcon },
+      { label: "推薦リスト", href: "/recommendations", icon: StarListIcon },
+      { label: "請求管理", href: "/billing", icon: ReceiptIcon },
     ],
   },
-  // 請求 (企業への請求 / PAへの請求) は使っていないのでメニューから外している。
-  // 画面と API は残してあり、URL (/invoices/companies, /invoices/partners) を直接開けば使える。
-  { label: "内定者管理", href: "/onboarding", icon: InvoiceIcon },
-  { label: "請求管理", href: "/billing", icon: InvoiceIcon },
-  { label: "KPIダッシュボード", href: "/kpi", icon: BroadcastIcon },
-  { label: "売上ダッシュボード", href: "/revenue", icon: BroadcastIcon },
-  { label: "チャット", href: "/chat", icon: ChatIcon },
-  { label: "修正依頼", href: "/feedback", icon: ChatIcon },
+  {
+    heading: "パートナー",
+    items: [
+      { label: "パートナーリスト", href: "/partners", icon: GlobeIcon },
+      { label: "連絡先紐づけ", href: "/partners/link", icon: LinkIcon },
+      { label: "一斉連絡", href: "/broadcast", icon: MegaphoneIcon },
+      { label: "連絡テンプレート", href: "/broadcast/templates", icon: FormIcon },
+      { label: "連絡グループ", href: "/broadcast/groups", icon: GroupIcon },
+    ],
+  },
+  {
+    heading: "数字",
+    items: [
+      { label: "KPIダッシュボード", href: "/kpi", icon: BarChartIcon },
+      { label: "売上ダッシュボード", href: "/revenue", icon: YenIcon },
+    ],
+  },
+];
+
+const FOOTER_ITEMS: NavItem[] = [
+  { label: "修正依頼", href: "/feedback", icon: FlagIcon },
   { label: "設定", href: "/settings", icon: SettingsIcon },
 ];
 
+const ALL_ITEMS = [...SECTIONS.flatMap((section) => section.items), ...FOOTER_ITEMS];
+
+// いまの URL にいちばん長く一致する項目を1つだけ選択中にする
+function activeHref(pathname: string) {
+  const matches = ALL_ITEMS.filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  matches.sort((a, b) => b.href.length - a.href.length);
+  return matches[0]?.href ?? null;
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
-  const [openItems, setOpenItems] = useState<string[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   // 修正依頼の未対応件数
   const [openFeedbackCount, setOpenFeedbackCount] = useState(0);
@@ -169,22 +116,7 @@ export default function Sidebar() {
   const [accountRole, setAccountRole] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncReport, setSyncReport] = useState<{ ok: boolean; lines: SyncLine[] } | null>(null);
-
-  const isSectionActive = (href: string) => {
-    return pathname === href || pathname.startsWith(`${href}/`);
-  };
-
-  const isChildActive = (href: string) => {
-    return pathname === href;
-  };
-
-  const toggleItem = (href: string) => {
-    setOpenItems((current) =>
-      current.includes(href)
-        ? current.filter((item) => item !== href)
-        : [...current, href]
-    );
-  };
+  const current = activeHref(pathname);
 
   useEffect(() => {
     const loadUnreadSummary = async () => {
@@ -299,155 +231,106 @@ export default function Sidebar() {
     window.location.href = "/login";
   };
 
-  return (
-    <aside className="w-72 shrink-0 bg-[var(--color-text-dark)] text-white flex flex-col h-screen sticky top-0 px-4 py-5">
+  const renderItem = (item: NavItem) => {
+    const active = current === item.href;
+    const Icon = item.icon;
+    const badge = item.href === "/chat" ? unreadChatCount : item.href === "/feedback" ? openFeedbackCount : 0;
+    return (
       <Link
-        href="/"
-        className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 hover:bg-white/10 transition-colors"
+        key={item.href}
+        href={item.href}
+        onClick={() => setMenuOpen(false)}
+        aria-current={active ? "page" : undefined}
+        className={`flex h-nav max-md:h-row items-center gap-2 rounded-button px-2 text-nav ${
+          active ? "bg-side-active font-semibold text-white" : "text-side-ink hover:bg-side-hover"
+        }`}
       >
-        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-[0_10px_30px_rgba(37,99,235,0.15)] ring-1 ring-white/15">
-          <Image
-            src="/logo.png"
-            alt="SMILE MATCHING"
-            width={56}
-            height={56}
-            className="h-full w-full object-contain"
-            priority
-          />
-        </div>
-        <div>
-          <p className="text-lg font-bold leading-[0.95] tracking-[0.18em] text-white">
-            <span className="block">SMILE</span>
-            <span className="block">MATCHING</span>
-          </p>
-          <p className="mt-1 text-xs text-white/50">人材紹介ダッシュボード</p>
-        </div>
+        <span className={active ? "text-white" : "text-side-icon"}>
+          <Icon size={20} />
+        </span>
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        {badge > 0 && (
+          <span aria-label={`${badge}件`} className="rounded-field bg-white px-2 text-note font-semibold text-side">
+            {badge}
+          </span>
+        )}
       </Link>
+    );
+  };
 
-      <nav className="flex-1 overflow-y-auto py-6 space-y-3">
-        {NAV.map((item) => {
-          const active = isSectionActive(item.href);
-          const expanded = active || openItems.includes(item.href);
-          const Icon = item.icon;
+  return (
+    <>
+      {/* スマホ幅の上部バー。メニューを開くと行き先の一覧が画面全体に出る */}
+      <div className="fixed inset-x-0 top-0 z-30 flex h-row items-center bg-side md:hidden">
+        <button
+          type="button"
+          onClick={() => setMenuOpen((open) => !open)}
+          aria-label={menuOpen ? "メニューを閉じる" : "メニューを開く"}
+          aria-expanded={menuOpen}
+          className="flex h-row w-row items-center justify-center text-white"
+        >
+          {menuOpen ? <CloseIcon size={20} /> : <MenuIcon size={20} />}
+        </button>
+        <Wordmark />
+      </div>
 
-          return (
-            <div
-              key={item.href}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] p-2"
-            >
-            {item.children ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => toggleItem(item.href)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${
-                    active
-                      ? "bg-[var(--color-primary)] text-white"
-                      : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <Icon active={active} />
-                  <span className="flex-1 font-medium">{item.label}</span>
-                  <svg
-                    viewBox="0 0 24 24"
-                    className={`h-4 w-4 transition-transform ${
-                      expanded ? "rotate-180" : ""
-                    }`}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
+      <aside
+        className={`z-20 flex-col bg-side max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:top-row md:sticky md:top-0 md:flex md:h-screen md:w-side md:shrink-0 ${
+          menuOpen ? "flex" : "hidden"
+        }`}
+      >
+        <div className="hidden h-row shrink-0 items-center pl-logo-inset md:flex">
+          <Wordmark />
+        </div>
 
-                {expanded && (
-                  <div className="mt-2 space-y-1 px-2 pb-1">
-                    {item.children.map((child) => (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        className={`flex items-center rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                          isChildActive(child.href)
-                            ? "bg-white/12 text-white font-medium"
-                            : "text-white/65 hover:bg-white/8 hover:text-white"
-                        }`}
-                      >
-                        {child.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : (
-              <Link
-                href={item.href}
-                className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${
-                  active
-                    ? "bg-[var(--color-primary)] text-white font-medium"
-                    : "text-white/80 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                <Icon active={active} />
-                <span className="flex-1">{item.label}</span>
-                {item.href === "/chat" && unreadChatCount > 0 && (
-                  <span className="min-w-5 rounded-full bg-white px-1.5 py-0.5 text-center text-[11px] font-semibold text-[var(--color-primary)]">
-                    {unreadChatCount}
-                  </span>
-                )}
-                {item.href === "/feedback" && openFeedbackCount > 0 && (
-                  <span className="min-w-5 rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[11px] font-semibold text-white">
-                    {openFeedbackCount}
-                  </span>
-                )}
-              </Link>
-            )}
+        <nav className="flex-1 overflow-y-auto px-2 pb-4">
+          {SECTIONS.map((section, index) => (
+            <div key={section.heading} className={index === 0 ? "pt-2" : "mt-4 border-t border-side-line pt-4"}>
+              <p className="px-2 pb-2 text-body font-bold text-white">{section.heading}</p>
+              <div className="flex flex-col">{section.items.map(renderItem)}</div>
             </div>
-          );
-        })}
-      </nav>
+          ))}
+        </nav>
 
-      <div className="space-y-3 border-t border-white/10 pt-4">
-        <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-white">{accountName}</p>
-            <p className="mt-1 text-xs text-white/55">{accountRole}</p>
-          </div>
+        <div className="relative shrink-0 border-t border-side-line p-2">
+          {FOOTER_ITEMS.map(renderItem)}
           <button
             type="button"
             onClick={() => void syncNow()}
             disabled={syncing}
-            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-bold text-[var(--color-text-dark)] shadow transition hover:bg-white/90 disabled:opacity-70"
+            className="flex h-nav max-md:h-row w-full items-center gap-2 rounded-button px-2 text-left text-nav text-side-ink hover:bg-side-hover disabled:opacity-60"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={syncing ? "animate-spin" : ""}
-            >
-              <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16" />
-              <path d="M3 12a9 9 0 0 1 15.5-6.2L21 8" />
-              <path d="M21 3v5h-5" />
-              <path d="M3 21v-5h5" />
-            </svg>
-            {syncing ? "同期中" : "同期"}
+            <span className="text-side-icon">
+              <SyncIcon size={20} className={syncing ? "animate-spin" : undefined} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{syncing ? "同期中" : "同期"}</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setAccountOpen((open) => !open)}
+            aria-expanded={accountOpen}
+            className="flex min-h-row w-full items-center gap-2 rounded-button px-2 text-left hover:bg-side-hover"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-body text-white">{accountName}</span>
+              {accountRole && <span className="block truncate text-note text-side-ink">{accountRole}</span>}
+            </span>
+            <span className="shrink-0 text-side-icon">
+              <ChevronUpDownIcon size={16} />
+            </span>
+          </button>
+          {accountOpen && (
+            <div className="absolute inset-x-2 bottom-full rounded-button border border-line bg-card p-2 shadow-float">
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="flex h-control max-md:h-row w-full items-center rounded-field px-2 text-body text-ink hover:bg-page"
+              >
+                ログアウト
+              </button>
+            </div>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => void logout()}
-          className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white/85 transition hover:bg-white/10"
-        >
-          ログアウト
-        </button>
-      </div>
 
       {syncReport ? (
         <div
@@ -486,6 +369,16 @@ export default function Sidebar() {
           </div>
         </div>
       ) : null}
-    </aside>
+      </aside>
+    </>
+  );
+}
+
+function Wordmark() {
+  return (
+    <Link href="/" className="flex h-row items-center gap-2">
+      <Image src="/logo.png" alt="" width={32} height={32} className="h-8 w-8 rounded-field bg-white object-contain" priority />
+      <span className="whitespace-nowrap text-label font-bold text-white">SMILE MATCHING</span>
+    </Link>
   );
 }

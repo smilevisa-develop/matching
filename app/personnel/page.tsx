@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import PersonnelTableClient from "./PersonnelTableClient";
 import SyncSheetNowButton from "./SyncSheetNowButton";
@@ -48,6 +49,20 @@ export default async function PersonnelPage() {
         <div>
           <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">候補者一覧</h1>
           <p className="text-sm text-gray-500 mt-1">{persons.length} 件</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/personnel/bulk-add"
+            className="rounded-lg border border-[var(--color-secondary)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-text-dark)] hover:bg-[var(--color-light)]"
+          >
+            一括登録
+          </Link>
+          <Link
+            href="/personnel/new"
+            className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-primary-hover)]"
+          >
+            ＋ 候補者を追加
+          </Link>
         </div>
       </div>
       <PersonnelTableClient

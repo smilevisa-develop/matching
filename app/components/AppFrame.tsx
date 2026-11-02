@@ -57,7 +57,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       <div className={isChat ? "hidden md:contents" : "contents"}>
         <Sidebar />
       </div>
-      <main className="flex-1 overflow-y-auto">
+      <main className={`min-w-0 flex-1 overflow-y-auto ${isChat ? "" : "max-md:pt-row"}`}>
         <div className="mx-auto w-full max-w-[1440px]">{children}</div>
       </main>
       {/* 右下の「修正依頼」ボタン (使いにくいところ・不具合をスクショ付きですぐ送れる) */}
