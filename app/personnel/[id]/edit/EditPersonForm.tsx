@@ -15,7 +15,7 @@ import {
   type EducationEntry,
   type WorkHistoryEntry,
 } from "@/lib/candidate-profile";
-import { ALL_INTERVIEW_SECTIONS, INTERVIEW_SECTIONS, LEGACY_SECTIONS } from "@/lib/interview-questions";
+import { allInterviewQuestions, INTERVIEW_SECTIONS, RESUME_TEXT_QUESTIONS, withTakeHomeSummary } from "@/lib/interview-questions";
 import SearchableSelect from "@/app/components/SearchableSelect";
 import UnsavedChangesBar from "@/app/components/UnsavedChangesBar";
 
@@ -214,8 +214,8 @@ export default function EditPersonForm({
     email: person.email ?? "",
     contactUrl: person.contactUrl ?? "",
     documents: buildInitialDocuments(person.documents, person.residenceStatus),
-    interviewAnswers: normalizeInterviewAnswers(
-      (person.resumeProfile as unknown as { interviewAnswers?: unknown } | null)?.interviewAnswers
+    interviewAnswers: withTakeHomeSummary(
+      normalizeInterviewAnswers((person.resumeProfile as unknown as { interviewAnswers?: unknown } | null)?.interviewAnswers),
     ),
   });
 
@@ -232,30 +232,24 @@ export default function EditPersonForm({
   // 事前質問を 2 グループに分割:
   //   - resume-linked (履歴書に反映される、existingField あり) → 基本情報 タブ
   //   - interview-only (面接時のヒアリング、jsonKey のみ)     → 詳細情報 タブ
-  // 空になったセクションは 表示から除外。
   const resumeLinkedSections = useMemo(
+    () => [
+      {
+        title: "履歴書の文章",
+        description: undefined as string | undefined,
+        questions: [...RESUME_TEXT_QUESTIONS, ...allInterviewQuestions().filter((q) => !!q.existingField)],
+      },
+    ],
+    []
+  );
+  const interviewOnlySections = useMemo(
     () =>
-      ALL_INTERVIEW_SECTIONS.map((s) => ({
+      INTERVIEW_SECTIONS.map((s) => ({
         ...s,
-        questions: s.questions.filter((q) => !!q.existingField),
+        questions: s.questions.filter((q) => !q.existingField),
       })).filter((s) => s.questions.length > 0),
     []
   );
-  // 詳細情報 = 履歴書に必要な項目 (INTERVIEW_SECTIONS)。以前の質問は回答があるものだけ最後にまとめて出す
-  const interviewOnlySections = useMemo(() => {
-    const current = INTERVIEW_SECTIONS.map((s) => ({
-      ...s,
-      questions: s.questions.filter((q) => !q.existingField),
-    })).filter((s) => s.questions.length > 0);
-    const answered = LEGACY_SECTIONS.flatMap((s) =>
-      s.questions.filter((q) => !q.existingField && (form.interviewAnswers[q.jsonKey ?? q.key] ?? "").trim()),
-    );
-    return answered.length > 0
-      ? [...current, { title: "以前の質問（回答があるものだけ）", description: "今のフォームでは聞いていない項目です。", questions: answered }]
-      : current;
-    // 回答の有無で出し分けるだけなので、初期値で決めてよい
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   const visibleDocuments = useMemo(
     () => mergeDocumentsForStatus(form.documents, form.residenceStatus),
     [form.documents, form.residenceStatus]
@@ -559,9 +553,6 @@ export default function EditPersonForm({
             </Field>
             <Field label="住所" className="md:col-span-2">
               <textarea className={`${INPUT} min-h-28`} value={form.address} onChange={(event) => setValue("address", event.target.value)} />
-            </Field>
-            <Field label="郵便番号">
-              <input className={INPUT} value={form.postalCode} onChange={(event) => setValue("postalCode", event.target.value)} />
             </Field>
             <Field label="配偶者">
               <select

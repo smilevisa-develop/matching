@@ -112,11 +112,35 @@ export function parseLocationAnswer(value: string | null | undefined): Candidate
 /** 居住地を尋ねるゲート質問の key (分岐のドライバ) */
 export const LOCATION_QUESTION_KEY = "currentLocation";
 
+/** 手当・手取り・全部引いて残る額を 1 問にまとめた質問の key (2026/11 の項目確認表) */
+export const TAKE_HOME_SUMMARY_KEY = "takeHomeSummary";
+
+/** まとめる前の 3 問の回答があれば、まとめた質問の回答として読む (元の回答は消さない) */
+export function withTakeHomeSummary(answers: Record<string, string>): Record<string, string> {
+  if ((answers[TAKE_HOME_SUMMARY_KEY] ?? "").trim()) return answers;
+  const fields = [
+    ["手当", "currentAllowances"],
+    ["手取り", "currentTakeHome"],
+    ["全部引いて残る額", "netAfterDeductions"],
+  ];
+  // 日本語訳が付いていない回答は、元の文章のまま入れる
+  const join = (ja: boolean) =>
+    fields
+      .map(([label, key]) => [label, ((ja && answers[`${key}__ja`]) || answers[key] || "").trim()])
+      .filter(([, v]) => v)
+      .map(([label, v]) => `${label}: ${v}`)
+      .join(" ／ ");
+  const summary = join(false);
+  if (!summary) return answers;
+  const ja = fields.some(([, key]) => answers[`${key}__ja`]) ? join(true) : "";
+  return { ...answers, [TAKE_HOME_SUMMARY_KEY]: summary, ...(ja ? { [`${TAKE_HOME_SUMMARY_KEY}__ja`]: ja } : {}) };
+}
+
 /**
  * 候補者フォーム / 詳細情報 の質問。履歴書に必要な項目だけ (採用チームの整理 2026/10):
- *   日本語 (資格・会話レベル) / 給料 (総額・基本給・手当・手取り・残業・夜勤・ボーナス)
- *   / アパート (社宅か自分で借りるか・部屋タイプ・家賃・全部引いて残る額) / 希望 (エリア・手取り・退職時期・入社時期・一時帰国・住まい)
- *   + 転職理由 (推薦リストにも出す)。それ以外は LEGACY_SECTIONS に移した。
+ *   日本語 (資格・会話レベル) / 給料 (総額・基本給・手当と手取りと残る額・残業・夜勤・ボーナス)
+ *   / アパート (社宅か自分で借りるか・部屋タイプ・家賃) / 希望 (エリア・手取り・退職時期・入社時期・一時帰国・住まい)
+ *   + 転職理由 (推薦リストにも出す)。これ以外の質問は 2026/11 の項目確認表でなくした (回答は DB に残っている)。
  */
 export const INTERVIEW_SECTIONS: InterviewSection[] = [
   {
@@ -182,20 +206,12 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         hint: "例：月 18万円",
       },
       {
-        key: "currentAllowances",
-        question: "手当はありますか。（種類と金額）",
-        type: "text",
-        jsonKey: "currentAllowances",
+        key: TAKE_HOME_SUMMARY_KEY,
+        question: "手当（種類と金額）、手取り、全部引いて毎月残る額を教えてください。家賃が給料から引かれているかも書いてください。",
+        type: "textarea",
+        jsonKey: TAKE_HOME_SUMMARY_KEY,
         priority: "must",
-        hint: "例：住宅手当 2万円、通勤手当 1万円 ／ なし",
-      },
-      {
-        key: "currentTakeHome",
-        question: "手取りはいくらですか。",
-        type: "text",
-        jsonKey: "currentTakeHome",
-        priority: "must",
-        hint: "例：月 18万円くらい",
+        hint: "例：住宅手当 2万円、通勤手当 1万円 ／ 手取り 月 18万円 ／ 全部引いて月 13万円残る（家賃は給料から引かれている）",
       },
       {
         key: "currentOvertimeHours",
@@ -263,14 +279,6 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
         priority: "must",
         hint: "例：月 3万円（会社が半分負担）",
       },
-      {
-        key: "netAfterDeductions",
-        question: "家賃・水道光熱費・保険・税金を全部引いたあと、毎月いくら残りますか。",
-        type: "text",
-        jsonKey: "netAfterDeductions",
-        priority: "must",
-        hint: "例：月 13万円くらい",
-      },
     ],
   },
   {
@@ -329,345 +337,6 @@ export const INTERVIEW_SECTIONS: InterviewSection[] = [
   },
 ];
 
-/**
- * 以前の質問 (履歴書に必要な項目に絞った 2026/10 以降は、候補者フォームでは聞かない)。
- * 既に回答がある候補者では 詳細情報 タブに「以前の質問」として出す (回答は消さない)。
- * 履歴書に載る existingField の質問 (志望動機・自己紹介・来日目的・現在の仕事) は 基本情報 タブに出る。
- */
-export const LEGACY_SECTIONS: InterviewSection[] = [
-  {
-    title: "はじめに",
-    description: "最初に 1 つだけ教えてください。この回答で、あとの質問が少し変わります。",
-    questions: [
-    ],
-  },
-  {
-    title: "日本に来た目的",
-    questions: [
-      {
-        key: "japanPurpose",
-        question: "日本に来た（来る）目的を教えてください。",
-        type: "textarea",
-        existingField: "japanPurpose",
-        priority: "must",
-        hint: "例：家族のためにお金を稼ぎたい。日本の技術を学びたい。",
-      },
-      {
-        key: "japanArrivalDate",
-        question: "いつ日本へ来ましたか。（海外の方は、いつ来る予定ですか。）",
-        type: "text",
-        jsonKey: "japanArrivalDate",
-        hint: "例：2023年4月 ／ 2026年8月ごろ予定",
-      },
-    ],
-  },
-  {
-    title: "日本語について",
-    questions: [
-    ],
-  },
-  {
-    title: "分野の経験・仕事内容・今の給料",
-    questions: [
-      {
-        key: "currentJob",
-        question: "今の（または直近の）お仕事の内容を教えてください。",
-        type: "textarea",
-        existingField: "currentJob",
-        priority: "must",
-        hint: "例：工場でお弁当を作る仕事をしています。",
-      },
-      {
-        key: "sameJobExperience",
-        question: "応募する分野での経験は、どのくらいありますか。",
-        type: "textarea",
-        jsonKey: "sameJobExperience",
-        priority: "must",
-        hint: "例：介護の仕事を3年しました。／ 経験はありません。",
-      },
-      {
-        key: "workChallenge",
-        question: "仕事で大変だったことと、その解決方法を教えてください。",
-        type: "textarea",
-        jsonKey: "workChallenge",
-        hint: "例：納期が厳しい時、手順を工夫して間に合わせました。",
-      },
-      {
-        key: "teamworkExperience",
-        question: "チームで働いた経験を教えてください。",
-        type: "textarea",
-        jsonKey: "teamworkExperience",
-        hint: "例：5人のチームで協力して目標を達成しました。",
-      },
-      {
-        key: "physicalConfidence",
-        question: "体力に自信はありますか。",
-        type: "select",
-        options: ["はい", "いいえ"],
-        jsonKey: "physicalConfidence",
-      },
-      {
-        key: "overtimeAcceptable",
-        question: "残業やシフト勤務はできますか。",
-        type: "select",
-        options: ["はい", "いいえ"],
-        jsonKey: "overtimeAcceptable",
-      },
-    ],
-  },
-  {
-    title: "転職の理由",
-    questions: [
-    ],
-  },
-  {
-    title: "今の住まい（アパート）について",
-    questions: [
-    ],
-  },
-  {
-    title: "応募理由・希望エリア・希望の給料",
-    questions: [
-      {
-        key: "motivation",
-        question: "弊社の求人に応募した理由を教えてください。",
-        type: "textarea",
-        existingField: "motivation",
-        priority: "must",
-        hint: "例：寮があり、長く働けそうだと思ったからです。",
-      },
-    ],
-  },
-  {
-    title: "面接・入社の可否",
-    questions: [
-      {
-        key: "interviewAvailability",
-        question: "面接ができる日時を教えてください。",
-        type: "textarea",
-        jsonKey: "interviewAvailability",
-        priority: "must",
-        hint: "例：平日の午後。土日も大丈夫です。",
-      },
-      {
-        key: "inPersonInterview",
-        question: "対面での面接はできますか。",
-        type: "select",
-        options: ["はい", "いいえ"],
-        jsonKey: "inPersonInterview",
-        showIf: { locationIn: ["domestic"] },
-      },
-      {
-        key: "otherInterviews",
-        question: "今、ほかの会社の面接も受けていますか。",
-        type: "textarea",
-        jsonKey: "otherInterviews",
-        hint: "例：はい、1社受けています。／ いいえ。",
-      },
-    ],
-  },
-  {
-    title: "日本での将来の目標",
-    questions: [
-      {
-        key: "desiredWorkYears",
-        question: "日本で、どのくらいの期間 働きたいですか。",
-        type: "text",
-        jsonKey: "desiredWorkYears",
-        priority: "must",
-        hint: "例：5年以上 ／ できるだけ長く",
-      },
-      {
-        key: "futurePlan",
-        question: "将来、日本でどんな仕事や生活をしたいですか。",
-        type: "textarea",
-        jsonKey: "futurePlan",
-        priority: "must",
-        hint: "例：現場のリーダーになりたい。家族を日本に呼びたい。",
-      },
-      {
-        key: "longTermIntent",
-        question: "同じ業種で長く働きたいですか。",
-        type: "select",
-        options: ["はい", "いいえ"],
-        jsonKey: "longTermIntent",
-      },
-      {
-        key: "homeReturnPlan",
-        question: "一時帰国の予定はありますか。",
-        type: "select",
-        options: ["あり", "なし"],
-        jsonKey: "homeReturnPlan",
-      },
-    ],
-  },
-  {
-    title: "日本語について",
-    questions: [
-      {
-        key: "japaneseLearningDuration",
-        question: "日本語は、どのくらいの期間 勉強していますか。",
-        type: "text",
-        jsonKey: "japaneseLearningDuration",
-        hint: "例：2年6か月",
-      },
-      {
-        key: "japaneseLearningMethod",
-        question: "毎日、どのように日本語を勉強していますか。",
-        type: "textarea",
-        jsonKey: "japaneseLearningMethod",
-        hint: "例：学校とアプリで勉強しています。",
-      },
-      {
-        key: "kanaReading",
-        question: "ひらがな・カタカナは読めますか。",
-        type: "select",
-        options: ["読める", "少し読める", "読めない"],
-        jsonKey: "kanaReading",
-      },
-    ],
-  },
-  {
-    title: "特定技能・これまでの経験",
-    questions: [
-      {
-        key: "tokuteiTestStatus",
-        question: "特定技能の試験には合格していますか。",
-        type: "select",
-        options: ["合格", "勉強中", "未受験"],
-        jsonKey: "tokuteiTestStatus",
-        // 技人国・永住の候補者には特定技能試験は関係ないので出さない
-        showIf: { residenceStatusNotIn: ["技術・人文知識・国際業務", "永住"] },
-      },
-      {
-        key: "pastJapanWorkExperience",
-        question: "以前、日本で働いた経験はありますか。",
-        type: "textarea",
-        jsonKey: "pastJapanWorkExperience",
-        hint: "例：はい、工場で1年働きました。／ いいえ。",
-      },
-      {
-        key: "drivingLicensePlan",
-        question: "運転免許について教えてください。",
-        type: "select",
-        options: ["取得済み", "取得予定あり", "取得予定なし"],
-        jsonKey: "drivingLicensePlan",
-      },
-    ],
-  },
-  {
-    title: "性格・人柄",
-    questions: [
-      {
-        key: "selfIntroduction",
-        question: "簡単に自己紹介をしてください。",
-        type: "textarea",
-        existingField: "selfIntroduction",
-        hint: "例：はじめまして。○○です。まじめに頑張ります。",
-      },
-      {
-        key: "strengths",
-        question: "あなたの長所を教えてください。",
-        type: "textarea",
-        jsonKey: "strengths",
-        hint: "例：まじめで、最後まで責任を持ってやり遂げます。",
-      },
-      {
-        key: "weaknesses",
-        question: "あなたの短所を教えてください。",
-        type: "textarea",
-        jsonKey: "weaknesses",
-        hint: "例：慎重すぎることがあります。確認を徹底しています。",
-      },
-      {
-        key: "mistakeResponse",
-        question: "仕事でミスをした時は、どうしますか。",
-        type: "textarea",
-        jsonKey: "mistakeResponse",
-        hint: "例：すぐに報告して、原因を確認し、再発を防ぎます。",
-      },
-      {
-        key: "stressManagement",
-        question: "ストレスを感じた時は、どうしていますか。",
-        type: "textarea",
-        jsonKey: "stressManagement",
-        hint: "例：運動や睡眠でリフレッシュします。",
-      },
-      {
-        key: "exerciseHabit",
-        question: "普段、運動はしていますか。",
-        type: "text",
-        jsonKey: "exerciseHabit",
-        hint: "例：週2回ジョギングをしています。",
-      },
-    ],
-  },
-  {
-    title: "その他の確認",
-    questions: [
-      {
-        key: "jobUnderstanding",
-        question: "求人の内容は、もう理解していますか。",
-        type: "select",
-        options: ["はい", "いいえ"],
-        jsonKey: "jobUnderstanding",
-      },
-      {
-        key: "movingCostReady",
-        question: "引っ越し費用や初期費用は準備できますか。",
-        type: "select",
-        options: ["はい", "いいえ"],
-        jsonKey: "movingCostReady",
-        showIf: { locationIn: ["domestic"] },
-      },
-      {
-        key: "noMovingSupportOk",
-        question: "引っ越しのサポートがなくても大丈夫ですか。",
-        type: "select",
-        options: ["はい", "いいえ"],
-        jsonKey: "noMovingSupportOk",
-        showIf: { locationIn: ["domestic"] },
-      },
-      {
-        key: "flightCostSelf",
-        question: "飛行機代は自己負担になりますが、大丈夫ですか。",
-        type: "select",
-        options: ["はい", "いいえ"],
-        jsonKey: "flightCostSelf",
-        showIf: { locationIn: ["overseas"] },
-      },
-      {
-        key: "familySupport",
-        question: "ご家族は、日本で働くことに賛成していますか。",
-        type: "select",
-        options: ["はい", "いいえ"],
-        jsonKey: "familySupport",
-      },
-      {
-        key: "childPlan",
-        question: "近い将来、お子様の予定はありますか。",
-        type: "select",
-        options: ["予定あり", "予定なし", "未定"],
-        jsonKey: "childPlan",
-      },
-      {
-        key: "candidateQuestions",
-        question: "何か質問はありますか。",
-        type: "textarea",
-        jsonKey: "candidateQuestions",
-        hint: "例：配属先はどこですか。／ 特にありません。",
-      },
-      {
-        key: "companyInquiry",
-        question: "会社について、知りたいことはありますか。",
-        type: "textarea",
-        jsonKey: "companyInquiry",
-        hint: "例：寮の有無を知りたいです。",
-      },
-    ],
-  },
-];
-
 /** すべての質問をフラットに走査するためのヘルパー */
 export function allInterviewQuestions(): InterviewQuestion[] {
   return INTERVIEW_SECTIONS.flatMap((s) => s.questions);
@@ -682,20 +351,40 @@ export function allInterviewQuestions(): InterviewQuestion[] {
  *   isExcluded … 担当者が intakeConfig で除外した質問
  *   isAnswered … すでに回答済み (履歴書 AI 抽出で埋まった等) の質問は出さない
  */
-/** 現行 + 以前の質問 (回答の表示や履歴書連携の項目を探すとき用) */
-export const ALL_INTERVIEW_SECTIONS: InterviewSection[] = [...INTERVIEW_SECTIONS, ...LEGACY_SECTIONS];
-
-/**
- * 履歴書にそのまま載る文章の質問のうち、今の事前質問 (INTERVIEW_SECTIONS) に無いもの
- * (来日目的・今の仕事・志望動機・自己紹介)。候補者フォームの「履歴書のための質問」で聞く
- */
-export const RESUME_TEXT_QUESTIONS: InterviewQuestion[] = LEGACY_SECTIONS.flatMap((s) =>
-  s.questions.filter(
-    (q) =>
-      q.existingField &&
-      !INTERVIEW_SECTIONS.some((cur) => cur.questions.some((c) => c.existingField === q.existingField)),
-  ),
-);
+/** 履歴書にそのまま載る文章の質問。候補者フォームの「履歴書のための質問」で聞く (辞めた理由は「転職の理由」で聞く) */
+export const RESUME_TEXT_QUESTIONS: InterviewQuestion[] = [
+  {
+    key: "japanPurpose",
+    question: "日本に来た（来る）目的を教えてください。",
+    type: "textarea",
+    existingField: "japanPurpose",
+    priority: "must",
+    hint: "例：家族のためにお金を稼ぎたい。日本の技術を学びたい。",
+  },
+  {
+    key: "currentJob",
+    question: "今の（または直近の）お仕事の内容を教えてください。",
+    type: "textarea",
+    existingField: "currentJob",
+    priority: "must",
+    hint: "例：工場でお弁当を作る仕事をしています。",
+  },
+  {
+    key: "motivation",
+    question: "弊社の求人に応募した理由を教えてください。",
+    type: "textarea",
+    existingField: "motivation",
+    priority: "must",
+    hint: "例：寮があり、長く働けそうだと思ったからです。",
+  },
+  {
+    key: "selfIntroduction",
+    question: "自己紹介と自己PRを書いてください。",
+    type: "textarea",
+    existingField: "selfIntroduction",
+    hint: "例：はじめまして。○○です。まじめで、最後まで責任を持ってやり遂げます。",
+  },
+];
 
 export function buildInterviewSections(opts: {
   priority: QuestionPriority;

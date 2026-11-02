@@ -415,7 +415,6 @@ export default function IntakeClient({
               <QuestionField label={t("phone")} sub={ja("phone")} type="text" hint="090-1234-5678" value={basicForm.phoneNumber} onChange={(v) => setBasic("phoneNumber", v)} />
               <QuestionField label={t("email")} sub={ja("email")} type="text" hint="example@gmail.com" value={basicForm.email} onChange={(v) => setBasic("email", v)} />
               <QuestionField label={t("address")} sub={ja("address")} type="textarea" hint={t("addressHint")} value={basicForm.address} onChange={(v) => setBasic("address", v)} />
-              <QuestionField label={t("postalCode")} sub={ja("postalCode")} type="text" hint={t("postalHint")} value={basicForm.postalCode} onChange={(v) => setBasic("postalCode", v)} />
               <QuestionField
                 label={t("spouse")}
                 sub={ja("spouse")}

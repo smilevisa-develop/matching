@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import IntakeClient, { type WorkRow } from "./IntakeClient";
 import { intakeLang } from "@/lib/intake-i18n";
 import { normalizeWorkHistories } from "@/lib/candidate-profile";
+import { withTakeHomeSummary } from "@/lib/interview-questions";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +92,7 @@ export default async function IntakePage({
         interviewAnswers:
           person.resumeProfile?.interviewAnswers &&
           typeof person.resumeProfile.interviewAnswers === "object"
-            ? (person.resumeProfile.interviewAnswers as Record<string, string>)
+            ? withTakeHomeSummary(person.resumeProfile.interviewAnswers as Record<string, string>)
             : {},
       }}
     />

@@ -33,6 +33,7 @@ import {
   LOCATION_QUESTION_KEY,
   buildInterviewSections,
   parseLocationAnswer,
+  withTakeHomeSummary,
   type InterviewQuestion,
 } from "@/lib/interview-questions";
 
@@ -149,7 +150,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
   const rp = person.resumeProfile;
   const interviewAnswers: Record<string, string> =
     rp?.interviewAnswers && typeof rp.interviewAnswers === "object"
-      ? (rp.interviewAnswers as Record<string, string>)
+      ? withTakeHomeSummary(rp.interviewAnswers as Record<string, string>)
       : {};
 
   const isQuestionAnswered = (q: InterviewQuestion): boolean => {
@@ -364,7 +365,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                     interviewAnswers:
                       person.resumeProfile?.interviewAnswers &&
                       typeof person.resumeProfile.interviewAnswers === "object"
-                        ? (person.resumeProfile.interviewAnswers as Record<string, string>)
+                        ? withTakeHomeSummary(person.resumeProfile.interviewAnswers as Record<string, string>)
                         : {},
                   }}
                 />
