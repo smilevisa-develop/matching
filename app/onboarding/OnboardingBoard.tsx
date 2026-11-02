@@ -624,7 +624,7 @@ function BoardCard({
         <p className="text-sm font-semibold text-[var(--color-text-dark)]">
           {card.personName}
           {card.documentsOnly ? <span className="ml-1 rounded bg-violet-100 px-1 text-[10px] font-normal text-violet-700">書類のみ</span> : null}
-          {card.twoApplications ? <span className="ml-1 rounded bg-orange-500 px-1 text-[10px] font-normal text-white">2回申請</span> : null}
+          {card.twoApplications ? <span className="ml-1 inline-block whitespace-nowrap rounded bg-orange-500 px-1 text-[10px] font-normal text-white">2回申請</span> : null}
         </p>
         {stageTasks.length > 0 ? (
           <span
