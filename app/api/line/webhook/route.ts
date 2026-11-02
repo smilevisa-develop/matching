@@ -1,5 +1,6 @@
 export const runtime = "nodejs";
 
+import crypto from "crypto";
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { reconcileMessagePersonLinks } from "@/lib/message-linking";
@@ -56,13 +57,28 @@ async function fetchGroupSummary(
 
 export async function POST(req: Request) {
   const text = await req.text();
-  console.log("=== LINE WEBHOOK RECEIVED ===", text);
+
+  // 署名検証。未設定のまま受け付けると誰でも偽イベントを送れるので、未設定なら受け付けない
+  const channelSecret = process.env.LINE_CHANNEL_SECRET;
+  if (!channelSecret) {
+    console.error("[line/webhook] LINE_CHANNEL_SECRET が未設定です");
+    return new Response("misconfigured", { status: 500 });
+  }
+  const sig = req.headers.get("x-line-signature") ?? "";
+  const expected = crypto.createHmac("sha256", channelSecret).update(text).digest("base64");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    console.warn("[line/webhook] 署名検証失敗");
+    return new Response("invalid signature", { status: 401 });
+  }
 
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
   try {
     const body = JSON.parse(text);
     const events = Array.isArray(body.events) ? body.events : [];
+    console.log(`[line/webhook] received ${events.length} event(s)`);
 
     for (const event of events) {
       const source = event?.source;
@@ -182,7 +198,10 @@ export async function POST(req: Request) {
 
     await reconcileMessagePersonLinks();
   } catch (error) {
-    console.error("Failed to store LINE webhook payload", error);
+    // エラー本文には受信内容が混ざることがあるので、種類だけ出す
+    const name = error instanceof Error ? error.name : "unknown";
+    const code = (error as { code?: unknown } | null)?.code;
+    console.error("[line/webhook] 保存に失敗", name, typeof code === "string" ? code : "");
   }
 
   return new Response("ok", { status: 200 });

@@ -9,6 +9,7 @@
 ```env
 DATABASE_URL="postgresql://..."
 LINE_CHANNEL_ACCESS_TOKEN="..."
+LINE_CHANNEL_SECRET="..."
 LINE_TEST_USER_ID="U..."
 ```
 
