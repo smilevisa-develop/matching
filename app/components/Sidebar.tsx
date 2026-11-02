@@ -44,7 +44,7 @@ type NavItem = {
 
 type SyncLine = { label: string; value: string; failed?: boolean };
 
-const SECTIONS: { heading: string; items: NavItem[] }[] = [
+const SECTIONS: { heading?: string; items: NavItem[] }[] = [
   {
     heading: "毎日の業務",
     items: [
@@ -89,14 +89,15 @@ const SECTIONS: { heading: string; items: NavItem[] }[] = [
       { label: "売上ダッシュボード", href: "/revenue", icon: YenIcon },
     ],
   },
+  {
+    items: [
+      { label: "修正依頼", href: "/feedback", icon: FlagIcon },
+      { label: "設定", href: "/settings", icon: SettingsIcon },
+    ],
+  },
 ];
 
-const FOOTER_ITEMS: NavItem[] = [
-  { label: "修正依頼", href: "/feedback", icon: FlagIcon },
-  { label: "設定", href: "/settings", icon: SettingsIcon },
-];
-
-const ALL_ITEMS = [...SECTIONS.flatMap((section) => section.items), ...FOOTER_ITEMS];
+const ALL_ITEMS = SECTIONS.flatMap((section) => section.items);
 
 // いまの URL にいちばん長く一致する項目を1つだけ選択中にする
 function activeHref(pathname: string) {
@@ -113,7 +114,6 @@ export default function Sidebar() {
   // 修正依頼の未対応件数
   const [openFeedbackCount, setOpenFeedbackCount] = useState(0);
   const [accountName, setAccountName] = useState("読み込み中...");
-  const [accountRole, setAccountRole] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncReport, setSyncReport] = useState<{ ok: boolean; lines: SyncLine[] } | null>(null);
   const current = activeHref(pathname);
@@ -157,14 +157,11 @@ export default function Sidebar() {
         const data = await res.json();
         if (data.ok && data.account) {
           setAccountName(data.account.name);
-          setAccountRole(data.account.role === "admin" ? "管理者" : "通常アカウント");
         } else {
           setAccountName("未ログイン");
-          setAccountRole("");
         }
       } catch {
         setAccountName("未ログイン");
-        setAccountRole("");
       }
     };
 
@@ -290,42 +287,35 @@ export default function Sidebar() {
 
         <nav className="flex-1 overflow-y-auto px-2 pb-4">
           {SECTIONS.map((section, index) => (
-            <div key={section.heading} className={index === 0 ? "pt-2" : "mt-4 border-t border-side-line pt-4"}>
-              <p className="px-2 pb-2 text-body font-bold text-white">{section.heading}</p>
+            <div key={section.heading ?? "other"} className={index === 0 ? "pt-2" : "mt-4 border-t border-side-line pt-4"}>
+              {section.heading && <p className="px-2 pb-2 text-body font-bold text-white">{section.heading}</p>}
               <div className="flex flex-col">{section.items.map(renderItem)}</div>
             </div>
           ))}
         </nav>
 
-        <div className="relative shrink-0 border-t border-side-line p-2">
-          {FOOTER_ITEMS.map(renderItem)}
-          <button
-            type="button"
-            onClick={() => void syncNow()}
-            disabled={syncing}
-            className="flex h-nav max-md:h-row w-full items-center gap-2 rounded-button px-2 text-left text-nav text-side-ink hover:bg-side-hover hover:text-white disabled:opacity-60"
-          >
-            <span className="text-side-icon">
-              <SyncIcon size={20} className={syncing ? "animate-spin" : undefined} />
-            </span>
-            <span className="min-w-0 flex-1 truncate">{syncing ? "同期中" : "同期"}</span>
-          </button>
+        {/* 名前の欄。一覧と見分けられるよう、明るい地にして分ける */}
+        <div className="relative flex shrink-0 items-center gap-2 bg-[var(--color-light)] p-2">
           <button
             type="button"
             onClick={() => setAccountOpen((open) => !open)}
             aria-expanded={accountOpen}
-            className="flex min-h-row w-full items-center gap-2 rounded-button px-2 text-left hover:bg-side-hover"
+            className="flex h-control min-w-0 flex-1 items-center gap-1 rounded-button px-2 text-left text-[var(--color-text-dark)] hover:bg-white"
           >
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-body text-white">{accountName}</span>
-              {accountRole && <span className="block truncate text-note text-white/55">{accountRole}</span>}
-            </span>
-            <span className="shrink-0 text-side-icon">
-              <ChevronUpDownIcon size={16} />
-            </span>
+            <span className="min-w-0 flex-1 truncate text-body font-semibold">{accountName}</span>
+            <ChevronUpDownIcon size={16} className="shrink-0" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void syncNow()}
+            disabled={syncing}
+            className="flex h-control shrink-0 items-center gap-1 rounded-button bg-[var(--color-primary)] px-2 text-note font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-60"
+          >
+            <SyncIcon size={16} className={syncing ? "animate-spin" : undefined} />
+            {syncing ? "同期中" : "同期"}
           </button>
           {accountOpen && (
-            <div className="absolute inset-x-2 bottom-full rounded-button border border-gray-200 bg-white p-2 shadow-float">
+            <div className="absolute inset-x-2 bottom-full mb-1 rounded-button border border-gray-200 bg-white p-2 shadow-float">
               <button
                 type="button"
                 onClick={() => void logout()}
