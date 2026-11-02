@@ -107,6 +107,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
       entryAt: ymd(p.entryAt),
       joinPlannedAt: ymd(p.joinPlannedAt),
       joinAt: ymd(p.joinAt),
+      leaveAt: ymd(p.leaveAt),
       offerAcceptedAt: ymd(p.offerAcceptedAt),
       applicationType: p.applicationType ?? "",
       applicationMethod: p.applicationMethod ?? "",

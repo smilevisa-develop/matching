@@ -16,7 +16,7 @@
 
 import { prisma } from "./prisma";
 import { ensureBillingTasks } from "./billing-flow";
-import { buildFlowTasks, OFFER_TO_APPLICATION_DAYS, OFFER_TO_JOIN_DAYS, PRE_OFFER_STAGE } from "./onboarding-flow";
+import { buildFlowTasks, IMMIGRATION_REPORT_DAYS, OFFER_TO_APPLICATION_DAYS, OFFER_TO_JOIN_DAYS, PRE_OFFER_STAGE } from "./onboarding-flow";
 import { ensurePlacementFolder } from "./placement-folder";
 
 export const OFFER_STAGE = "内定済み";
@@ -209,7 +209,8 @@ async function onJoinStage(personId: number, stage: string, dateYmd?: string | n
   const card = await prisma.personPlacement.findUnique({ where: { personId }, select: { stage: true } });
   if (!card) return created;
   if (stage === JOIN_WAITING_STAGE) {
-    await prisma.personPlacement.update({ where: { personId }, data: { joinPlannedAt: date } });
+    const planned = await prisma.personPlacement.update({ where: { personId }, data: { joinPlannedAt: date } });
+    await syncImmigrationReportTasks(planned.id);
   } else {
     // 保留・キャンセル・内定辞退のカードは工程を動かさない (日付だけ入れる)
     const movable = !["hold", "card_cancelled", "declined", "joined", "billing"].includes(card.stage ?? "");
@@ -218,23 +219,62 @@ async function onJoinStage(personId: number, stage: string, dateYmd?: string | n
       data: { joinAt: date, ...(movable ? { stage: "joined", stageChangedAt: new Date() } : {}) },
     });
     if (updated.stage === "joined") await ensureBillingTasks(updated.id);
+    await syncImmigrationReportTasks(updated.id);
   }
   return created;
 }
+
+/** タスク名の頭の期限 (【11/16まで】) を除いた名前 */
+const bareTitle = (title: string) => title.replace(/^【[^】]*】/, "");
 
 /** 申請種別が変わったら、未完了タスクをその種別の内容で作り直す (完了済みは残す) */
 export async function rebuildFlowTasksForType(placementId: number) {
   const p = await prisma.personPlacement.findUniqueOrThrow({
     where: { id: placementId },
-    select: { applicationType: true, offerAcceptedAt: true, offerAt: true },
+    select: { applicationType: true, offerAcceptedAt: true, offerAt: true, externalResidenceStatus: true, person: { select: { residenceStatus: true } } },
   });
   // 請求のタスクは入社日から作るもので、種別では変わらない (2回申請の人が別の種別で申請し直しても残す)
   await prisma.placementTask.deleteMany({ where: { placementId, doneAt: null, billingStep: null } });
   const doneTitles = new Set(
-    (await prisma.placementTask.findMany({ where: { placementId }, select: { title: true } })).map((t) => t.title),
+    (await prisma.placementTask.findMany({ where: { placementId }, select: { title: true } })).map((t) => bareTitle(t.title)),
   );
-  const tasks = buildFlowTasks(p.applicationType, p.offerAcceptedAt ?? p.offerAt ?? null).filter((t) => !doneTitles.has(t.title));
+  const tasks = buildFlowTasks(
+    p.applicationType,
+    p.offerAcceptedAt ?? p.offerAt ?? null,
+    p.person?.residenceStatus ?? p.externalResidenceStatus,
+  ).filter((t) => !doneTitles.has(t.title));
   if (tasks.length > 0) {
     await prisma.placementTask.createMany({ data: tasks.map((t) => ({ ...t, placementId })) });
   }
+  await syncImmigrationReportTasks(placementId);
+}
+
+/**
+ * 入管への退社・入社報告の期限を、退職日・入社日 (未定の間は入社予定日) の 14 日後にそろえる。
+ * ボードのタスクは期限を出さないので、タスク名の頭にも書く。日付が無ければ期限なし。変わったタスクの数を返す
+ */
+export async function syncImmigrationReportTasks(placementId: number): Promise<number> {
+  const p = await prisma.personPlacement.findUnique({
+    where: { id: placementId },
+    select: {
+      leaveAt: true,
+      joinAt: true,
+      joinPlannedAt: true,
+      tasks: { where: { doneAt: null, title: { contains: "入管へ" } }, select: { id: true, title: true, dueAt: true } },
+    },
+  });
+  if (!p) return 0;
+  let changed = 0;
+  for (const task of p.tasks) {
+    const bare = bareTitle(task.title);
+    const from = bare.startsWith("入管へ退社報告") ? p.leaveAt : bare.startsWith("入管へ入社報告") ? (p.joinAt ?? p.joinPlannedAt) : undefined;
+    if (from === undefined) continue;
+    const dueAt = from ? new Date(from.getTime() + IMMIGRATION_REPORT_DAYS * 86_400_000) : null;
+    const md = dueAt ? new Date(dueAt.getTime() + 9 * 3600_000) : null;
+    const title = md ? `【${md.getUTCMonth() + 1}/${md.getUTCDate()}まで】${bare}` : bare;
+    if (title === task.title && dueAt?.getTime() === task.dueAt?.getTime()) continue;
+    await prisma.placementTask.update({ where: { id: task.id }, data: { title, dueAt } });
+    changed++;
+  }
+  return changed;
 }

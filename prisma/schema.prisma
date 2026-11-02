@@ -921,6 +921,8 @@ model PersonPlacement {
   entryAt              DateTime?
   joinPlannedAt        DateTime?
   joinAt               DateTime?
+  /// 前の会社の退職日 (入管への退社報告の期限を決める。変更・特定活動の人だけ)
+  leaveAt              DateTime?
   sixMonthStatus       String?
   consultation         String?
   currentAction        String?

@@ -9,6 +9,7 @@ import {
   DECLINED_STAGE,
   HOLD_STAGE,
   NEXT_STAGE,
+  needsImmigrationReport,
   ONBOARDING_STAGES,
   SUPPORT_OPTIONS,
   stageOfPhase,
@@ -103,6 +104,8 @@ export type OnboardingCard = {
   entryAt: string;
   joinPlannedAt: string;
   joinAt: string;
+  /** 前の会社の退職日 (入管への退社報告の期限を決める) */
+  leaveAt: string;
   /** 認定 / 変更 / 更新 / 特定活動 (未設定は空) */
   applicationType: string;
   /** 申請方法 (短文) */
@@ -256,6 +259,7 @@ export default function OnboardingBoard({
     if (patch.entryAt !== undefined) body.entryAt = patch.entryAt || null;
     if (patch.joinPlannedAt !== undefined) body.joinPlannedAt = patch.joinPlannedAt || null;
     if (patch.joinAt !== undefined) body.joinAt = patch.joinAt || null;
+    if (patch.leaveAt !== undefined) body.leaveAt = patch.leaveAt || null;
     if (patch.offerAcceptedAt !== undefined) body.offerAcceptedAt = patch.offerAcceptedAt || null;
     if (patch.applicationType !== undefined) body.applicationType = patch.applicationType || null;
     if (patch.applicationMethod !== undefined) body.applicationMethod = patch.applicationMethod || null;
@@ -1223,6 +1227,7 @@ function CardDrawer({
                   ["applicationAt", "申請日"],
                   ...(card.personId && card.applicationType !== "認定" ? ([["visaExpiryDate", "在留期日 (申請前)"]] as const) : []),
                   ["applicationResultAt", "申請結果日"],
+                  ...(needsImmigrationReport(card.applicationType, card.residenceStatus) ? ([["leaveAt", "退職日"]] as const) : []),
                   ["returnHomeAt", "一時帰国日"],
                   ["entryAt", "入国日"],
                   ["joinPlannedAt", "入社予定日"],
@@ -1709,6 +1714,7 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
         entryAt: "",
         joinPlannedAt: "",
         joinAt: "",
+        leaveAt: "",
         offerAcceptedAt: "",
         applicationType: form.applicationType,
         applicationMethod: form.applicationMethod.trim(),

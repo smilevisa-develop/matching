@@ -31,7 +31,7 @@ export const TASK_PHASES = [
 export type TaskPhase = (typeof TASK_PHASES)[number];
 
 /** 対象者。全員 / 海外から呼ぶ場合 / 国内転職 など */
-export type TaskTarget = "全員" | "認定（海外）" | "変更（国内転職）" | "更新" | "特定活動" | "国内（変更・更新・特定活動）";
+export type TaskTarget = "全員" | "認定（海外）" | "変更（国内転職）" | "更新" | "特定活動" | "国内（変更・更新・特定活動）" | "変更・特定活動（実習生以外）";
 
 export type MasterTask = {
   phase: TaskPhase;
@@ -647,6 +647,26 @@ export const MASTER_TASKS: MasterTask[] = [
     target: "全員",
     howto: "入社後すぐ必要になるため、入社前に案内しておく",
     evidence: "案内記録",
+  },
+
+  // ───────── 入管への報告 (変更・特定活動。実習生は対象外)。期限は退職日・入社日から決まる (lib/onboarding-autolink.ts) ─────────
+  {
+    phase: "7. 結果受領・在留カード",
+    title: "入管へ退社報告をする（退職日から14日以内）",
+    dueDays: 50,
+    owner: "人材チーム（内定）",
+    target: "変更・特定活動（実習生以外）",
+    howto: "内定者の詳細に退職日を入れると、タスクの頭に期限が付く",
+    evidence: "報告の控え",
+  },
+  {
+    phase: "10. 入社前後",
+    title: "入管へ入社報告をする（入社日から14日以内）",
+    dueDays: 74,
+    owner: "人材チーム（内定）",
+    target: "変更・特定活動（実習生以外）",
+    howto: "入社日 (未定の間は入社予定日) から期限を決める",
+    evidence: "報告の控え",
   },
 
   // ───────── 10. 入社前後 ─────────

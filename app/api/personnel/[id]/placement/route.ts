@@ -10,7 +10,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { PRE_OFFER_STAGE } from "@/lib/onboarding-flow";
-import { ensureOnboardingCard, onDealCandidateStageChanged, rebuildFlowTasksForType } from "@/lib/onboarding-autolink";
+import { ensureOnboardingCard, onDealCandidateStageChanged, rebuildFlowTasksForType, syncImmigrationReportTasks } from "@/lib/onboarding-autolink";
 import { requestOnboardingSheetSync } from "@/lib/onboarding-sheet-sync";
 
 type Params = Promise<{ id: string }>;
@@ -113,6 +113,7 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
     ) {
       await rebuildFlowTasksForType(placement.id);
     }
+    if (updateData.joinAt !== undefined || updateData.joinPlannedAt !== undefined) await syncImmigrationReportTasks(placement.id);
     // 企業データベース (スプシ) の「内定者管理」タブに反映する (アプリが正。応答は待たせない)
     after(() => requestOnboardingSheetSync());
 

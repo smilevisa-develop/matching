@@ -46,6 +46,7 @@ const TABS: { name: string; include: (t: MasterTask) => boolean }[] = [
     include: (t) =>
       t.target === "全員" ||
       t.target === "変更（国内転職）" ||
+      t.target === "変更・特定活動（実習生以外）" ||
       t.target === "国内（変更・更新・特定活動）",
   },
   {
@@ -56,7 +57,7 @@ const TABS: { name: string; include: (t: MasterTask) => boolean }[] = [
   {
     name: "特定活動",
     include: (t) =>
-      t.target === "全員" || t.target === "特定活動" || t.target === "国内（変更・更新・特定活動）",
+      t.target === "全員" || t.target === "特定活動" || t.target === "変更・特定活動（実習生以外）" || t.target === "国内（変更・更新・特定活動）",
   },
 ];
 

@@ -20,7 +20,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { moveDealCandidateStage } from "@/lib/deal-candidate-move";
 import { ensurePlacementFolder } from "@/lib/placement-folder";
-import { rebuildFlowTasksForType } from "@/lib/onboarding-autolink";
+import { rebuildFlowTasksForType, syncImmigrationReportTasks } from "@/lib/onboarding-autolink";
 import { BILLING_PHASE, ensureBillingTasks } from "@/lib/billing-flow";
 import { todayJst } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
@@ -59,6 +59,7 @@ const DATE_FIELDS = [
   "entryAt",
   "joinPlannedAt",
   "joinAt",
+  "leaveAt",
   "nextActionDueAt",
 ] as const;
 
@@ -185,6 +186,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
       if (removed.count > 0) rebuiltTasks = true;
     }
 
+    // 入管への報告の期限は退職日・入社日から決まる
+    if ((data.leaveAt !== undefined || data.joinAt !== undefined || data.joinPlannedAt !== undefined) && (await syncImmigrationReportTasks(placement.id)) > 0) {
+      rebuiltTasks = true;
+    }
+
     const tasks = rebuiltTasks ? await listTasks(placement.id) : undefined;
     return Response.json({ ok: true, placement: updated, rebuiltTasks, tasks });
   } catch (error) {
@@ -226,11 +232,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ personI
           joinPlannedAt: placement.joinPlannedAt ?? new Date(base.getTime() + OFFER_TO_JOIN_DAYS * 86_400_000),
         },
       });
+      const person = placement.personId
+        ? await prisma.person.findUnique({ where: { id: placement.personId }, select: { residenceStatus: true } })
+        : null;
       const tasks = buildFlowTasks(
         typeof body.applicationType === "string" ? body.applicationType : placement.applicationType,
         base,
+        person?.residenceStatus ?? placement.externalResidenceStatus,
       );
       await prisma.placementTask.createMany({ data: tasks.map((t) => ({ ...t, placementId: placement.id })) });
+      await syncImmigrationReportTasks(placement.id);
       const created = await listTasks(placement.id);
       return Response.json({ ok: true, created: created.length, tasks: created });
     }

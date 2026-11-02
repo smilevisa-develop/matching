@@ -746,107 +746,7 @@ export default function EditPersonForm({
             </div>
           ) : null}
 
-          {/* 島1: 在留資格・免許 */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-base font-semibold text-[var(--color-text-dark)]">在留資格・免許</p>
-            <p className="mt-1 text-sm text-gray-500">在留資格の基本情報と、保有する免許・資格を記録します。</p>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <Field label="現在の在留資格">
-                <select className={INPUT} value={form.residenceStatus} onChange={(event) => setValue("residenceStatus", event.target.value)}>
-                  {/* 既存 DB に標準リスト外の値があれば、その値も option として表示 */}
-                  {form.residenceStatus && !RESIDENCE_STATUSES.includes(form.residenceStatus) ? (
-                    <option value={form.residenceStatus}>{form.residenceStatus}</option>
-                  ) : null}
-                  {RESIDENCE_STATUSES.map((status) => (
-                    <option key={status}>{status}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="在留資格の有効期限">
-                <input className={INPUT} type="date" value={form.visaExpiryDate} onChange={(event) => setValue("visaExpiryDate", event.target.value)} />
-              </Field>
-              {form.residenceStatus.includes("特定技能") ? (
-                <Field label="特定技能の開始日">
-                  <input className={INPUT} type="date" value={form.sswStartDate} onChange={(event) => setValue("sswStartDate", event.target.value)} />
-                  <p className="mt-1 text-[11px] text-gray-400">推薦リストの「特定技能通算期間」はここから計算します（1号は通算 5 年まで）。</p>
-                </Field>
-              ) : null}
-              <Field label="日本語検定">
-                <input className={INPUT} value={form.japaneseLevel} onChange={(event) => setValue("japaneseLevel", event.target.value)} placeholder="JLPT N3" />
-              </Field>
-              <Field label="取得日">
-                <input className={INPUT} type="month" value={ym(form.japaneseLevelDate)} onChange={(event) => setValue("japaneseLevelDate", event.target.value)} />
-              </Field>
-              <Field label="免許">
-                <input className={INPUT} value={form.licenseName} onChange={(event) => setValue("licenseName", event.target.value)} placeholder="普通自動車第一種免許" />
-              </Field>
-              <Field label="免許の有効期限">
-                <input className={INPUT} type="month" value={ym(form.licenseExpiryDate)} onChange={(event) => setValue("licenseExpiryDate", event.target.value)} />
-              </Field>
-              <Field label="実習経験" className="md:col-span-2">
-                <input
-                  className={INPUT}
-                  value={form.traineeExperience}
-                  onChange={(event) => setValue("traineeExperience", event.target.value)}
-                  placeholder="例: 有 / 無 / 技能実習2号 (溶接) 3年"
-                />
-                <p className="mt-1 text-[11px] text-gray-400">
-                  推薦リストには「有 / 無」だけが出ます（ここに書いた内容そのものは企業に渡りません）。未記入なら空欄のままです。
-                </p>
-              </Field>
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-[var(--color-secondary)] bg-[var(--color-light)] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-[var(--color-text-dark)]">その他の資格</p>
-                  <p className="mt-1 text-xs text-gray-500">複数の資格を行ごとに追加できます。</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={addOtherQualification}
-                  className="rounded-lg border border-[var(--color-secondary)] bg-white px-3 py-1.5 text-xs text-[var(--color-primary)] hover:bg-[var(--color-light)]"
-                >
-                  + 行を追加
-                </button>
-              </div>
-              <div className="mt-3 space-y-3">
-                {form.otherQualifications.map((entry, index) => (
-                  <div key={index} className="grid gap-3 rounded-xl border border-white bg-white p-3 md:grid-cols-[2fr_1fr_auto]">
-                    <Field label={index === 0 ? "資格名" : ""}>
-                      <input
-                        className={INPUT}
-                        value={entry.name}
-                        onChange={(event) => updateOtherQualification(index, "name", event.target.value)}
-                        placeholder="介護初任者研修"
-                      />
-                    </Field>
-                    <Field label={index === 0 ? "取得日 (任意)" : ""}>
-                      <input
-                        className={INPUT}
-                        type="month"
-                        value={ym(entry.expiryDate)}
-                        onChange={(event) => updateOtherQualification(index, "expiryDate", event.target.value)}
-                      />
-                    </Field>
-                    {form.otherQualifications.length > 1 ? (
-                      <div className="flex items-end">
-                        <button
-                          type="button"
-                          onClick={() => removeOtherQualification(index)}
-                          className="rounded-lg border border-gray-200 px-2 py-2 text-xs text-gray-400 hover:border-red-300 hover:text-red-500"
-                        >
-                          削除
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* 島2: 学歴・職歴 */}
+          {/* 島1: 学歴・職歴 */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <p className="text-base font-semibold text-[var(--color-text-dark)]">学歴・職歴</p>
             <p className="mt-1 text-sm text-gray-500">高校・大学および職歴をまとめて管理します。</p>
@@ -983,6 +883,106 @@ export default function EditPersonForm({
                       >
                         この行を削除
                       </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 島2: 在留資格・免許 */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <p className="text-base font-semibold text-[var(--color-text-dark)]">在留資格・免許</p>
+            <p className="mt-1 text-sm text-gray-500">在留資格の基本情報と、保有する免許・資格を記録します。</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Field label="現在の在留資格">
+                <select className={INPUT} value={form.residenceStatus} onChange={(event) => setValue("residenceStatus", event.target.value)}>
+                  {/* 既存 DB に標準リスト外の値があれば、その値も option として表示 */}
+                  {form.residenceStatus && !RESIDENCE_STATUSES.includes(form.residenceStatus) ? (
+                    <option value={form.residenceStatus}>{form.residenceStatus}</option>
+                  ) : null}
+                  {RESIDENCE_STATUSES.map((status) => (
+                    <option key={status}>{status}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="在留資格の有効期限">
+                <input className={INPUT} type="date" value={form.visaExpiryDate} onChange={(event) => setValue("visaExpiryDate", event.target.value)} />
+              </Field>
+              {form.residenceStatus.includes("特定技能") ? (
+                <Field label="特定技能の開始日">
+                  <input className={INPUT} type="date" value={form.sswStartDate} onChange={(event) => setValue("sswStartDate", event.target.value)} />
+                  <p className="mt-1 text-[11px] text-gray-400">推薦リストの「特定技能通算期間」はここから計算します（1号は通算 5 年まで）。</p>
+                </Field>
+              ) : null}
+              <Field label="日本語検定">
+                <input className={INPUT} value={form.japaneseLevel} onChange={(event) => setValue("japaneseLevel", event.target.value)} placeholder="JLPT N3" />
+              </Field>
+              <Field label="取得日">
+                <input className={INPUT} type="month" value={ym(form.japaneseLevelDate)} onChange={(event) => setValue("japaneseLevelDate", event.target.value)} />
+              </Field>
+              <Field label="免許">
+                <input className={INPUT} value={form.licenseName} onChange={(event) => setValue("licenseName", event.target.value)} placeholder="普通自動車第一種免許" />
+              </Field>
+              <Field label="免許の有効期限">
+                <input className={INPUT} type="month" value={ym(form.licenseExpiryDate)} onChange={(event) => setValue("licenseExpiryDate", event.target.value)} />
+              </Field>
+              <Field label="実習経験" className="md:col-span-2">
+                <input
+                  className={INPUT}
+                  value={form.traineeExperience}
+                  onChange={(event) => setValue("traineeExperience", event.target.value)}
+                  placeholder="例: 有 / 無 / 技能実習2号 (溶接) 3年"
+                />
+                <p className="mt-1 text-[11px] text-gray-400">
+                  推薦リストには「有 / 無」だけが出ます（ここに書いた内容そのものは企業に渡りません）。未記入なら空欄のままです。
+                </p>
+              </Field>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-[var(--color-secondary)] bg-[var(--color-light)] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--color-text-dark)]">その他の資格</p>
+                  <p className="mt-1 text-xs text-gray-500">複数の資格を行ごとに追加できます。</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addOtherQualification}
+                  className="rounded-lg border border-[var(--color-secondary)] bg-white px-3 py-1.5 text-xs text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+                >
+                  + 行を追加
+                </button>
+              </div>
+              <div className="mt-3 space-y-3">
+                {form.otherQualifications.map((entry, index) => (
+                  <div key={index} className="grid gap-3 rounded-xl border border-white bg-white p-3 md:grid-cols-[2fr_1fr_auto]">
+                    <Field label={index === 0 ? "資格名" : ""}>
+                      <input
+                        className={INPUT}
+                        value={entry.name}
+                        onChange={(event) => updateOtherQualification(index, "name", event.target.value)}
+                        placeholder="介護初任者研修"
+                      />
+                    </Field>
+                    <Field label={index === 0 ? "取得日 (任意)" : ""}>
+                      <input
+                        className={INPUT}
+                        type="month"
+                        value={ym(entry.expiryDate)}
+                        onChange={(event) => updateOtherQualification(index, "expiryDate", event.target.value)}
+                      />
+                    </Field>
+                    {form.otherQualifications.length > 1 ? (
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={() => removeOtherQualification(index)}
+                          className="rounded-lg border border-gray-200 px-2 py-2 text-xs text-gray-400 hover:border-red-300 hover:text-red-500"
+                        >
+                          削除
+                        </button>
+                      </div>
                     ) : null}
                   </div>
                 ))}

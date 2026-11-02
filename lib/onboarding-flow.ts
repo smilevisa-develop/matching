@@ -15,6 +15,8 @@ import { MASTER_TASKS, TASK_PHASES, type MasterTask } from "./onboarding-task-ma
 
 export const OFFER_TO_APPLICATION_DAYS = 10;
 export const OFFER_TO_JOIN_DAYS = 60;
+/** 入管への退社・入社報告の期限 (退職日・入社日から) */
+export const IMMIGRATION_REPORT_DAYS = 14;
 
 /**
  * ボードの列 (ステージ)。
@@ -255,6 +257,11 @@ export function resolveStage(input: {
 export const APPLICATION_TYPES = ["認定", "変更", "更新", "特定活動"] as const;
 export type ApplicationType = (typeof APPLICATION_TYPES)[number];
 
+/** 入管への退社・入社報告が要る人 (変更・特定活動。実習生は対象外) */
+export function needsImmigrationReport(applicationType: string | null | undefined, residenceStatus: string | null | undefined): boolean {
+  return (applicationType === "変更" || applicationType === "特定活動") && !residenceStatus?.includes("実習");
+}
+
 /** 工程名 → ステージ */
 export function stageOfPhase(phase: string): OnboardingStageId {
   const hit = ONBOARDING_STAGES.find((s) => (s.phases as readonly string[]).includes(phase));
@@ -271,7 +278,7 @@ export function tasksInStage<T extends { category: string }>(tasks: T[], stage: 
  * 中身はスプレッドシート「内定後タスク管理表」と同じ (原本: lib/onboarding-task-master.ts)。
  * category に工程名を入れておくことで、ステージごとのチェックリストとして表示できる。
  */
-export function buildFlowTasks(applicationType: string | null, baseDate: Date | null) {
+export function buildFlowTasks(applicationType: string | null, baseDate: Date | null, residenceStatus?: string | null) {
   const type = (APPLICATION_TYPES as readonly string[]).includes(applicationType ?? "")
     ? (applicationType as ApplicationType)
     : null;
@@ -283,6 +290,7 @@ export function buildFlowTasks(applicationType: string | null, baseDate: Date | 
     if (target === "変更（国内転職）") return type === "変更";
     if (target === "更新") return type === "更新";
     if (target === "特定活動") return type === "特定活動";
+    if (target === "変更・特定活動（実習生以外）") return needsImmigrationReport(type, residenceStatus);
     if (target === "国内（変更・更新・特定活動）") {
       return type === "変更" || type === "更新" || type === "特定活動";
     }
