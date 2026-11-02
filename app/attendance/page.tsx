@@ -99,16 +99,8 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
                         {cell?.absence && <p className="font-semibold text-red-600">欠勤</p>}
                         {cell?.sched && (
                           <p className="whitespace-nowrap tabular-nums">
-                            <span className="font-semibold">予定</span> {cell.sched.start}-{cell.sched.end}
+                            {cell.sched.start}-{cell.sched.end}
                           </p>
-                        )}
-                        {cell?.att && (
-                          <p className="whitespace-nowrap tabular-nums">
-                            <span className="font-semibold">実績</span> {cell.att.start}-{cell.att.end}
-                          </p>
-                        )}
-                        {cell?.att && !cell.att.end && day < today && (
-                          <p className="font-semibold text-red-600">退勤未打刻</p>
                         )}
                       </td>
                     );
