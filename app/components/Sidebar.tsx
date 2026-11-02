@@ -242,7 +242,7 @@ export default function Sidebar() {
         onClick={() => setMenuOpen(false)}
         aria-current={active ? "page" : undefined}
         className={`flex h-nav max-md:h-row items-center gap-2 rounded-button px-2 text-nav ${
-          active ? "bg-side-active font-semibold text-white" : "text-side-ink hover:bg-side-hover"
+          active ? "bg-side-active font-semibold text-white" : "text-side-ink hover:bg-side-hover hover:text-white"
         }`}
       >
         <span className={active ? "text-white" : "text-side-icon"}>
@@ -250,7 +250,12 @@ export default function Sidebar() {
         </span>
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
         {badge > 0 && (
-          <span aria-label={`${badge}件`} className="rounded-field bg-white px-2 text-note font-semibold text-side">
+          <span
+            aria-label={`${badge}件`}
+            className={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[11px] font-semibold ${
+              item.href === "/chat" ? "bg-white text-[var(--color-primary)]" : "bg-red-500 text-white"
+            }`}
+          >
             {badge}
           </span>
         )}
@@ -298,7 +303,7 @@ export default function Sidebar() {
             type="button"
             onClick={() => void syncNow()}
             disabled={syncing}
-            className="flex h-nav max-md:h-row w-full items-center gap-2 rounded-button px-2 text-left text-nav text-side-ink hover:bg-side-hover disabled:opacity-60"
+            className="flex h-nav max-md:h-row w-full items-center gap-2 rounded-button px-2 text-left text-nav text-side-ink hover:bg-side-hover hover:text-white disabled:opacity-60"
           >
             <span className="text-side-icon">
               <SyncIcon size={20} className={syncing ? "animate-spin" : undefined} />
@@ -313,18 +318,18 @@ export default function Sidebar() {
           >
             <span className="min-w-0 flex-1">
               <span className="block truncate text-body text-white">{accountName}</span>
-              {accountRole && <span className="block truncate text-note text-side-ink">{accountRole}</span>}
+              {accountRole && <span className="block truncate text-note text-white/55">{accountRole}</span>}
             </span>
             <span className="shrink-0 text-side-icon">
               <ChevronUpDownIcon size={16} />
             </span>
           </button>
           {accountOpen && (
-            <div className="absolute inset-x-2 bottom-full rounded-button border border-line bg-card p-2 shadow-float">
+            <div className="absolute inset-x-2 bottom-full rounded-button border border-gray-200 bg-white p-2 shadow-float">
               <button
                 type="button"
                 onClick={() => void logout()}
-                className="flex h-control max-md:h-row w-full items-center rounded-field px-2 text-body text-ink hover:bg-page"
+                className="flex h-control max-md:h-row w-full items-center rounded-field px-2 text-body text-[var(--color-text-dark)] hover:bg-[var(--color-light)]"
               >
                 ログアウト
               </button>

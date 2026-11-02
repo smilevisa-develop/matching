@@ -37,15 +37,15 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   }
 
   const navClass =
-    "flex h-control items-center rounded-button border border-line bg-card px-4 text-body text-ink hover:bg-page";
+    "flex h-control items-center rounded-button border border-gray-200 bg-white px-4 text-body text-[var(--color-text-dark)] hover:bg-[var(--color-light)]";
 
   return (
-    <div className="flex flex-col gap-4 p-4 text-ink md:p-8">
+    <div className="flex flex-col gap-4 p-4 text-[var(--color-text-dark)] md:p-8">
       <RefreshOnFocus />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-title font-semibold">出勤表</h1>
-          <p className="text-note text-ink-sub">
+          <p className="text-note text-gray-500">
             {from.slice(0, 4)}年 {shortDate(days[0])} 〜 {shortDate(days[6])}
           </p>
         </div>
@@ -63,19 +63,19 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
       </div>
 
       {!data ? (
-        <p className="rounded-card border border-line bg-card p-4 text-body text-ink-sub">
+        <p className="rounded-card border border-gray-200 bg-white p-4 text-body text-gray-500">
           出勤表を読み込めませんでした。時間をおいて開き直してください。
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-card border border-line bg-card">
+        <div className="overflow-x-auto rounded-card border border-gray-200 bg-white">
           <table className="w-full min-w-[1100px] table-fixed border-collapse">
             <thead>
-              <tr className="border-b border-line">
-                <th className="sticky left-0 z-10 w-name bg-card px-4 py-2 text-left text-th font-medium text-ink-sub">名前</th>
+              <tr className="border-b border-gray-200">
+                <th className="sticky left-0 z-10 w-name bg-white px-4 py-2 text-left text-th font-medium text-gray-500">名前</th>
                 {days.map((day) => (
                   <th
                     key={day}
-                    className={`px-2 py-2 text-left text-th font-medium ${day === today ? "bg-brand-soft text-ink" : "text-ink-sub"}`}
+                    className={`px-2 py-2 text-left text-th font-medium ${day === today ? "bg-[var(--color-light)] text-[var(--color-text-dark)]" : "text-gray-500"}`}
                   >
                     {shortDate(day)}（{WEEK_LABELS[dayOfWeek(day)]}）
                   </th>
@@ -84,27 +84,27 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
             </thead>
             <tbody>
               {data.members.map((member) => (
-                <tr key={member.id} className="border-b border-divider last:border-b-0">
-                  <td className="sticky left-0 z-10 bg-card px-4 py-2 align-top text-body">{member.name}</td>
+                <tr key={member.id} className="border-b border-gray-100 last:border-b-0">
+                  <td className="sticky left-0 z-10 bg-white px-4 py-2 align-top text-body">{member.name}</td>
                   {days.map((day) => {
                     const cell = data.cells[member.id]?.[day];
                     return (
-                      <td key={day} className={`px-2 py-2 align-top text-note ${day === today ? "bg-brand-soft" : ""}`}>
-                        {cell?.absence && <p className="font-semibold text-danger">欠勤</p>}
+                      <td key={day} className={`px-2 py-2 align-top text-note ${day === today ? "bg-[var(--color-light)]" : ""}`}>
+                        {cell?.absence && <p className="font-semibold text-red-600">欠勤</p>}
                         {cell?.sched && (
-                          <p className="text-ink-sub">
+                          <p className="text-gray-500">
                             予定 {cell.sched.start}-{cell.sched.end}
                           </p>
                         )}
                         {cell?.att && (
-                          <p className="text-ink">
+                          <p className="text-[var(--color-text-dark)]">
                             実績 {cell.att.start}-
                             {cell.att.end ?? (
-                              <span className={day === today ? "text-done" : "text-danger"}>{openLabel(day, today)}</span>
+                              <span className={day === today ? "text-emerald-600" : "text-red-600"}>{openLabel(day, today)}</span>
                             )}
                           </p>
                         )}
-                        {!cell?.absence && !cell?.sched && !cell?.att && <p className="text-ink-mute">-</p>}
+                        {!cell?.absence && !cell?.sched && !cell?.att && <p className="text-gray-400">-</p>}
                       </td>
                     );
                   })}

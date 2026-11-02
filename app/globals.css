@@ -12,24 +12,14 @@
   --color-accent: #C89F5B;           /* 温かみのアンバー (任意のアクセント) */
 }
 
-/* SmileReach と同じ値 (サイドバーと出勤表で使う。smilereach の DESIGN.md / globals.css が正本) */
+/* サイドバーの作りと大きさは SmileReach と同じ。色はこのシステムの元の色 (:root のパレット) を使う */
 @theme {
-  --color-side: #252c34;
-  --color-side-hover: #2e3740;
-  --color-side-active: #3a444e;
-  --color-side-line: #343d46;
-  --color-side-ink: #b9c2ca;
-  --color-side-icon: #98a2ab;
-  --color-page: #f6f7f8;
-  --color-card: #ffffff;
-  --color-line: #e4e6e8;
-  --color-divider: #edeff0;
-  --color-ink: #14181b;
-  --color-ink-sub: #5b6469;
-  --color-ink-mute: #8a9299;
-  --color-brand-soft: #eef2fb;
-  --color-done: #17805f;
-  --color-danger: #b3261e;
+  --color-side: var(--color-text-dark);
+  --color-side-hover: rgb(255 255 255 / 0.1);
+  --color-side-active: var(--color-primary);
+  --color-side-line: rgb(255 255 255 / 0.1);
+  --color-side-ink: rgb(255 255 255 / 0.8);
+  --color-side-icon: rgb(255 255 255 / 0.7);
   --radius-field: 6px;
   --radius-button: 8px;
   --radius-card: 12px;
