@@ -4,8 +4,41 @@ import { SESSION_COOKIE_NAME } from "@/lib/auth-constants";
 
 const PUBLIC_PATHS = ["/login"];
 
+/** 外部からの Webhook (LINE / Messenger / WhatsApp)。メンテナンス中も受け取る */
+const isWebhook = (pathname: string) =>
+  pathname.startsWith("/api/line/webhook") ||
+  pathname.startsWith("/api/messenger/webhook") ||
+  pathname.startsWith("/api/whatsapp/webhook");
+
+/**
+ * サーバー移行用 (環境変数を入れた環境だけで動く)。
+ *   MAINTENANCE_MODE=1  … 移行中の書き込みを止める。Webhook とヘルスチェック以外は 503
+ *   FORWARD_TO_URL=...  … 旧サーバーから新サーバーへ。画面は転送し、/api は外部から呼ばれるので中継する
+ */
+function migrationResponse(request: NextRequest): NextResponse | null {
+  const { pathname, search } = request.nextUrl;
+  if (pathname === "/api/health") return null;
+
+  const forwardTo = process.env.FORWARD_TO_URL?.trim().replace(/\/+$/, "");
+  if (forwardTo) {
+    const target = new URL(`${pathname}${search}`, forwardTo);
+    return pathname.startsWith("/api/") ? NextResponse.rewrite(target) : NextResponse.redirect(target, 308);
+  }
+
+  if (process.env.MAINTENANCE_MODE === "1" && !isWebhook(pathname)) {
+    return new NextResponse(
+      '<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>メンテナンス中</title><body style="font-family:sans-serif;text-align:center;padding:64px 16px"><h1 style="font-size:20px">メンテナンス中です</h1><p>しばらくしてからもう一度開いてください。<br>System maintenance. Please try again later.</p></body></html>',
+      { status: 503, headers: { "content-type": "text/html; charset=utf-8", "retry-after": "900" } },
+    );
+  }
+  return null;
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  const migration = migrationResponse(request);
+  if (migration) return migration;
 
   if (
     pathname.startsWith("/_next") ||
@@ -15,9 +48,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/logo") ||
     pathname.startsWith("/api/auth") ||
     // 外部からの Webhook (LINE / Messenger / WhatsApp 等) は未ログインで呼ばれる
-    pathname.startsWith("/api/line/webhook") ||
-    pathname.startsWith("/api/messenger/webhook") ||
-    pathname.startsWith("/api/whatsapp/webhook") ||
+    isWebhook(pathname) ||
     // 定期実行 (GitHub Actions 等の外部 cron から呼ばれる) はログインセッションを持てない。
     // ハンドラ側で CRON_SECRET (Authorization: Bearer) により保護する。
     pathname.startsWith("/api/cron/") ||
