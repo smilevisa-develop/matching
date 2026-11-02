@@ -6,15 +6,15 @@
  *   - メール本文に貼る公開 URL
  *
  * 解決順:
- *   1. PUBLIC_BASE_URL 環境変数 (例: "https://matching.up.railway.app")
+ *   1. PUBLIC_BASE_URL 環境変数 (例: "https://matching.smilereach.jp")
  *   2. RAILWAY_PUBLIC_DOMAIN 環境変数 (Railway が自動で設定)
- *   3. デフォルト: "https://matching.up.railway.app"
+ *   3. デフォルト: "https://matching.smilereach.jp"
  *
  * 注意: ホストヘッダから組み立てる方法は host header injection 攻撃の余地があり、
  *      かつ background job からは Request が無いので、env からのみ解決する。
  */
 
-const FALLBACK_HOST = "matching.up.railway.app";
+const FALLBACK_HOST = "matching.smilereach.jp";
 
 export function getPublicBaseUrl(): string {
   const explicit = process.env.PUBLIC_BASE_URL?.trim();
