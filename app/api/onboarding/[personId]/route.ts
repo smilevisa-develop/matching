@@ -21,7 +21,7 @@ import { prisma } from "@/lib/prisma";
 import { moveDealCandidateStage } from "@/lib/deal-candidate-move";
 import { ensurePlacementFolder } from "@/lib/placement-folder";
 import { rebuildFlowTasksForType } from "@/lib/onboarding-autolink";
-import { BILLING_STAGE, ensureBillingTasks } from "@/lib/billing-flow";
+import { BILLING_PHASE, ensureBillingTasks } from "@/lib/billing-flow";
 import { todayJst } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 import { requestKpiSheetSync } from "@/lib/kpi-sheet-sync";
@@ -123,6 +123,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
     if (body.applicantName !== undefined) data.applicantName = str(body.applicantName);
     if (body.returnHomeFlag !== undefined) data.returnHomeFlag = str(body.returnHomeFlag);
     if (typeof body.documentsOnly === "boolean") data.documentsOnly = body.documentsOnly;
+    if (typeof body.twoApplications === "boolean") data.twoApplications = body.twoApplications;
     if (body.externalName !== undefined && !placement.personId) data.externalName = str(body.externalName);
     if (body.externalCompanyName !== undefined && !placement.personId) data.externalCompanyName = str(body.externalCompanyName);
     if (body.externalResidenceStatus !== undefined && !placement.personId) data.externalResidenceStatus = str(body.externalResidenceStatus);
@@ -170,11 +171,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
       rebuiltTasks = true;
     }
 
-    // 請求の列に入れたとき / 請求の列で入社日を変えたときは、入社日から請求のタスク (翌月 1 日に請求 …) を作る
-    const nowBilling = (updated.stage ?? "") === BILLING_STAGE;
-    if (nowBilling && (data.stage === BILLING_STAGE || data.joinAt !== undefined)) {
+    // 入社 = 請求。入社の列に入れたとき / 入社の列で入社日を変えたときは、入社日から請求のタスク (翌月 1 日に請求 …) を作る
+    const nowJoined = updated.stage === "joined";
+    if (nowJoined && (data.stage === "joined" || data.joinAt !== undefined)) {
       const r = await ensureBillingTasks(placement.id);
       if (r.created > 0) rebuiltTasks = true;
+    } else if (!nowJoined && placement.stage === "joined" && data.stage !== undefined && !updated.twoApplications) {
+      // 入社の列から出したら、まだ終わっていない請求のタスクは消す (間違えて入れたとき用。戻せば作り直す)。
+      // 2回申請の人は 1 回目の入社の請求なので残す
+      const removed = await prisma.placementTask.deleteMany({
+        where: { placementId: placement.id, doneAt: null, OR: [{ category: BILLING_PHASE }, { billingStep: { not: null } }] },
+      });
+      if (removed.count > 0) rebuiltTasks = true;
     }
 
     const tasks = rebuiltTasks ? await listTasks(placement.id) : undefined;

@@ -6,7 +6,8 @@
  *
  * 例: 10/15 入社 → 11/1 請求 → 11/30 入金 → 12 月初めにパートナーへ依頼 → 12/31 までに支払い
  *
- * 内定者管理の「請求」の列に入れたときに、入社日からこの 5 つのタスクを期限つきで作る (紹介パートナーがいなければ前の 2 つだけ)。
+ * 内定者管理の「入社」の列に入れたときに、入社日からこの 5 つのタスクを期限つきで作る (紹介パートナーがいなければ前の 2 つだけ)。
+ * 入社 = 請求 (2026/11 に「請求」の列をなくした)。「2回申請あり」の人は 1 回目の入社のときに作ったものをそのまま使い、2 回目では作り直さない。
  * 担当は全部その企業 (求人) の担当者 (トゥイ・チンディ)。2026/10/26 土田さん:
  *   内定までと入社後の請求・パートナーへの支払いは企業の担当者、内定〜入社 (内定者管理) はグェット
  */
@@ -14,7 +15,6 @@
 import { prisma } from "@/lib/prisma";
 
 export const BILLING_PHASE = "11. 請求";
-export const BILLING_STAGE = "billing";
 
 export type BillingStepKey = "invoice" | "payment" | "pa-request" | "pa-invoice" | "pa-payment";
 
@@ -106,8 +106,9 @@ export function buildBillingTasks(args: {
 const ymdJst = (d: Date) => new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 
 /**
- * 内定者カードに請求のタスクを用意する (請求の列に入れたとき・入社日を変えたとき)。
+ * 内定者カードに請求のタスクを用意する (入社の列に入れたとき・入社の列で入社日を変えたとき)。
  * まだ終わっていない請求のタスクは作り直し、終わったものは残す。入社日が無ければ何もしない。
+ * 「2回申請あり」の人に請求のタスクがあれば何もしない (請求は 1 回目の入社日で決まる)。
  */
 export async function ensureBillingTasks(placementId: number): Promise<{ created: number; reason?: string }> {
   const p = await prisma.personPlacement.findUnique({
@@ -115,6 +116,7 @@ export async function ensureBillingTasks(placementId: number): Promise<{ created
     select: {
       joinAt: true,
       personId: true,
+      twoApplications: true,
       person: {
         select: {
           partner: { select: { name: true } },
@@ -126,6 +128,7 @@ export async function ensureBillingTasks(placementId: number): Promise<{ created
   });
   if (!p) return { created: 0, reason: "内定者が見つかりません" };
   if (!p.joinAt) return { created: 0, reason: "入社日がありません" };
+  if (p.twoApplications && p.tasks.some((t) => t.billingStep)) return { created: 0, reason: "1 回目の入社で請求済みです" };
   const personId = p.personId;
 
   const done = new Set(p.tasks.filter((t) => t.doneAt && t.billingStep).map((t) => t.billingStep));

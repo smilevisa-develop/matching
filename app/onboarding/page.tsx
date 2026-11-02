@@ -83,6 +83,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
       companyName: company?.name ?? p.externalCompanyName ?? null,
       external: !p.person,
       documentsOnly: p.documentsOnly,
+      twoApplications: p.twoApplications,
       driveFolderUrl: p.driveFolderUrl ?? null,
       // 本人の SNS の連絡先 (候補者詳細の「SNS の連絡先」)
       contactUrl: p.person?.contactUrl?.trim() || null,

@@ -66,6 +66,8 @@ export type OnboardingCard = {
   external: boolean;
   /** 書類作成のみを請け負った内定者 (薄く色を付けて出す) */
   documentsOnly: boolean;
+  /** 別の在留資格でもう一度申請する内定者 (列の一番上に色を付けて出す。請求は 1 回目の入社のときだけ) */
+  twoApplications: boolean;
   /** 内定者の Drive フォルダ (企業フォルダ / 内定者 / 英語名)。まだ無ければ null */
   driveFolderUrl: string | null;
   /** 本人の SNS の連絡先 URL (LINE / Messenger など)。未登録なら null */
@@ -127,7 +129,6 @@ const COLUMNS: { id: OnboardingStageId; label: string }[] = [
   { id: "card_cancelled", label: "キャンセル" },
   { id: "support", label: "サポート" },
   { id: "joined", label: "入社" },
-  { id: "billing", label: "請求" },
   { id: "hold", label: "保留" },
 ];
 
@@ -148,11 +149,12 @@ const VISA_RANK = { red: 0, yellow: 1, none: 2 } as const;
  */
 const VISA_STAGES = new Set<string>(["offer", "documents", "prepare", "applying", "card_processing", "hold"]);
 const visaOf = (card: OnboardingCard) => (VISA_STAGES.has(card.stage) ? card.visaExpiryDate : "");
-/** 在留期限が近い人を上に (赤 → 黄 → そのほか。同じ色の中は期限の近い順、そのほかは元の順) */
+/** 2回申請ありの人を一番上に、次に在留期限が近い人を上に (赤 → 黄 → そのほか。同じ色の中は期限の近い順、そのほかは元の順) */
 function byVisaUrgency(list: OnboardingCard[]): OnboardingCard[] {
   return list
     .map((c, i) => ({ c, i, a: visaAlert(visaOf(c)) }))
     .sort((x, y) => {
+      if (x.c.twoApplications !== y.c.twoApplications) return x.c.twoApplications ? -1 : 1;
       const rx = VISA_RANK[x.a?.level ?? "none"];
       const ry = VISA_RANK[y.a?.level ?? "none"];
       if (rx !== ry) return rx - ry;
@@ -258,6 +260,7 @@ export default function OnboardingBoard({
     if (patch.applicationType !== undefined) body.applicationType = patch.applicationType || null;
     if (patch.applicationMethod !== undefined) body.applicationMethod = patch.applicationMethod || null;
     if (patch.documentsOnly !== undefined) body.documentsOnly = patch.documentsOnly;
+    if (patch.twoApplications !== undefined) body.twoApplications = patch.twoApplications;
     const res = await fetch(apiPath(card), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -614,13 +617,14 @@ function BoardCard({
       }}
       onMouseLeave={endHover}
       className={`w-full cursor-grab rounded-xl border p-3 text-left shadow-sm hover:shadow-md ${
-        card.documentsOnly ? "border-violet-200 bg-violet-50" : "border-gray-200 bg-white"
+        card.twoApplications ? "border-orange-300 bg-orange-100" : card.documentsOnly ? "border-violet-200 bg-violet-50" : "border-gray-200 bg-white"
       } ${dragging ? "opacity-40" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold text-[var(--color-text-dark)]">
           {card.personName}
           {card.documentsOnly ? <span className="ml-1 rounded bg-violet-100 px-1 text-[10px] font-normal text-violet-700">書類のみ</span> : null}
+          {card.twoApplications ? <span className="ml-1 rounded bg-orange-500 px-1 text-[10px] font-normal text-white">2回申請</span> : null}
         </p>
         {stageTasks.length > 0 ? (
           <span
@@ -635,7 +639,7 @@ function BoardCard({
       </div>
       <p className="mt-0.5 truncate text-xs text-gray-500">{[card.companyName, card.ownerName].filter(Boolean).join(" ・ ")}</p>
       <VisaBadge ymd={visaOf(card)} />
-      {(card.stage === "joined" || card.stage === "billing") && !card.joinAt ? (
+      {card.stage === "joined" && !card.joinAt ? (
         <p className="mt-1 text-[11px] font-medium text-red-600">入社日 未入力</p>
       ) : null}
       {next ? (
@@ -948,10 +952,16 @@ function CardDrawer({
               {card.kanaName ? <p className="text-sm text-gray-600">{card.kanaName}</p> : null}
               <p className="truncate text-xs text-gray-500">{[card.companyName, card.residenceStatus].filter(Boolean).join(" ・ ")}</p>
               <VisaBadge ymd={visaOf(card)} />
-              <label className="mt-1 inline-flex cursor-pointer items-center gap-1.5 text-xs text-violet-700">
-                <input type="checkbox" checked={card.documentsOnly} onChange={(e) => onSave({ documentsOnly: e.target.checked })} />
-                書類作成のみ
-              </label>
+              <div className="mt-1 flex flex-wrap items-center gap-3">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-violet-700">
+                  <input type="checkbox" checked={card.documentsOnly} onChange={(e) => onSave({ documentsOnly: e.target.checked })} />
+                  書類作成のみ
+                </label>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-orange-700">
+                  <input type="checkbox" checked={card.twoApplications} onChange={(e) => onSave({ twoApplications: e.target.checked })} />
+                  2回申請あり
+                </label>
+              </div>
             </div>
             <button type="button" onClick={onClose} className="px-1 text-xl leading-none text-gray-400 hover:text-gray-600">
               ×
@@ -1406,7 +1416,7 @@ type InfoField =
   | "joinAt";
 
 /** 先へ進むときに見る工程の順番 (保留・キャンセル・内定辞退は入らない) */
-const FLOW_ORDER: OnboardingStageId[] = ["offer", "documents", "prepare", "applying", "card_processing", "card_issued", "support", "joined", "billing"];
+const FLOW_ORDER: OnboardingStageId[] = ["offer", "documents", "prepare", "applying", "card_processing", "card_issued", "support", "joined"];
 
 /** その工程に入れるときに埋まっていてほしい項目 (前の工程の分も一緒に聞く) */
 const STAGE_INFO: Partial<Record<OnboardingStageId, InfoField[]>> = {
@@ -1552,7 +1562,7 @@ function StageInfoModal({
             )}
           </label>
         ))}
-        {stage === "billing" ? (
+        {stage === "joined" && !card.twoApplications ? (
           <p className="mt-2 text-[11px] text-gray-500">入社の翌月 1 日に請求 → その月末に入金 → パートナーへの依頼・支払い、のタスクを作ります。</p>
         ) : null}
         <div className="mt-4 flex justify-end gap-2">
@@ -1686,6 +1696,7 @@ function AddEntryModal({ staff, onCancel, onCreated }: { staff: Staff[]; onCance
         companyName: form.companyName.trim() || null,
         external: true,
         documentsOnly,
+        twoApplications: false,
         driveFolderUrl: null,
         outsourced: false,
         ownerId,

@@ -89,7 +89,8 @@ export const ONBOARDING_STAGES = [
   {
     id: "billing",
     label: "請求",
-    hint: "入社した人の請求対応 (2026/10 に「入社・請求」から分けた)",
+    // 列はない (入社 = 請求)。詳細の「他の工程」に請求のタスクをまとめるために残している
+    hint: "入社した人の請求対応",
     targetDays: 30,
     phases: ["11. 請求"],
   },
@@ -147,7 +148,6 @@ export const NEXT_STAGE: Partial<Record<OnboardingStageId, OnboardingStageId>> =
   card_processing: "card_issued",
   card_issued: "support",
   support: "joined",
-  joined: "billing",
 };
 
 /** サポート工程のタスクが属する工程名 */
@@ -240,6 +240,7 @@ export function resolveStage(input: {
   joinAt?: Date | null;
 }): OnboardingStageId {
   const saved = input.stage ?? "";
+  if (saved === "billing") return "joined"; // 請求の列はなくした
   if (ONBOARDING_STAGES.some((s) => s.id === saved)) return saved as OnboardingStageId;
   if (LEGACY_STAGE_MAP[saved]) return LEGACY_STAGE_MAP[saved];
   if (input.joinAt) return "joined";
@@ -288,7 +289,8 @@ export function buildFlowTasks(applicationType: string | null, baseDate: Date | 
     return false;
   };
 
-  return MASTER_TASKS.filter((t) => matches(t.target))
+  // 請求のタスクは入社のときに入社日から作る (lib/billing-flow.ts)
+  return MASTER_TASKS.filter((t) => matches(t.target) && t.phase !== "11. 請求")
     .sort((a, b) => {
       const pa = TASK_PHASES.indexOf(a.phase);
       const pb = TASK_PHASES.indexOf(b.phase);

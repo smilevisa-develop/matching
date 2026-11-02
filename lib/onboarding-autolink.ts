@@ -15,6 +15,7 @@
  */
 
 import { prisma } from "./prisma";
+import { ensureBillingTasks } from "./billing-flow";
 import { buildFlowTasks, OFFER_TO_APPLICATION_DAYS, OFFER_TO_JOIN_DAYS, PRE_OFFER_STAGE } from "./onboarding-flow";
 import { ensurePlacementFolder } from "./placement-folder";
 
@@ -198,7 +199,7 @@ export async function removeUntouchedOnboardingCard(personId: number): Promise<{
 /**
  * カンバンで「入社待ち」「入社済み」にしたときの日付を、内定者カードにも入れる。
  * - 入社待ち: 入社予定日
- * - 入社済み: 入社日 (カードの工程も「入社」まで進める。請求などの後ろの工程からは戻さない)
+ * - 入社済み: 入社日 (カードの工程も「入社」まで進める)。入社 = 請求なので請求のタスクも作る
  * 内定承諾を飛ばしてここまで動かした人はカードが無いので、先に内定承諾と同じ手順でカードを作る。
  */
 async function onJoinStage(personId: number, stage: string, dateYmd?: string | null): Promise<{ created: boolean }> {
@@ -212,10 +213,11 @@ async function onJoinStage(personId: number, stage: string, dateYmd?: string | n
   } else {
     // 保留・キャンセル・内定辞退のカードは工程を動かさない (日付だけ入れる)
     const movable = !["hold", "card_cancelled", "declined", "joined", "billing"].includes(card.stage ?? "");
-    await prisma.personPlacement.update({
+    const updated = await prisma.personPlacement.update({
       where: { personId },
       data: { joinAt: date, ...(movable ? { stage: "joined", stageChangedAt: new Date() } : {}) },
     });
+    if (updated.stage === "joined") await ensureBillingTasks(updated.id);
   }
   return created;
 }
@@ -226,7 +228,8 @@ export async function rebuildFlowTasksForType(placementId: number) {
     where: { id: placementId },
     select: { applicationType: true, offerAcceptedAt: true, offerAt: true },
   });
-  await prisma.placementTask.deleteMany({ where: { placementId, doneAt: null } });
+  // 請求のタスクは入社日から作るもので、種別では変わらない (2回申請の人が別の種別で申請し直しても残す)
+  await prisma.placementTask.deleteMany({ where: { placementId, doneAt: null, billingStep: null } });
   const doneTitles = new Set(
     (await prisma.placementTask.findMany({ where: { placementId }, select: { title: true } })).map((t) => t.title),
   );
