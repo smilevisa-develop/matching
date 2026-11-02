@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireCurrentAccount } from "@/lib/auth";
 import { readAttendanceWeek, type AttendanceWeek } from "@/lib/portal-attendance";
 import RefreshOnFocus from "@/app/components/RefreshOnFocus";
+import AutoRefresh from "./AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +18,6 @@ const todayJst = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0
 /** その日を含む週の日曜 (ポータルの出勤表と同じ日曜始まり) */
 const weekStart = (key: string) => shiftDay(key, -dayOfWeek(key));
 const shortDate = (key: string) => `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}`;
-
-/** 退勤がない実績。「勤務中」と言えるのは今日だけで、過去は打刻漏れ */
-const openLabel = (day: string, today: string) => (day === today ? "勤務中" : day < today ? "退勤未打刻" : "");
 
 export default async function AttendancePage({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
   await requireCurrentAccount();
@@ -42,10 +40,11 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   return (
     <div className="flex flex-col gap-4 p-4 text-[var(--color-text-dark)] md:p-8">
       <RefreshOnFocus />
+      <AutoRefresh />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-title font-semibold">出勤表</h1>
-          <p className="text-note text-gray-500">
+          <h1 className="text-title font-bold">出勤表</h1>
+          <p className="text-body">
             {from.slice(0, 4)}年 {shortDate(days[0])} 〜 {shortDate(days[6])}
           </p>
         </div>
@@ -63,19 +62,21 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
       </div>
 
       {!data ? (
-        <p className="rounded-card border border-gray-200 bg-white p-4 text-body text-gray-500">
+        <p className="rounded-card border border-gray-200 bg-white p-4 text-body">
           出勤表を読み込めませんでした。時間をおいて開き直してください。
         </p>
       ) : (
         <div className="overflow-x-auto rounded-card border border-gray-200 bg-white">
-          <table className="w-full min-w-[1100px] table-fixed border-collapse">
+          <table className="w-full min-w-[1120px] table-fixed border-collapse">
             <thead>
-              <tr className="border-b border-gray-200">
-                <th className="sticky left-0 z-10 w-name bg-white px-4 py-2 text-left text-th font-medium text-gray-500">名前</th>
+              <tr className="border-b border-gray-300">
+                <th className="sticky left-0 z-10 w-name bg-white px-4 py-2 text-left text-body font-semibold">名前</th>
                 {days.map((day) => (
                   <th
                     key={day}
-                    className={`px-2 py-2 text-left text-th font-medium ${day === today ? "bg-[var(--color-light)] text-[var(--color-text-dark)]" : "text-gray-500"}`}
+                    className={`border-l border-gray-200 px-3 py-2 text-left text-body font-semibold ${
+                      day === today ? "bg-[var(--color-primary)] text-white" : ""
+                    }`}
                   >
                     {shortDate(day)}（{WEEK_LABELS[dayOfWeek(day)]}）
                   </th>
@@ -84,27 +85,31 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
             </thead>
             <tbody>
               {data.members.map((member) => (
-                <tr key={member.id} className="border-b border-gray-100 last:border-b-0">
-                  <td className="sticky left-0 z-10 bg-white px-4 py-2 align-top text-body">{member.name}</td>
+                <tr key={member.id} className="border-b border-gray-200 last:border-b-0">
+                  <td className="sticky left-0 z-10 bg-white px-4 py-3 align-top text-body font-semibold">{member.name}</td>
                   {days.map((day) => {
                     const cell = data.cells[member.id]?.[day];
                     return (
-                      <td key={day} className={`px-2 py-2 align-top text-note ${day === today ? "bg-[var(--color-light)]" : ""}`}>
+                      <td
+                        key={day}
+                        className={`border-l border-gray-200 px-3 py-3 align-top text-body ${
+                          day === today ? "bg-[var(--color-light)]" : ""
+                        }`}
+                      >
                         {cell?.absence && <p className="font-semibold text-red-600">欠勤</p>}
                         {cell?.sched && (
-                          <p className="text-gray-500">
-                            予定 {cell.sched.start}-{cell.sched.end}
+                          <p className="whitespace-nowrap tabular-nums">
+                            <span className="font-semibold">予定</span> {cell.sched.start}-{cell.sched.end}
                           </p>
                         )}
                         {cell?.att && (
-                          <p className="text-[var(--color-text-dark)]">
-                            実績 {cell.att.start}-
-                            {cell.att.end ?? (
-                              <span className={day === today ? "text-emerald-600" : "text-red-600"}>{openLabel(day, today)}</span>
-                            )}
+                          <p className="whitespace-nowrap tabular-nums">
+                            <span className="font-semibold">実績</span> {cell.att.start}-{cell.att.end}
                           </p>
                         )}
-                        {!cell?.absence && !cell?.sched && !cell?.att && <p className="text-gray-400">-</p>}
+                        {cell?.att && !cell.att.end && day < today && (
+                          <p className="font-semibold text-red-600">退勤未打刻</p>
+                        )}
                       </td>
                     );
                   })}

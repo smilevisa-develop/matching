@@ -18,8 +18,8 @@
   --color-side-hover: rgb(255 255 255 / 0.1);
   --color-side-active: var(--color-primary);
   --color-side-line: rgb(255 255 255 / 0.1);
-  --color-side-ink: rgb(255 255 255 / 0.8);
-  --color-side-icon: rgb(255 255 255 / 0.7);
+  --color-side-ink: #fff;
+  --color-side-icon: #fff;
   --radius-field: 6px;
   --radius-button: 8px;
   --radius-card: 12px;
@@ -67,9 +67,28 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 補助テキスト: 薄すぎる gray-400 だけ少しだけ濃くする (gray-500/600 はそのまま) */
-.text-gray-400 {
-  color: #7A8782 !important;
+/*
+ * 文字は薄くしない (2026/11 土田さんの指示。全画面共通)。灰色の文字も本文と同じ濃さにする。
+ * 差は色の薄さではなく、大きさ・太さ・配置でつける。押せないものだけ .text-disabled で薄くする。
+ */
+.text-gray-300,
+.text-gray-400,
+.text-gray-500,
+.text-gray-600,
+.text-slate-500 {
+  color: var(--color-text-dark) !important;
+}
+.text-white\/55,
+.text-white\/60,
+.text-white\/70,
+.text-white\/80 {
+  color: #fff !important;
+}
+.text-red-400 {
+  color: #dc2626 !important;
+}
+.text-disabled {
+  color: #8A948F;
 }
 
 /* ラベル等の極小フォントを底上げ (読める大きさに) */

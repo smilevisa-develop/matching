@@ -364,7 +364,7 @@ export default function BulkAddClient({ partners }: { partners: Partner[] }) {
               <p className="text-sm font-semibold text-[var(--color-primary)]">
                 ここにドロップしてください
               </p>
-              <p className="text-xs text-[var(--color-primary)]/70 mt-1">指を離すと追加されます</p>
+              <p className="text-xs text-[var(--color-primary)] mt-1">指を離すと追加されます</p>
             </>
           ) : (
             <>

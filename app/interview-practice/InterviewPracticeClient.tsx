@@ -741,7 +741,7 @@ export default function InterviewPracticeClient() {
             className="mt-4 w-full rounded-xl bg-[var(--color-primary)] px-6 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-[var(--color-primary-hover)]"
           >
             <span className="block text-lg font-bold leading-tight">もう一度 練習する</span>
-            <span className="block text-[11px] font-normal leading-tight opacity-80">Practice again</span>
+            <span className="block text-[11px] font-normal leading-tight">Practice again</span>
           </button>
           <p className="mt-3 text-center text-[11px] text-gray-400">
             これは AI が作った練習用のフィードバックです。選考の結果とは関係ありません。
@@ -1191,7 +1191,7 @@ function BigButton({
       className="flex h-16 w-full flex-col items-center justify-center rounded-2xl bg-[var(--color-primary)] text-white shadow-md hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-40"
     >
       <span className="text-lg font-bold leading-tight">{ja}</span>
-      <span className="text-[11px] font-normal leading-tight opacity-80">{en}</span>
+      <span className="text-[11px] font-normal leading-tight">{en}</span>
     </button>
   );
 }
@@ -1264,13 +1264,13 @@ function InterviewStage({ step, level, remaining }: { step: Step; level: number;
       >
         {talking ? <SoundBars /> : null}
         {mine ? "あなたの番" : "面接官"}
-        <span className="font-normal opacity-80">{mine ? "Your turn" : "Interviewer"}</span>
+        <span className="font-normal">{mine ? "Your turn" : "Interviewer"}</span>
       </span>
 
       {talking ? (
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-5 pb-4 pt-14 text-left text-white">
           <p className="text-[26px] font-bold leading-tight">{status.ja}</p>
-          <p className="mt-0.5 text-xs opacity-90">{status.en}</p>
+          <p className="mt-0.5 text-xs">{status.en}</p>
         </div>
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/45 px-5 text-center">

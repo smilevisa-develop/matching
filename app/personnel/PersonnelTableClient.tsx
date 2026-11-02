@@ -166,7 +166,7 @@ export default function PersonnelTableClient({
                     const checked = draftColumns.includes(item.key);
                     const disabled = !checked && draftColumns.length >= MAX_PERSONNEL_COLUMNS;
                     return (
-                      <label key={item.key} className={`flex items-center gap-3 text-sm ${disabled ? "text-gray-300" : "text-[var(--color-text-dark)]"}`}>
+                      <label key={item.key} className={`flex items-center gap-3 text-sm ${disabled ? "text-disabled" : "text-[var(--color-text-dark)]"}`}>
                         <input
                           type="checkbox"
                           checked={checked}

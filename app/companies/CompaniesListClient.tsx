@@ -90,7 +90,7 @@ function CompaniesTable({
   return (
     <div
       className={`overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ${
-        muted ? "opacity-80" : ""
+        ""
       }`}
     >
       <table className="w-full text-sm">

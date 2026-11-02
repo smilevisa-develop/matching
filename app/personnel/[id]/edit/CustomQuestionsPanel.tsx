@@ -242,7 +242,7 @@ export function CustomQuestionsList() {
           {archivedQuestions.map((question) => (
             <div
               key={question.id}
-              className="rounded-2xl border border-gray-200 bg-gray-50 p-4 opacity-70"
+              className="rounded-2xl border border-gray-200 bg-gray-50 p-4"
             >
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-medium text-gray-500 line-through">{question.label}</p>

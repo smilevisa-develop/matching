@@ -193,7 +193,7 @@ function PartnerTable({
             <tr
               key={p.id}
               className={`border-t border-gray-100 hover:bg-gray-50 ${
-                p.isActive ? "" : "bg-gray-50 opacity-60"
+                p.isActive ? "" : "bg-gray-50"
               }`}
             >
               <td className="p-0 font-mono text-[13px] text-[var(--color-primary)]">

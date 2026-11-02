@@ -727,7 +727,7 @@ function SnsButton({ card }: { card: OnboardingCard }) {
     return (
       <span
         title={card.personId ? "SNS の連絡先が未登録です (候補者詳細の「連絡手段」で登録できます)" : "SNS の連絡先は未登録です"}
-        className="shrink-0 cursor-not-allowed rounded-md p-1 text-gray-300"
+        className="shrink-0 cursor-not-allowed rounded-md p-1 text-disabled"
       >
         {icon}
       </span>

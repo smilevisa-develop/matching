@@ -34,7 +34,7 @@ export default function IconAction({
     : "flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[var(--color-primary)] transition-transform group-hover:scale-110 group-hover:bg-[var(--color-light)]";
 
   const labelClass = `text-[10px] font-medium leading-none ${
-    disabled ? "text-gray-300" : "text-gray-500"
+    disabled ? "text-disabled" : "text-gray-500"
   }`;
 
   const inner = (
