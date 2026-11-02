@@ -515,8 +515,9 @@ function buildResumeEmptyRowGroups(): { guard: string; rowMarkers: string[] }[] 
       guard: `会社名${i}`,
       // 区切り用の空セパレータ行 (guard の名前を白文字や極小フォントで隠して
       // 入れておけば、対応する職歴が空のときに改行行も一緒に消える)
-      rowMarkers: [`会社名${i}`, `入社${i}`, `退社${i}`, `退社${i}ラベル`, `_職歴${i}_区切り`],
+      rowMarkers: [`会社名${i}`, `入社${i}`, `退社${i}`, `退社${i}ラベル`, `仕事内容${i}`, `_職歴${i}_区切り`],
     });
+    groups.push({ guard: `仕事内容${i}`, rowMarkers: [`仕事内容${i}`] });
   }
   for (let i = 1; i <= RESUME_MAX_CERTS; i++) {
     groups.push({
@@ -704,8 +705,8 @@ async function insertInlineImageAtPlaceholder({
           location: { index: hit.startIndex },
           uri: photoUrl,
           objectSize: {
-            height: { magnitude: 120, unit: "PT" },
-            width: { magnitude: 100, unit: "PT" },
+            height: { magnitude: 175, unit: "PT" },
+            width: { magnitude: 125, unit: "PT" },
           },
         },
       },

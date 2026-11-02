@@ -34,6 +34,7 @@ type ResumeProfileInput = {
   universityName?: string | null;
   universityStartDate?: string | null;
   universityEndDate?: string | null;
+  interviewAnswers?: unknown;
 };
 
 type ResumeDocumentInput = {
@@ -320,17 +321,27 @@ function buildIndexedPlaceholders(
   profile: ResumeProfileInput | null | undefined
 ): Record<string, string> {
   const map: Record<string, string> = {};
+  // いちばん新しい会社に退社日が無く、退職済みでなければ「現在に至る」と出す
+  const answers = (profile?.interviewAnswers ?? {}) as Record<string, unknown>;
+  const latest = works.reduce<number>(
+    (best, w, i) => (w.date && (best < 0 || w.date >= works[best].date) ? i : best),
+    -1,
+  );
+  const stillWorking = latest >= 0 && !works[latest].endDate && answers.employmentStatus !== "退職済み";
   for (let i = 0; i < works.length; i++) {
     const n = i + 1;
     const w = works[i];
     const hasData = Boolean(w.label || w.date || w.endDate);
     const company = w.label.trim();
+    const current = stillWorking && i === latest;
     map[`入社${n}`] = formatYearMonth(w.date);
-    map[`退社${n}`] = formatYearMonth(w.endDate);
+    map[`退社${n}`] = current ? "現在に至る" : formatYearMonth(w.endDate);
     // 入社行: "{会社名} 入社" (会社名が空なら空文字)
     map[`会社名${n}`] = company ? `${company} 入社` : hasData ? "入社" : "";
     // 退社行: "{会社名} 退社" (会社名が空なら "退社" 単体)
-    map[`退社${n}ラベル`] = company ? `${company} 退社` : hasData ? "退社" : "";
+    map[`退社${n}ラベル`] = current ? "" : company ? `${company} 退社` : hasData ? "退社" : "";
+    // 候補者フォームの「仕事内容」は退職理由N と同じ欄に入っている。空なら行ごと消す
+    map[`仕事内容${n}`] = w.result ? `仕事内容：${w.result}` : "";
     // 退職理由は別 placeholder で参照可能
     map[`退職理由${n}`] = w.result;
   }
