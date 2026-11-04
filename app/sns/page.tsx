@@ -1,6 +1,8 @@
 import { requireCurrentAccount } from "@/lib/auth";
 import { getYoutubeStats, youtubeConfigured, type YoutubeChannel } from "@/lib/sns-youtube";
 import { getMetaStats, metaConfigured, type MetaPost } from "@/lib/sns-meta";
+import { getMetaConnection } from "@/lib/sns-meta-connect";
+import MetaConnect from "./MetaConnect";
 
 export const dynamic = "force-dynamic";
 
@@ -8,10 +10,12 @@ export const dynamic = "force-dynamic";
  * SNS の数字。候補者向けに投稿している動画 (YouTube / Facebook / Instagram / TikTok) の再生数などを 1 か所で見る。
  * 2026/11: まず YouTube。Facebook / Instagram は Meta のトークン、TikTok は開発者審査のあとに足す
  */
-export default async function SnsPage() {
-  await requireCurrentAccount();
+export default async function SnsPage({ searchParams }: { searchParams: Promise<{ meta?: string }> }) {
+  const account = await requireCurrentAccount();
+  const { meta: metaResult } = await searchParams;
   const yt = youtubeConfigured() ? await getYoutubeStats() : null;
-  const meta = metaConfigured() ? await getMetaStats() : null;
+  const meta = (await metaConfigured()) ? await getMetaStats() : null;
+  const conn = account.role === "admin" ? await getMetaConnection() : null;
 
   return (
     <div className="space-y-6 p-8">
@@ -37,9 +41,20 @@ export default async function SnsPage() {
         </>
       )}
 
+      {conn ? (
+        <Card title="Meta との接続（管理者）">
+          <MetaConnect
+            appId={conn.appId}
+            hasSecret={conn.hasSecret}
+            connected={conn.connected}
+            expiresAt={conn.expiresAt?.toISOString() ?? null}
+            result={metaResult ?? null}
+          />
+        </Card>
+      ) : null}
       {!meta ? (
         <Card title="Facebook / Instagram">
-          <p className="text-sm text-[var(--color-text-dark)]">まだ接続していません (Meta のトークンの設定が要ります)</p>
+          <p className="text-sm text-[var(--color-text-dark)]">まだ接続していません (管理者が上の「Meta と接続」をすると出ます)</p>
         </Card>
       ) : (
         <>

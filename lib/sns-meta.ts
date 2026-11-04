@@ -2,12 +2,13 @@
  * SNS の数字 (Facebook ページ / Instagram)。
  *
  * Meta Graph API を、ページを管理している人のユーザートークンで呼ぶ (アプリ「株式会社CROSLAN」で発行)。
- *   SNS_META_TOKEN … 長期のユーザートークン (約 60 日で切れるので、切れたらグラフ API エクスプローラで作り直す)
+ * トークンは SNS ページの「Meta と接続」で取って CoreSettings に保存する (約 60 日で切れる。切れたらもう一度接続する)
  * トークンから見えるページ全部と、そのページに紐づく Instagram を出す。
  * Messenger 連携のトークン (FB_PAGE_ACCESS_TOKEN) は別のアプリ・別のページなので使わない。
  */
 
 import { unstable_cache } from "next/cache";
+import { getMetaToken } from "@/lib/sns-meta-connect";
 
 export type MetaPost = {
   id: string;
@@ -39,13 +40,13 @@ export type MetaPage = {
 
 const API = "https://graph.facebook.com/v21.0";
 
-export function metaConfigured(): boolean {
-  return Boolean(process.env.SNS_META_TOKEN?.trim());
+export async function metaConfigured(): Promise<boolean> {
+  return Boolean(await getMetaToken());
 }
 
 async function call<T>(path: string, params: Record<string, string>): Promise<T> {
-  const token = process.env.SNS_META_TOKEN?.trim();
-  if (!token) throw new Error("SNS_META_TOKEN が未設定です");
+  const token = await getMetaToken();
+  if (!token) throw new Error("Meta と接続していません");
   const q = new URLSearchParams({ ...params, access_token: token });
   const res = await fetch(`${API}/${path}?${q}`, { cache: "no-store" });
   const json = (await res.json().catch(() => ({}))) as T & { error?: { message?: string } };
@@ -192,5 +193,5 @@ export const getMetaStats = unstable_cache(
     return { pages, errors };
   },
   ["meta-stats"],
-  { revalidate: 3600 },
+  { revalidate: 3600, tags: ["meta-stats"] },
 );
