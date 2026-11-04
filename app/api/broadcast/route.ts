@@ -122,6 +122,7 @@ export async function POST(req: Request) {
       whatsappParams,
       fileIds,
       kind,
+      emailMessage,
     } = body as {
       mode: "filter" | "group";
       relationshipStatus: string | null;
@@ -137,6 +138,8 @@ export async function POST(req: Request) {
       message: string;
       /** メール件名 (UI で個別指定された場合)。優先順位: 本体 > デフォルト */
       emailSubject?: string | null;
+      /** メールだけ別の本文にするとき (無ければ message をそのまま使う)。{{変数}} は同じように展開する */
+      emailMessage?: string | null;
       scheduledAt: string | null;
       /** WhatsApp 承認テンプレ名 (一斉連絡ページで固定使用しているテンプレ)。 */
       whatsappTemplateName?: string | null;
@@ -343,6 +346,7 @@ export async function POST(req: Request) {
     const surveyTag = `{{${SURVEY_URL_VARIABLE}}}`;
     const usesSurvey =
       message.includes(surveyTag) ||
+      (typeof emailMessage === "string" && emailMessage.includes(surveyTag)) ||
       (waTemplate?.specs ?? []).some((s) => s.auto === SURVEY_URL_VARIABLE || (s.value ?? "").includes(surveyTag));
     if (usesSurvey) for (const t of targets) t.surveyUrl = await ensureSurveyUrl(t.id);
     /** 1 つでも届いたパートナー (アンケートの依頼なら送信日を記録する) */
@@ -370,6 +374,18 @@ export async function POST(req: Request) {
         surveyUrl: t.surveyUrl,
       };
       return expandTemplate(message, { partner, openDeals, urgentDeals });
+    };
+    /** メール用の本文 (別に指定されたときだけ変わる) */
+    const renderEmailFor = (t: Target): string => {
+      if (typeof emailMessage !== "string" || !emailMessage.trim()) return renderFor(t);
+      const partner: PartnerForBroadcast = {
+        name: t.name,
+        contactName: t.contactName,
+        country: t.country,
+        introducibleFields: t.introducibleFields,
+        surveyUrl: t.surveyUrl,
+      };
+      return expandTemplate(emailMessage, { partner, openDeals, urgentDeals });
     };
 
     if (scheduledAt) {
@@ -747,7 +763,7 @@ export async function POST(req: Request) {
         } else if (ch === "Messenger") {
           await sendViaMessenger(t, personalizedMessage);
         } else if (ch === "mail" || ch === "メール" || ch === "Email") {
-          await sendViaEmail(t, personalizedMessage);
+          await sendViaEmail(t, renderEmailFor(t));
         }
         // それ以外 (「未設定」等) はスキップ
       }
