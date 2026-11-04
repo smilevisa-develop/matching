@@ -88,7 +88,8 @@ async function fetchFbPosts(pageId: string, pageToken: string): Promise<MetaPost
   const plain = await get<FbPostRaw>("posts", "id,message,created_time,permalink_url,shares").catch(() => []);
   for (const p of plain) {
     const text = (p.message ?? "").slice(0, 80);
-    if (texts.has(text)) continue;
+    // 文章の無い投稿 (リールや写真の自動投稿) と、リールと同じ文章のものは重ねて出さない
+    if (!text || texts.has(text)) continue;
     posts.push({ id: p.id, text, publishedAt: p.created_time ?? "", url: p.permalink_url ?? null, views: null, likes: null, comments: null, shares: p.shares?.count ?? null });
   }
   posts.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
