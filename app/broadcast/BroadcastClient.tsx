@@ -23,6 +23,7 @@ import {
   REFERRAL_FEE_LABEL,
   flattenForWhatsapp,
 } from "@/lib/broadcast-message";
+import { SURVEY_REQUEST_TEXT } from "@/lib/partner-survey";
 
 type DealJson = Omit<DealForBroadcast, "deadline"> & { deadline: string | null };
 
@@ -520,6 +521,8 @@ export default function BroadcastClient({
             contactName: targetPartners[0].contactName,
             country: targetPartners[0].country,
             introducibleFields: targetPartners[0].introducibleFields,
+            // アンケートのリンクは送るときにパートナーごとに作る。プレビューでは形だけ見せる
+            surveyUrl: PREVIEW_PARTNER.surveyUrl,
           }
         : PREVIEW_PARTNER;
     return expandTemplate(messageTemplate, { partner: samplePartner, openDeals, urgentDeals });
@@ -824,6 +827,18 @@ export default function BroadcastClient({
               <p className="mb-2 text-[11px] text-gray-500">
                 送りたい内容だけを入力してください。書き出し（会社名・担当者名・あなたの名前）と結びの挨拶は、求人情報と同じ形で自動で付きます。
               </p>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNoticeBody(SURVEY_REQUEST_TEXT)}
+                  className="rounded-lg border border-[var(--color-secondary)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+                >
+                  アンケートの依頼文を入れる
+                </button>
+                <span className="text-[11px] text-[var(--color-text-dark)]">
+                  本文の {"{{アンケートURL}}"} は、送るときにパートナーごとのリンクになります。回答はそのままパートナー情報に入ります
+                </span>
+              </div>
               <textarea
                 rows={9}
                 value={noticeBody}

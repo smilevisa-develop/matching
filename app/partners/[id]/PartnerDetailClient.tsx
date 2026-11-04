@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SURVEY_CHOICES, type SurveyAnswers, type SurveyChoiceKey } from "@/lib/partner-survey";
 import { CHANNELS } from "@/lib/candidate-profile";
 import {
   INTRODUCIBLE_FIELDS,
@@ -58,6 +59,9 @@ export type PartnerDetailData = {
   messengerSubscriptionExpiresAt: string | null;
   messengerSubscriptionTopic: string | null;
   whatsappId: string | null;
+  /** アンケート (lib/partner-survey.ts)。回答日と、列が無い回答 */
+  surveyAnsweredAt: string | null;
+  surveyAnswers: SurveyAnswers;
   createdAt: string;
   updatedAt: string;
   deals: {
@@ -557,6 +561,7 @@ export default function PartnerDetailClient({ initial }: { initial: PartnerDetai
       {/* 紹介可能 / 手数料 / メモ・特徴 (別セクション) */}
       <section className="rounded-2xl border border-gray-200 bg-[#FAF9F5] p-6 shadow-sm">
         <h2 className="text-base font-semibold text-[var(--color-text-dark)]">紹介条件・特徴</h2>
+        <SurveyBox partnerId={initial.id} answeredAt={initial.surveyAnsweredAt} answers={initial.surveyAnswers} />
         <p className="mt-0.5 text-xs text-gray-500">どの人材を紹介できるか、手数料、強み・備考をまとめます。</p>
 
         {/* 紹介可能 */}
@@ -1433,3 +1438,50 @@ function Field({
 
 const INPUT =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30";
+
+/** アンケートの回答状況と、列が無い回答。リンクを個別に送るときのコピーもここ */
+function SurveyBox({ partnerId, answeredAt, answers }: { partnerId: number; answeredAt: string | null; answers: SurveyAnswers }) {
+  const [copied, setCopied] = useState(false);
+  const copyLink = async () => {
+    const res = await fetch(`/api/partners/${partnerId}/survey-link`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      alert(data.error ?? "リンクを取得できませんでした");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(data.url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt("コピーできなかったので、ここから選択してコピーしてください", data.url);
+    }
+  };
+  const keys = (Object.keys(SURVEY_CHOICES) as SurveyChoiceKey[]).filter((k) => (answers[k] ?? []).length > 0);
+  return (
+    <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-xl bg-[var(--color-light)] px-4 py-3 text-sm">
+      <div className="min-w-0">
+        <p className="font-semibold text-[var(--color-text-dark)]">
+          アンケート{answeredAt ? ` 回答 ${new Date(answeredAt).toLocaleDateString("ja-JP")}` : " 未回答"}
+        </p>
+        {keys.length > 0 ? (
+          <dl className="mt-1 grid gap-x-6 gap-y-1 text-xs text-[var(--color-text-dark)] sm:grid-cols-2">
+            {keys.map((k) => (
+              <div key={k} className="flex gap-2">
+                <dt className="shrink-0">{SURVEY_CHOICES[k].label}:</dt>
+                <dd className="font-medium">{(answers[k] ?? []).join("・")}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={() => void copyLink()}
+        className="shrink-0 rounded-lg border border-[var(--color-secondary)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] hover:bg-white/70"
+      >
+        {copied ? "コピーしました ✓" : "アンケートのリンクをコピー"}
+      </button>
+    </div>
+  );
+}

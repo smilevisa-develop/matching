@@ -11,6 +11,8 @@ import {
 } from "@/lib/broadcast-variables";
 import { sendEmail, textToBasicHtml, DEFAULT_EMAIL_SUBJECT, type EmailAttachment } from "@/lib/email";
 import { publicUrl } from "@/lib/public-url";
+import { SURVEY_URL_VARIABLE } from "@/lib/partner-survey";
+import { ensureSurveyUrl } from "@/lib/partner-survey-server";
 import { incrementChannelUsage } from "@/lib/channel-usage";
 import { CHANNEL_TEXT_LIMITS, flattenForWhatsapp } from "@/lib/broadcast-message";
 
@@ -286,6 +288,8 @@ export async function POST(req: Request) {
       messengerSubscriptionToken: string | null;
       messengerSubscriptionStatus: string | null;
       messengerSubscriptionExpiresAt: Date | null;
+      /** パートナーごとのアンケートのリンク (本文に {{アンケートURL}} があるときだけ作る) */
+      surveyUrl: string | null;
     };
     // 明示指定された partnerIds の partner のみを取得 (フィルタ再評価せず)
     const partners = await prisma.partner.findMany({
@@ -332,8 +336,15 @@ export async function POST(req: Request) {
         messengerSubscriptionToken: p.messengerSubscriptionToken,
         messengerSubscriptionStatus: p.messengerSubscriptionStatus,
         messengerSubscriptionExpiresAt: p.messengerSubscriptionExpiresAt,
+        surveyUrl: null,
       };
     });
+    // アンケートのリンクは、本文 (WhatsApp の変数も) で使うときだけ作る
+    const surveyTag = `{{${SURVEY_URL_VARIABLE}}}`;
+    const usesSurvey =
+      message.includes(surveyTag) ||
+      (waTemplate?.specs ?? []).some((s) => s.auto === SURVEY_URL_VARIABLE || (s.value ?? "").includes(surveyTag));
+    if (usesSurvey) for (const t of targets) t.surveyUrl = await ensureSurveyUrl(t.id);
 
     // 変数展開のため案件スナップショットを 1 回ロード
     const { openDeals, urgentDeals } = await loadDealSnapshot();
@@ -354,6 +365,7 @@ export async function POST(req: Request) {
         contactName: t.contactName,
         country: t.country,
         introducibleFields: t.introducibleFields,
+        surveyUrl: t.surveyUrl,
       };
       return expandTemplate(message, { partner, openDeals, urgentDeals });
     };
@@ -400,6 +412,7 @@ export async function POST(req: Request) {
         contactName: t.contactName,
         country: t.country,
         introducibleFields: t.introducibleFields,
+        surveyUrl: t.surveyUrl,
       };
       // 各 {{n}} を値に解決する:
       //   { value } → テンプレに保存した固定値
@@ -410,7 +423,8 @@ export async function POST(req: Request) {
       return waTemplate.specs.map((spec) => {
         let raw = "";
         if (spec.value !== undefined) {
-          raw = spec.value;
+          // 入力した文面の中の {{アンケートURL}} などもパートナーごとに展開する
+          raw = expandTemplate(spec.value, { partner, openDeals, urgentDeals });
         } else if (spec.auto === ACCOUNT_LASTNAME_SOURCE) {
           raw = senderLastName;
         } else if (spec.auto) {

@@ -22,6 +22,8 @@ export type PartnerRow = {
   dealCount: number;
   personCount: number;
   isActive: boolean;
+  /** アンケートに最後に答えた日時 (未回答なら null) */
+  surveyAnsweredAt: string | null;
 };
 
 export default function SharedPartnersClient({
@@ -178,6 +180,7 @@ function PartnerTable({
             <th className="px-4 py-3 text-left font-semibold w-28 whitespace-nowrap">関係性</th>
             <th className="px-4 py-3 text-left font-semibold">紹介可能国籍</th>
             <SortableTh label="評価" sortKey="rating" sort={sort} onSort={onSort} className="w-32" />
+            <th className="px-4 py-3 text-left font-semibold w-28 whitespace-nowrap">アンケート</th>
             <SortableTh
               label="実績 (求人)"
               sortKey="dealCount"
@@ -251,6 +254,15 @@ function PartnerTable({
                     <RatingStars value={p.rating} readOnly size={14} />
                   ) : (
                     <span className="text-xs text-gray-300">未評価</span>
+                  )}
+                </Link>
+              </td>
+              <td className="p-0 text-xs text-[var(--color-text-dark)]">
+                <Link href={`/partners/${p.id}`} className="block px-4 py-3">
+                  {p.surveyAnsweredAt ? (
+                    `回答 ${new Date(p.surveyAnsweredAt).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}`
+                  ) : (
+                    <span className="text-disabled">未回答</span>
                   )}
                 </Link>
               </td>

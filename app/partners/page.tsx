@@ -51,6 +51,7 @@ export default async function PartnersPage() {
           dealCount: p._count.deals,
           personCount: p._count.persons,
           isActive: p.isActive,
+          surveyAnsweredAt: p.surveyAnsweredAt?.toISOString() ?? null,
         }))}
       />
     </div>

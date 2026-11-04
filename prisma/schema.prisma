@@ -233,6 +233,14 @@ model Partner {
   /// 特徴・強み (備考列)
   features           String?
 
+  // --- パートナーアンケート (lib/partner-survey.ts) ---
+  /// パートナーごとのアンケートのリンク (/partner-survey/[token])。一斉連絡で {{アンケートURL}} を使ったときに作る
+  surveyToken      String?   @unique
+  /// 最後にアンケートに答えた日時
+  surveyAnsweredAt DateTime?
+  /// 列が無い回答 (今すぐ紹介できる人数・日本語レベル・提示までの日数・連絡の言語)
+  surveyAnswers    Json?
+
   // --- 紹介可能 (checkbox 選択, CSV 保存) ---
   /// 紹介可能な国籍 (CSV: "ベトナム,インドネシア,...")
   introducibleNationalities     String?

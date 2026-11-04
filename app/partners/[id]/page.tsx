@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
 import PartnerDetailClient, { type PartnerDetailData } from "./PartnerDetailClient";
+import { readSurveyAnswers } from "@/lib/partner-survey";
 
 export const dynamic = "force-dynamic";
 
@@ -123,6 +124,8 @@ export default async function PartnerDetailPage({
     messengerSubscriptionExpiresAt: partner.messengerSubscriptionExpiresAt?.toISOString() ?? null,
     messengerSubscriptionTopic: partner.messengerSubscriptionTopic,
     whatsappId: partner.whatsappId,
+    surveyAnsweredAt: partner.surveyAnsweredAt?.toISOString() ?? null,
+    surveyAnswers: readSurveyAnswers(partner.surveyAnswers),
     createdAt: partner.createdAt.toISOString(),
     updatedAt: partner.updatedAt.toISOString(),
     deals: partner.deals.map((d) => ({

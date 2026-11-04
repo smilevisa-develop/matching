@@ -39,6 +39,12 @@ export const BROADCAST_VARIABLES: BroadcastVariable[] = [
     category: "受信者",
   },
   {
+    key: "アンケートURL",
+    label: "{{アンケートURL}}",
+    description: "受信パートナーごとのアンケートのリンク (回答はそのままパートナー情報に入る)",
+    category: "受信者",
+  },
+  {
     key: "急ぎ案件一覧",
     label: "{{急ぎ案件一覧}}",
     description: "ステージが「至急募集」の案件を箇条書きで挿入",
@@ -73,6 +79,8 @@ export type PartnerForBroadcast = {
   contactName: string | null;
   country: string | null;
   introducibleFields: string | null; // CSV
+  /** パートナーごとのアンケートのリンク ({{アンケートURL}})。送るときにサーバーで入れる */
+  surveyUrl?: string | null;
 };
 
 /** Deal 1 件を 1 行にフォーマット: 案件ID / 分野 / 勤務地 / 基本給 / 〆締切 */
@@ -131,6 +139,7 @@ export function expandTemplate(
     // (WhatsApp はテンプレ変数が空だと送信自体を拒否するため、全チャネルで同じ値にする)
     担当者名: partner.contactName?.trim() || "ご担当者",
     拠点国: partner.country ?? "",
+    アンケートURL: partner.surveyUrl ?? "",
     急ぎ案件一覧: formatDealList(filteredUrgent),
     募集中案件一覧: formatDealList(filteredOpen),
   };
@@ -147,6 +156,7 @@ export const PREVIEW_PARTNER: PartnerForBroadcast = {
   contactName: "(担当者名)",
   country: "(拠点国)",
   introducibleFields: null,
+  surveyUrl: "https://matching.smilereach.jp/partner-survey/(パートナーごとのリンク)",
 };
 
 /**
