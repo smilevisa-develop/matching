@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, Fragment } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 import Link from "next/link";
 import {
   CHAT_LANGUAGES,
@@ -157,15 +158,15 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   initialPinnedKeys: string[];
   templates: Template[];
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useKeptState<string | null>("selectedId", null);
   const [messages, setMessages] = useState(initialMessages);
   const [lang, setLang] = useState<ChatLang>(initialLang);
   const [pinned, setPinned] = useState<Set<string>>(() => new Set(initialPinnedKeys));
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [panel, setPanel] = useState<"templates" | "shortcuts" | null>(null);
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useKeptState("search", "");
+  const [filter, setFilter] = useKeptState<Filter>("filter", "all");
   const [filterOpen, setFilterOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   /** 開いた時点で未読だった最初のメッセージ (「ここから未読メッセージ」の位置) */
@@ -180,7 +181,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   /** 一番下を見ているか (見ているときだけ新着を追いかける) */
   const stickToBottomRef = useRef(true);
   /** スマホでトーク画面を開いているか (スマホは一覧とトーク画面を切り替える。PC は両方出す) */
-  const [mobileRoom, setMobileRoom] = useState(false);
+  const [mobileRoom, setMobileRoom] = useKeptState("mobileRoom", false);
   /** 入力欄の「翻訳」: 訳す前の文と、確認用の訳し戻し */
   const [draft, setDraft] = useState<{ original: string; back: string | null; target: DraftLang } | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
@@ -238,7 +239,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
     if (selectedId && conversations.some((p) => p.id === selectedId)) return;
     if (!window.matchMedia("(min-width: 768px)").matches) return;
     setSelectedId(sortedPartners[0]?.id ?? null);
-  }, [selectedId, conversations, sortedPartners]);
+  }, [selectedId, conversations, sortedPartners, setSelectedId]);
 
   /** スマホ: トーク一覧へ戻る (トークを閉じる。開いたままだと新着が既読になってしまう) */
   const backToList = () => {

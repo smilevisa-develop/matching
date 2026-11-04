@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 
 export default function DealTabs({
   progressContent,
@@ -11,7 +12,7 @@ export default function DealTabs({
   conditionContent: ReactNode;
   jobPostingContent: ReactNode;
 }) {
-  const [tab, setTab] = useState<"progress" | "condition" | "jobPosting">("progress");
+  const [tab, setTab] = useKeptState<"progress" | "condition" | "jobPosting">("dealTab", "progress");
 
   return (
     <div className="space-y-4">

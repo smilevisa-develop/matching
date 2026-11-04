@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useKeptState } from "@/app/components/KeepOnBack";
 import { CANDIDATE_STAGES } from "@/lib/deal-stages";
 
 type Deal = {
@@ -18,7 +19,8 @@ export default function RecommendationsClient({
   /** 指定すると求人選択 UI を出さず、このIDで固定 */
   lockedDealId?: number;
 }) {
-  const [dealId, setDealId] = useState(
+  const [dealId, setDealId] = useKeptState(
+    "dealId",
     lockedDealId ? String(lockedDealId) : deals[0]?.id ? String(deals[0].id) : ""
   );
   // ステージ複数選択
@@ -26,7 +28,7 @@ export default function RecommendationsClient({
   //   NG / 不合格 / 内定済み は推薦リスト作成時に通常含めないので除外
   const STAGE_OPTIONS = CANDIDATE_STAGES;
   const DEFAULT_STAGES = ["接続済み", "事前面談済み", "推薦済み"];
-  const [stageFilters, setStageFilters] = useState<string[]>(DEFAULT_STAGES);
+  const [stageFilters, setStageFilters] = useKeptState<string[]>("stages", DEFAULT_STAGES);
   const [saving, setSaving] = useState(false);
 
   const toggleStage = (stage: string) => {

@@ -18,6 +18,7 @@ import {
 import { allInterviewQuestions, INTERVIEW_SECTIONS, RESUME_TEXT_QUESTIONS, withTakeHomeSummary } from "@/lib/interview-questions";
 import SearchableSelect from "@/app/components/SearchableSelect";
 import UnsavedChangesBar from "@/app/components/UnsavedChangesBar";
+import { useKeptState } from "@/app/components/KeepOnBack";
 
 type Person = {
   id: number;
@@ -154,7 +155,7 @@ export default function EditPersonForm({
   japaneseCheckContent?: React.ReactNode;
 }) {
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState<(typeof SECTION_ITEMS)[number]["id"]>("basic");
+  const [activeSection, setActiveSection] = useKeptState<(typeof SECTION_ITEMS)[number]["id"]>("section", "basic");
   const [submitting, setSubmitting] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
