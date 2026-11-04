@@ -87,6 +87,7 @@ const SECTIONS: { heading?: string; items: NavItem[] }[] = [
     items: [
       { label: "KPIダッシュボード", href: "/kpi", icon: BarChartIcon },
       { label: "売上ダッシュボード", href: "/revenue", icon: YenIcon },
+      { label: "SNS", href: "/sns", icon: BarChartIcon },
     ],
   },
   {
