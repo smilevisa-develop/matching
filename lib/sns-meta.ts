@@ -17,9 +17,9 @@ export type MetaPost = {
   url: string | null;
   /** 再生数 (動画・リール。取れなければ null) */
   views: number | null;
-  likes: number;
-  comments: number;
-  shares: number;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
 };
 
 export type MetaPage = {
@@ -56,49 +56,42 @@ async function call<T>(path: string, params: Record<string, string>): Promise<T>
 
 const n = (v: unknown): number => (typeof v === "number" ? v : typeof v === "string" ? Number(v) || 0 : 0);
 
-type FbPostRaw = {
-  id: string;
-  message?: string;
-  created_time?: string;
-  permalink_url?: string;
-  likes?: { summary?: { total_count?: number } };
-  comments?: { summary?: { total_count?: number } };
-  shares?: { count?: number };
-  attachments?: { data?: { media_type?: string }[] };
-};
+type FbReelRaw = { id: string; description?: string; updated_time?: string; permalink_url?: string; views?: number };
+type FbPostRaw = { id: string; message?: string; created_time?: string; permalink_url?: string; shares?: { count?: number } };
 
-/** Facebook ページの投稿 (直近 25 件)。再生数は投稿ごとの insights から取り、取れなければ null */
+/**
+ * Facebook ページの投稿 (直近 25 件)。
+ * 動画はリール (video_reels) で再生数が取れる。いいね・コメントの数は pages_read_user_content が要るので今は出さない (null)。
+ * リール以外の投稿は posts から文章だけ
+ */
 async function fetchFbPosts(pageId: string, pageToken: string): Promise<MetaPost[]> {
-  const q = new URLSearchParams({
-    fields: "id,message,created_time,permalink_url,likes.summary(true).limit(0),comments.summary(true).limit(0),shares,attachments{media_type}",
-    limit: "25",
-    access_token: pageToken,
-  });
-  const res = await fetch(`${API}/${pageId}/posts?${q}`, { cache: "no-store" });
-  const json = (await res.json().catch(() => ({}))) as { data?: FbPostRaw[]; error?: { message?: string } };
-  if (json.error) throw new Error(`Meta API posts: ${json.error.message}`);
-  const posts: MetaPost[] = [];
-  for (const p of json.data ?? []) {
-    let views: number | null = null;
-    if (p.attachments?.data?.some((a) => a.media_type === "video")) {
-      // 動画の再生数。指標の名前が変わることがあるので、取れなければ null のまま
-      const iq = new URLSearchParams({ metric: "post_video_views", access_token: pageToken });
-      const ir = await fetch(`${API}/${p.id}/insights?${iq}`, { cache: "no-store" });
-      const ij = (await ir.json().catch(() => ({}))) as { data?: { values?: { value?: unknown }[] }[] };
-      const v = ij.data?.[0]?.values?.[0]?.value;
-      if (typeof v === "number") views = v;
-    }
-    posts.push({
-      id: p.id,
-      text: (p.message ?? "").slice(0, 80),
-      publishedAt: p.created_time ?? "",
-      url: p.permalink_url ?? null,
-      views,
-      likes: n(p.likes?.summary?.total_count),
-      comments: n(p.comments?.summary?.total_count),
-      shares: n(p.shares?.count),
-    });
+  const get = async <T,>(path: string, fields: string) => {
+    const q = new URLSearchParams({ fields, limit: "25", access_token: pageToken });
+    const res = await fetch(`${API}/${pageId}/${path}?${q}`, { cache: "no-store" });
+    const json = (await res.json().catch(() => ({}))) as { data?: T[]; error?: { message?: string } };
+    if (json.error) throw new Error(`Meta API ${path}: ${json.error.message}`);
+    return json.data ?? [];
+  };
+  const reels = await get<FbReelRaw>("video_reels", "id,description,updated_time,permalink_url,views");
+  const posts: MetaPost[] = reels.map((r) => ({
+    id: r.id,
+    text: (r.description ?? "").slice(0, 80),
+    publishedAt: r.updated_time ?? "",
+    url: r.permalink_url ? `https://www.facebook.com${r.permalink_url}` : null,
+    views: typeof r.views === "number" ? r.views : null,
+    likes: null,
+    comments: null,
+    shares: null,
+  }));
+  // リール以外の投稿 (リールと同じ文章のものは重ねて出さない)
+  const texts = new Set(posts.map((p) => p.text));
+  const plain = await get<FbPostRaw>("posts", "id,message,created_time,permalink_url,shares").catch(() => []);
+  for (const p of plain) {
+    const text = (p.message ?? "").slice(0, 80);
+    if (texts.has(text)) continue;
+    posts.push({ id: p.id, text, publishedAt: p.created_time ?? "", url: p.permalink_url ?? null, views: null, likes: null, comments: null, shares: p.shares?.count ?? null });
   }
+  posts.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
   return posts;
 }
 
@@ -125,14 +118,8 @@ async function fetchIgPosts(igId: string, pageToken: string): Promise<MetaPost[]
   if (json.error) throw new Error(`Meta API media: ${json.error.message}`);
   const posts: MetaPost[] = [];
   for (const m of json.data ?? []) {
-    let views: number | null = null;
-    if (m.media_type === "VIDEO" || m.media_type === "REELS") {
-      const iq = new URLSearchParams({ metric: "views", access_token: pageToken });
-      const ir = await fetch(`${API}/${m.id}/insights?${iq}`, { cache: "no-store" });
-      const ij = (await ir.json().catch(() => ({}))) as { data?: { values?: { value?: unknown }[] }[] };
-      const v = ij.data?.[0]?.values?.[0]?.value;
-      if (typeof v === "number") views = v;
-    }
+    // 再生数は instagram_manage_insights が要る (アプリに無い) ので出さない
+    const views: number | null = null;
     posts.push({
       id: m.id,
       text: (m.caption ?? "").slice(0, 80),
@@ -141,7 +128,7 @@ async function fetchIgPosts(igId: string, pageToken: string): Promise<MetaPost[]
       views,
       likes: n(m.like_count),
       comments: n(m.comments_count),
-      shares: 0,
+      shares: null,
     });
   }
   return posts;
