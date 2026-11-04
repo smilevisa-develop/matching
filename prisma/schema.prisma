@@ -707,6 +707,10 @@ model CoreSettings {
   snsMetaAppSecret          String?
   snsMetaToken              String?
   snsMetaTokenExpiresAt     DateTime?
+  /// SNS の数字 (TikTok) で使うアプリと、接続したアカウントごとのトークン (lib/sns-tiktok.ts)
+  snsTiktokClientKey        String?
+  snsTiktokClientSecret     String?
+  snsTiktokAccounts         Json?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 }

@@ -3,6 +3,8 @@ import { getYoutubeStats, youtubeConfigured, type YoutubeChannel } from "@/lib/s
 import { getMetaStats, metaConfigured, type MetaPost } from "@/lib/sns-meta";
 import { getMetaConnection } from "@/lib/sns-meta-connect";
 import MetaConnect from "./MetaConnect";
+import { getTiktokConnection, getTiktokStats, type TiktokAccount } from "@/lib/sns-tiktok";
+import TiktokConnect from "./TiktokConnect";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +12,11 @@ export const dynamic = "force-dynamic";
  * SNS の数字。候補者向けに投稿している動画 (YouTube / Facebook / Instagram / TikTok) の再生数などを 1 か所で見る。
  * 2026/11: まず YouTube。Facebook / Instagram は Meta のトークン、TikTok は開発者審査のあとに足す
  */
-export default async function SnsPage({ searchParams }: { searchParams: Promise<{ meta?: string }> }) {
+export default async function SnsPage({ searchParams }: { searchParams: Promise<{ meta?: string; tiktok?: string }> }) {
   const account = await requireCurrentAccount();
-  const { meta: metaResult } = await searchParams;
+  const { meta: metaResult, tiktok: tiktokResult } = await searchParams;
+  const tiktokConn = await getTiktokConnection();
+  const tiktok = tiktokConn.accounts.length > 0 ? await getTiktokStats() : null;
   const yt = youtubeConfigured() ? await getYoutubeStats() : null;
   const meta = (await metaConfigured()) ? await getMetaStats() : null;
   const conn = account.role === "admin" ? await getMetaConnection() : null;
@@ -97,9 +101,27 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
         </>
       )}
 
-      <Card title="TikTok">
-        <p className="text-sm text-[var(--color-text-dark)]">準備中 (TikTok の開発者審査のあと)</p>
-      </Card>
+      {account.role === "admin" ? (
+        <Card title="TikTok との接続（管理者）">
+          <TiktokConnect clientKey={tiktokConn.clientKey} hasSecret={tiktokConn.hasSecret} accounts={tiktokConn.accounts} result={tiktokResult ?? null} />
+        </Card>
+      ) : null}
+      {!tiktok ? (
+        <Card title="TikTok">
+          <p className="text-sm text-[var(--color-text-dark)]">まだ接続していません (管理者が上の「TikTok と接続」をすると出ます)</p>
+        </Card>
+      ) : (
+        <>
+          {tiktok.errors.map((e) => (
+            <p key={e.id} className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {e.id}: {e.error}
+            </p>
+          ))}
+          {tiktok.accounts.map((a) => (
+            <TiktokCard key={a.openId} account={a} />
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -156,6 +178,30 @@ function ChannelCard({ channel: c }: { channel: YoutubeChannel }) {
           </tbody>
         </table>
       </div>
+    </Card>
+  );
+}
+
+function TiktokCard({ account: a }: { account: TiktokAccount }) {
+  const fmt = (v: number | null) => (v === null ? "-" : v.toLocaleString("ja-JP"));
+  return (
+    <Card
+      title={
+        a.url ? (
+          <a href={a.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+            TikTok ・ {a.displayName}
+          </a>
+        ) : (
+          `TikTok ・ ${a.displayName}`
+        )
+      }
+    >
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="フォロワー" value={fmt(a.followers)} />
+        <Stat label="いいね合計" value={fmt(a.likes)} />
+        <Stat label="動画数" value={fmt(a.videoCount)} />
+      </div>
+      <PostTable posts={a.videos.map((v) => ({ id: v.id, text: v.title, publishedAt: v.publishedAt, url: v.url, views: v.views, likes: v.likes, comments: v.comments, shares: v.shares }))} />
     </Card>
   );
 }
