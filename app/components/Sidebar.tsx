@@ -294,13 +294,13 @@ export default function Sidebar() {
           ))}
         </nav>
 
-        {/* 名前の欄。一覧と見分けられるよう、明るい地にして分ける */}
-        <div className="relative flex shrink-0 items-center gap-2 bg-[var(--color-light)] p-2">
+        {/* 名前の欄。サイドバーと同じ暗い地のまま、線と一段濃い地で一覧と分ける */}
+        <div className="relative flex shrink-0 items-center gap-2 border-t border-side-line bg-black/20 p-2">
           <button
             type="button"
             onClick={() => setAccountOpen((open) => !open)}
             aria-expanded={accountOpen}
-            className="flex h-control min-w-0 flex-1 items-center gap-1 rounded-button px-2 text-left text-[var(--color-text-dark)] hover:bg-white"
+            className="flex h-control min-w-0 flex-1 items-center gap-1 rounded-button px-2 text-left text-white hover:bg-side-hover"
           >
             <span className="min-w-0 flex-1 truncate text-body font-semibold">{accountName}</span>
             <ChevronUpDownIcon size={16} className="shrink-0" />
@@ -309,7 +309,7 @@ export default function Sidebar() {
             type="button"
             onClick={() => void syncNow()}
             disabled={syncing}
-            className="flex h-control shrink-0 items-center gap-1 rounded-button bg-[var(--color-primary)] px-2 text-note font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-60"
+            className="flex h-control shrink-0 items-center gap-1 rounded-button border border-white/20 bg-[var(--color-primary)] px-2 text-note font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-60"
           >
             <SyncIcon size={16} className={syncing ? "animate-spin" : undefined} />
             {syncing ? "同期中" : "同期"}
