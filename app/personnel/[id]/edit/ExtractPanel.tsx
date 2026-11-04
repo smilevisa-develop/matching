@@ -60,7 +60,7 @@ export type ExtractedCandidate = {
   currentJob?: string;
   retirementReason?: string;
   preferenceNote?: string;
-  workExperiences?: { companyName?: string; startDate?: string; endDate?: string; reason?: string }[];
+  workExperiences?: { companyName?: string; startDate?: string; endDate?: string; content?: string; reason?: string }[];
   _warnings?: string[];
   /** 確証がない値 (field はキー名。職歴は "workExperiences") */
   _uncertain?: { field: string; reason: string }[];
@@ -589,7 +589,8 @@ function ExtractModal({
                         <p className="mt-1">
                           {entry.startDate ?? "?"} 〜 {entry.endDate ?? "?"}
                         </p>
-                        {entry.reason ? <p className="mt-1 whitespace-pre-wrap">{entry.reason}</p> : null}
+                        {entry.content ? <p className="mt-1 whitespace-pre-wrap">仕事内容：{entry.content}</p> : null}
+                        {entry.reason ? <p className="mt-1 whitespace-pre-wrap">退社理由：{entry.reason}</p> : null}
                       </div>
                     ))}
                   </div>

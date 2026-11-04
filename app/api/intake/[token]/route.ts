@@ -118,9 +118,9 @@ export async function PUT(req: Request, ctx: { params: Promise<{ token: string }
     if (bPhone) onboardingData.phoneNumber = bPhone;
     if (bPostal) onboardingData.postalCode = bPostal;
     if (bEmail) await prisma.person.update({ where: { id: person.id }, data: { email: bEmail } });
-    // 職歴 (会社名・入社・退社・仕事内容/退職理由)。1 件でも書かれていたら置き換える
+    // 職歴 (会社名・入社・退社・仕事内容)。1 件でも書かれていたら置き換える
     const workExperiences = normalizeWorkHistories(body?.workExperiences).filter(
-      (w) => w.companyName || w.startDate || w.endDate || w.reason,
+      (w) => w.companyName || w.startDate || w.endDate || w.content || w.reason,
     );
     if (Object.keys(onboardingData).length > 0) {
       if (person.onboarding) {
@@ -183,7 +183,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ token: string }
       const toTranslate: Record<string, string> = {};
       for (const [k, v] of Object.entries(dataExisting)) if (v) toTranslate[k] = v;
       for (const [k, v] of Object.entries(incomingAnswers)) if (v && !k.endsWith(JA_SUFFIX)) toTranslate[k] = v;
-      for (const [i, w] of workExperiences.entries()) if (w.reason) toTranslate[`work_${i}_reason`] = w.reason;
+      for (const [i, w] of workExperiences.entries()) if (w.content) toTranslate[`work_${i}_content`] = w.content;
       after(async () => {
         try {
           const translated = await translateAnswersToJapanese(lang, toTranslate);

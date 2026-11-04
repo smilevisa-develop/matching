@@ -81,7 +81,7 @@ export default async function IntakePage({
         childrenCount: (person.resumeProfile?.childrenCount ?? "").replace(/[^0-9]/g, ""),
       }}
       initialWork={normalizeWorkHistories(person.resumeProfile?.workExperiences).map(
-        (w): WorkRow => ({ companyName: w.companyName, startDate: w.startDate, endDate: w.endDate, reason: w.reason }),
+        (w): WorkRow => ({ companyName: w.companyName, startDate: w.startDate, endDate: w.endDate, content: w.content, reason: w.reason }),
       )}
       initial={{
         motivation: person.resumeProfile?.motivation ?? "",

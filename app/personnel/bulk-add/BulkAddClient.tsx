@@ -52,6 +52,7 @@ type ExtractedCandidate = {
     companyName?: string;
     startDate?: string;
     endDate?: string;
+    content?: string;
     reason?: string;
   }[];
 };

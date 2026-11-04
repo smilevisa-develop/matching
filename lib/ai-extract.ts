@@ -33,6 +33,7 @@ export type ExtractedCandidate = {
     companyName?: string;
     startDate?: string;
     endDate?: string;
+    content?: string;
     reason?: string;
   }[];
   motivation?: string;
@@ -185,8 +186,8 @@ const EXTRACTION_SCHEMA_DESCRIPTION = `次のJSONスキーマに沿って、読�
 
 - universityStartDate / universityEndDate: 大学等の入学・卒業年月 YYYY-MM-DD
 
-- workExperiences: 職歴 [{companyName, startDate, endDate, reason}]
-  各オブジェクト: companyName=勤務先名、startDate=開始 YYYY-MM-DD、endDate=終了 YYYY-MM-DD (現職なら省略)、reason=退職理由
+- workExperiences: 職歴 [{companyName, startDate, endDate, content, reason}]
+  各オブジェクト: companyName=勤務先名、startDate=開始 YYYY-MM-DD、endDate=終了 YYYY-MM-DD (現職なら省略)、content=その会社での仕事内容 (担当業務)、reason=その会社の退職理由 (書いてあるときだけ)
 
 - motivation: 志望動機 (なぜ弊社の求人に応募したか)
 

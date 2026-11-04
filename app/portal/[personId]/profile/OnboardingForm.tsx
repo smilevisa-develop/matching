@@ -159,7 +159,7 @@ export default function OnboardingForm({
   const addWorkExperience = () => {
     setForm((current) => ({
       ...current,
-      workExperiences: [...current.workExperiences, { companyName: "", startDate: "", endDate: "", reason: "" }],
+      workExperiences: [...current.workExperiences, { companyName: "", startDate: "", endDate: "", content: "", reason: "" }],
     }));
   };
 
@@ -187,7 +187,7 @@ export default function OnboardingForm({
           ...form,
           documents: visibleDocuments,
           workExperiences: form.workExperiences.filter(
-            (entry) => entry.companyName || entry.startDate || entry.endDate || entry.reason
+            (entry) => entry.companyName || entry.startDate || entry.endDate || entry.content || entry.reason
           ),
         }),
       });
@@ -366,8 +366,8 @@ export default function OnboardingForm({
                       <Field label="退社年月日">
                         <input className={INPUT} type="date" value={entry.endDate} onChange={(event) => updateWorkExperience(index, "endDate", event.target.value)} />
                       </Field>
-                      <Field label="退社理由">
-                        <textarea className={`${INPUT} min-h-20`} value={entry.reason} onChange={(event) => updateWorkExperience(index, "reason", event.target.value)} />
+                      <Field label="仕事内容">
+                        <textarea className={`${INPUT} min-h-20`} value={entry.content} onChange={(event) => updateWorkExperience(index, "content", event.target.value)} />
                       </Field>
                     </div>
                   </div>
@@ -532,7 +532,7 @@ function mergeDocuments(documents: DocumentInput[], residenceStatus: string) {
 }
 
 function withInitialWorkRow(entries: WorkHistoryEntry[]) {
-  return entries.length > 0 ? entries : [{ companyName: "", startDate: "", endDate: "", reason: "" }];
+  return entries.length > 0 ? entries : [{ companyName: "", startDate: "", endDate: "", content: "", reason: "" }];
 }
 
 function upsertDocument(documents: DocumentInput[], nextDocument: DocumentInput) {

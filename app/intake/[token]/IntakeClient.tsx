@@ -53,7 +53,7 @@ type BasicInfo = {
   childrenCount: string;
 };
 
-export type WorkRow = { companyName: string; startDate: string; endDate: string; reason: string };
+export type WorkRow = { companyName: string; startDate: string; endDate: string; content: string; reason: string };
 
 type PageBlock = {
   title: string;
@@ -71,7 +71,7 @@ type PageBlock = {
 const GENDER_OPTIONS = ["男性", "女性", "その他"];
 // 候補者の詳細画面 (lib/candidate-profile.ts の SPOUSE_OPTIONS) と同じ値で保存する
 const SPOUSE_OPTIONS = ["無", "有"];
-const EMPTY_WORK: WorkRow = { companyName: "", startDate: "", endDate: "", reason: "" };
+const EMPTY_WORK: WorkRow = { companyName: "", startDate: "", endDate: "", content: "", reason: "" };
 
 const INPUT =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20";
@@ -273,7 +273,7 @@ export default function IntakeClient({
         body: JSON.stringify({
           ...mergedForm,
           basic: basicForm,
-          workExperiences: work.filter((r) => r.companyName || r.startDate || r.endDate || r.reason),
+          workExperiences: work.filter((r) => r.companyName || r.startDate || r.endDate || r.content || r.reason),
           lang,
         }),
       });
@@ -459,7 +459,7 @@ export default function IntakeClient({
                       <input type="month" className={INPUT} value={toMonthInput(row.endDate)} onChange={(e) => setWorkRow(i, "endDate", e.target.value)} />
                     </div>
                   </div>
-                  <QuestionField label={t("workContent")} sub={ja("workContent")} type="textarea" hint={t("workContentHint")} value={row.reason} onChange={(v) => setWorkRow(i, "reason", v)} />
+                  <QuestionField label={t("workContent")} sub={ja("workContent")} type="textarea" hint={t("workContentHint")} value={row.content} onChange={(v) => setWorkRow(i, "content", v)} />
                 </div>
               ))}
               <button

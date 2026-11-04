@@ -186,6 +186,9 @@ export type WorkHistoryEntry = {
   companyName: string;
   startDate: string;
   endDate: string;
+  /** 仕事内容 (履歴書の「仕事内容：」に出る) */
+  content: string;
+  /** 退社理由。2026/11 までは仕事内容もここに入れていた (履歴書には出さない) */
   reason: string;
 };
 
@@ -211,6 +214,7 @@ export function normalizeWorkHistories(value: unknown): WorkHistoryEntry[] {
       companyName: cleanCompanyName(String(current.companyName ?? current.label ?? "")),
       startDate: String(current.startDate ?? current.date ?? ""),
       endDate: String(current.endDate ?? ""),
+      content: String(current.content ?? ""),
       reason: String(current.reason ?? current.result ?? ""),
     };
   });

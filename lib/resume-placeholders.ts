@@ -132,7 +132,7 @@ function asResumeLines(value: unknown) {
   return Array.isArray(value) ? (value as ResumeLine[]) : [];
 }
 
-type WorkLine = { date: string; endDate: string; label: string; result: string };
+type WorkLine = { date: string; endDate: string; label: string; content: string; result: string };
 
 function asWorkLines(value: unknown): WorkLine[] {
   if (!Array.isArray(value)) return [];
@@ -148,6 +148,7 @@ function asWorkLines(value: unknown): WorkLine[] {
           "",
         ),
       ),
+      content: valueOrBlank(String(current.content ?? "")),
       result: valueOrBlank(String(current.reason ?? current.result ?? "")),
     };
   });
@@ -159,6 +160,7 @@ function mapWorkLine(lines: WorkLine[], index: number) {
     date: valueOrBlank(line?.date),
     endDate: valueOrBlank(line?.endDate),
     label: valueOrBlank(line?.label),
+    content: valueOrBlank(line?.content),
     result: valueOrBlank(line?.result),
   };
 }
@@ -316,7 +318,7 @@ export function buildResumePlaceholders(input: ResumeDocumentInput) {
 }
 
 function buildIndexedPlaceholders(
-  works: { date: string; endDate: string; label: string; result: string }[],
+  works: { date: string; endDate: string; label: string; content: string; result: string }[],
   certs: { date: string; label: string }[],
   profile: ResumeProfileInput | null | undefined
 ): Record<string, string> {
@@ -340,8 +342,8 @@ function buildIndexedPlaceholders(
     map[`会社名${n}`] = company ? `${company} 入社` : hasData ? "入社" : "";
     // 退社行: "{会社名} 退社" (会社名が空なら "退社" 単体)
     map[`退社${n}ラベル`] = current ? "" : company ? `${company} 退社` : hasData ? "退社" : "";
-    // 候補者フォームの「仕事内容」は退職理由N と同じ欄に入っている。空なら行ごと消す
-    map[`仕事内容${n}`] = w.result ? `仕事内容：${w.result}` : "";
+    // 仕事内容。空なら行ごと消す (退社理由は履歴書には出さない)
+    map[`仕事内容${n}`] = w.content ? `仕事内容：${w.content}` : "";
     // 退職理由は別 placeholder で参照可能
     map[`退職理由${n}`] = w.result;
   }

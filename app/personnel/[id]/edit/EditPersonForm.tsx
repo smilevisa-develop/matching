@@ -353,7 +353,7 @@ export default function EditPersonForm({
       ...current,
       workExperiences: [
         ...current.workExperiences,
-        { companyName: "", startDate: "", endDate: "", reason: "" },
+        { companyName: "", startDate: "", endDate: "", content: "", reason: "" },
       ],
     }));
     setDirty(true);
@@ -439,7 +439,7 @@ export default function EditPersonForm({
           ...form,
           partnerId: form.partnerId ? Number(form.partnerId) : null,
           workExperiences: form.workExperiences.filter(
-            (entry) => entry.companyName || entry.startDate || entry.endDate || entry.reason
+            (entry) => entry.companyName || entry.startDate || entry.endDate || entry.content || entry.reason
           ),
           // 3 件目以降の学歴 (1・2 件目は highSchool* / university* カラムに入る)
           educations: form.educations.filter(
@@ -863,8 +863,19 @@ export default function EditPersonForm({
                       <Field label="退社年月日">
                         <input className={INPUT} type="month" value={ym(entry.endDate)} onChange={(event) => updateWorkExperience(index, "endDate", event.target.value)} />
                       </Field>
-                      <Field label="退社理由" className="md:col-span-2">
-                        <textarea className={`${INPUT} min-h-24`} value={entry.reason} onChange={(event) => updateWorkExperience(index, "reason", event.target.value)} />
+                      <Field label="仕事内容" className="md:col-span-2">
+                        <textarea className={`${INPUT} min-h-24`} value={entry.content} onChange={(event) => updateWorkExperience(index, "content", event.target.value)} placeholder="例：工場で機械の組み立て、検品" />
+                        {/* 本人が母国語で書いた仕事内容に、フォーム送信後に付いた日本語訳 */}
+                        {form.interviewAnswers[`work_${index}_content__ja`] ? (
+                          <p className="mt-1 rounded-md bg-[var(--color-light)] px-2 py-1 text-[11px] text-[var(--color-text-dark)]">
+                            <span className="font-semibold">日本語訳: </span>
+                            {form.interviewAnswers[`work_${index}_content__ja`]}
+                          </p>
+                        ) : null}
+                        {/* 2026/11 まではこの欄が「退社理由」だった。前に入れた内容は消さずに見せる (履歴書には出ない) */}
+                        {entry.reason ? (
+                          <p className="mt-1 text-xs text-[var(--color-text-dark)]">以前の「退社理由」の欄: {entry.reason}（履歴書には出ません）</p>
+                        ) : null}
                       </Field>
                     </div>
                     {form.workExperiences.length > 1 ? (
@@ -1253,7 +1264,7 @@ function mergeDocumentsForStatus(documents: DocumentInput[], residenceStatus: st
 }
 
 function withInitialWorkRow(entries: WorkHistoryEntry[]) {
-  return entries.length > 0 ? entries : [{ companyName: "", startDate: "", endDate: "", reason: "" }];
+  return entries.length > 0 ? entries : [{ companyName: "", startDate: "", endDate: "", content: "", reason: "" }];
 }
 
 function withInitialOtherQualRow(entries: OtherQualificationEntry[]) {

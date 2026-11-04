@@ -61,7 +61,7 @@ type FormRow = {
   japanPurpose: string | null;
   currentJob: string | null;
   retirementReason: string | null;
-  workExperiences: { companyName: string; startDate: string; endDate: string; reason: string }[];
+  workExperiences: { companyName: string; startDate: string; endDate: string; content: string; reason: string }[];
   photoUrl: string | null;
   driveFolderUrl: string | null;
 };
