@@ -236,6 +236,8 @@ model Partner {
   // --- パートナーアンケート (lib/partner-survey.ts) ---
   /// パートナーごとのアンケートのリンク (/partner-survey/[token])。一斉連絡で {{アンケートURL}} を使ったときに作る
   surveyToken      String?   @unique
+  /// 最後にアンケートの依頼を送った日時 (一斉連絡で {{アンケートURL}} 入りの文面が 1 つでも届いたとき)
+  surveySentAt     DateTime?
   /// 最後にアンケートに答えた日時
   surveyAnsweredAt DateTime?
   /// 列が無い回答 (今すぐ紹介できる人数・日本語レベル・提示までの日数・連絡の言語)

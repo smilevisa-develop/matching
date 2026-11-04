@@ -37,10 +37,13 @@ export default function PartnerSurveyClient({
   token,
   initial,
   answeredAt,
+  preview = false,
 }: {
   token: string;
   initial: SurveyInitial;
   answeredAt: string | null;
+  /** 社内確認用。送信ボタンは押せない */
+  preview?: boolean;
 }) {
   const [form, setForm] = useState(initial);
   const [sending, setSending] = useState(false);
@@ -66,6 +69,7 @@ export default function PartnerSurveyClient({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (preview) return;
     if (!form.email.trim() && !form.contactPhone.trim()) {
       setError("メールか電話番号のどちらかを入力してください / Email or phone is required");
       return;
@@ -103,6 +107,11 @@ export default function PartnerSurveyClient({
 
   return (
     <main className="mx-auto max-w-xl px-4 py-8">
+      {preview ? (
+        <p className="mb-4 rounded-lg bg-[#FEF3C7] px-3 py-2 text-sm font-semibold text-[#92400E]">
+          プレビューです。パートナーにはこの画面が、その会社の登録内容が入った状態で届きます。送信はできません
+        </p>
+      ) : null}
       <h1 className="text-xl font-bold text-[var(--color-text-dark)]">パートナーアンケート / Partner Survey</h1>
       <p className="mt-2 text-sm text-[var(--color-text-dark)]">
         {form.name} 様
@@ -220,7 +229,7 @@ export default function PartnerSurveyClient({
         {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
         <button
           type="submit"
-          disabled={sending}
+          disabled={sending || preview}
           className="w-full rounded-lg bg-[var(--color-primary)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
         >
           {sending ? "送信中…" : "送信する / Submit"}

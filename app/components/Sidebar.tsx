@@ -27,6 +27,7 @@ import {
   SettingsIcon,
   StarListIcon,
   SyncIcon,
+  ClipboardIcon,
   UserCheckIcon,
   UsersIcon,
   YenIcon,
@@ -76,6 +77,7 @@ const SECTIONS: { heading?: string; items: NavItem[] }[] = [
     heading: "パートナー",
     items: [
       { label: "パートナーリスト", href: "/partners", icon: GlobeIcon },
+      { label: "パートナーアンケート", href: "/partners/survey", icon: ClipboardIcon },
       { label: "連絡先紐づけ", href: "/partners/link", icon: LinkIcon },
       { label: "一斉連絡", href: "/broadcast", icon: MegaphoneIcon },
       { label: "連絡テンプレート", href: "/broadcast/templates", icon: FormIcon },

@@ -345,6 +345,8 @@ export async function POST(req: Request) {
       message.includes(surveyTag) ||
       (waTemplate?.specs ?? []).some((s) => s.auto === SURVEY_URL_VARIABLE || (s.value ?? "").includes(surveyTag));
     if (usesSurvey) for (const t of targets) t.surveyUrl = await ensureSurveyUrl(t.id);
+    /** 1 つでも届いたパートナー (アンケートの依頼なら送信日を記録する) */
+    const sentTargets = new Set<number>();
 
     // 変数展開のため案件スナップショットを 1 回ロード
     const { openDeals, urgentDeals } = await loadDealSnapshot();
@@ -582,6 +584,7 @@ export async function POST(req: Request) {
         const r = await sendLine(t.lineGroupId, personalizedMessage, attachments);
         if (r.ok) {
           sentCount++;
+          sentTargets.add(t.id);
           sentLineGroup++;
           await incrementChannelUsage("LINE", lineMsgCount);
         } else {
@@ -592,6 +595,7 @@ export async function POST(req: Request) {
         const r = await sendLine(t.lineUserId, personalizedMessage, attachments);
         if (r.ok) {
           sentCount++;
+          sentTargets.add(t.id);
           sentLine++;
           await incrementChannelUsage("LINE", lineMsgCount);
         } else {
@@ -621,6 +625,7 @@ export async function POST(req: Request) {
       const r = await sendWhatsapp(t.whatsappId, personalizedMessage, params);
       if (r.ok) {
         sentCount++;
+        sentTargets.add(t.id);
         sentWhatsapp++;
         await incrementChannelUsage("WhatsApp", 1);
       } else {
@@ -653,6 +658,7 @@ export async function POST(req: Request) {
       const r = await sendMessenger(t.messengerPsid, personalizedMessage, subToken);
       if (r.ok) {
         sentCount++;
+        sentTargets.add(t.id);
         sentMessenger++;
         await incrementChannelUsage("Messenger", 1);
       } else {
@@ -696,6 +702,7 @@ export async function POST(req: Request) {
       });
       if (r.ok) {
         sentCount++;
+        sentTargets.add(t.id);
         sentEmail++;
         await incrementChannelUsage("Email", 1);
         await prisma.message.create({
@@ -744,6 +751,10 @@ export async function POST(req: Request) {
         }
         // それ以外 (「未設定」等) はスキップ
       }
+    }
+
+    if (usesSurvey && sentTargets.size > 0) {
+      await prisma.partner.updateMany({ where: { id: { in: [...sentTargets] } }, data: { surveySentAt: new Date() } });
     }
 
     await prisma.messageLog.create({
