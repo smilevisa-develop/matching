@@ -45,6 +45,8 @@ export function proxy(request: NextRequest) {
     // Railway のデプロイ時 healthcheck (認証不要で 200 を返す)
     pathname === "/api/health" ||
     pathname.startsWith("/favicon") ||
+    // TikTok for Developers の URL 所有確認ファイル (public/tiktok*.txt)
+    /^\/tiktok[A-Za-z0-9]+\.txt$/.test(pathname) ||
     pathname.startsWith("/logo") ||
     pathname.startsWith("/api/auth") ||
     // 外部からの Webhook (LINE / Messenger / WhatsApp 等) は未ログインで呼ばれる
