@@ -148,18 +148,20 @@ async function freshToken(a: TiktokAccountToken, clientKey: string, clientSecret
   };
 }
 
+/** user.info.basic + user.info.stats の範囲だけ (profile_deep_link などは user.info.profile が要る) */
 async function fetchUserInfo(accessToken: string) {
-  const q = new URLSearchParams({ fields: "open_id,display_name,profile_deep_link,follower_count,likes_count,video_count" });
+  const q = new URLSearchParams({ fields: "open_id,display_name,follower_count,likes_count,video_count" });
   const res = await fetch(`https://open.tiktokapis.com/v2/user/info/?${q}`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" });
   const json = (await res.json().catch(() => ({}))) as {
-    data?: { user?: { display_name?: string; profile_deep_link?: string; follower_count?: number; likes_count?: number; video_count?: number } };
+    data?: { user?: { display_name?: string; follower_count?: number; likes_count?: number; video_count?: number } };
     error?: { code?: string; message?: string };
   };
   if (json.error?.code && json.error.code !== "ok") throw new Error(`TikTok API user/info: ${json.error.message ?? json.error.code}`);
   const u = json.data?.user ?? {};
   return {
     displayName: u.display_name ?? "",
-    url: u.profile_deep_link ?? null,
+    // プロフィールの URL は user.info.profile スコープが要るので出さない
+    url: null as string | null,
     followers: typeof u.follower_count === "number" ? u.follower_count : null,
     likes: typeof u.likes_count === "number" ? u.likes_count : null,
     videoCount: typeof u.video_count === "number" ? u.video_count : null,
@@ -211,6 +213,10 @@ export const getTiktokStats = unstable_cache(
         if (fresh !== a) changed = true;
         refreshed.push(fresh);
         const info = await fetchUserInfo(fresh.accessToken);
+        if (info.displayName && info.displayName !== fresh.displayName) {
+          refreshed[refreshed.length - 1] = { ...fresh, displayName: info.displayName };
+          changed = true;
+        }
         accounts.push({ openId: a.openId, displayName: info.displayName || a.displayName, url: info.url, followers: info.followers, likes: info.likes, videoCount: info.videoCount, videos: await fetchVideos(fresh.accessToken) });
       } catch (e) {
         refreshed.push(a);
