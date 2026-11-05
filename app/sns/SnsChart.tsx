@@ -2,14 +2,7 @@
 
 import { useState } from "react";
 
-/** 同じ動画を各媒体に上げているので、公開日ごとに媒体別の再生数を積み上げて見る */
-export const PLATFORMS = [
-  { key: "youtube", label: "YouTube", color: "#D23A2F" },
-  { key: "facebook", label: "Facebook", color: "#1D6FD6" },
-  { key: "instagram", label: "Instagram", color: "#B5338A" },
-  { key: "tiktok", label: "TikTok", color: "#B07D10" },
-] as const;
-export type PlatformKey = (typeof PLATFORMS)[number]["key"];
+import { PLATFORMS, type PlatformKey } from "@/lib/sns-platforms";
 
 export type ChartItem = { platform: PlatformKey; date: string; views: number; title: string };
 export type ChartGroup = { label: string; items: ChartItem[] };

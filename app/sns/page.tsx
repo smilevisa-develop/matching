@@ -2,7 +2,8 @@ import { requireCurrentAccount } from "@/lib/auth";
 import { getYoutubeStats, youtubeConfigured, type YoutubeChannel } from "@/lib/sns-youtube";
 import { getMetaStats, metaConfigured, type MetaPage, type MetaPost } from "@/lib/sns-meta";
 import { getTiktokConnection, getTiktokStats, type TiktokAccount } from "@/lib/sns-tiktok";
-import SnsChart, { PLATFORMS, type ChartGroup, type ChartItem } from "./SnsChart";
+import SnsChart, { type ChartGroup, type ChartItem } from "./SnsChart";
+import { PLATFORMS } from "@/lib/sns-platforms";
 
 export const dynamic = "force-dynamic";
 
