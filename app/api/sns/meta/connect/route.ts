@@ -40,7 +40,7 @@ export async function GET() {
     await requireApiAdmin();
     const s = await prisma.coreSettings.findUnique({ where: { id: 1 }, select: { snsMetaAppId: true, snsMetaAppSecret: true } });
     if (!s?.snsMetaAppId || !s.snsMetaAppSecret) {
-      return Response.redirect(new URL("/sns?meta=noapp", process.env.PUBLIC_BASE_URL ?? "https://matching.smilereach.jp"), 302);
+      return Response.redirect(new URL("/settings?meta=noapp", process.env.PUBLIC_BASE_URL ?? "https://matching.smilereach.jp"), 302);
     }
     const state = randomBytes(16).toString("base64url");
     const jar = await cookies();

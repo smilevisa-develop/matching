@@ -1,128 +1,140 @@
 import { requireCurrentAccount } from "@/lib/auth";
 import { getYoutubeStats, youtubeConfigured, type YoutubeChannel } from "@/lib/sns-youtube";
-import { getMetaStats, metaConfigured, type MetaPost } from "@/lib/sns-meta";
-import { getMetaConnection } from "@/lib/sns-meta-connect";
-import MetaConnect from "./MetaConnect";
+import { getMetaStats, metaConfigured, type MetaPage, type MetaPost } from "@/lib/sns-meta";
 import { getTiktokConnection, getTiktokStats, type TiktokAccount } from "@/lib/sns-tiktok";
-import TiktokConnect from "./TiktokConnect";
+import SnsChart, { PLATFORMS, type ChartGroup, type ChartItem } from "./SnsChart";
 
 export const dynamic = "force-dynamic";
 
 /**
  * SNS の数字。候補者向けに投稿している動画 (YouTube / Facebook / Instagram / TikTok) の再生数などを 1 か所で見る。
- * 2026/11: まず YouTube。Facebook / Instagram は Meta のトークン、TikTok は開発者審査のあとに足す
+ * 上: 公開日ごとの媒体別の積み上げ (インドネシア / ベトナム)。下: 媒体ごとにインドネシアとベトナムを横に並べる。
+ * 接続 (API キー・トークン) は設定ページの「SNS 連携」
  */
-export default async function SnsPage({ searchParams }: { searchParams: Promise<{ meta?: string; tiktok?: string }> }) {
+type Country = "id" | "vn" | "other";
+const COUNTRY: { key: Country; label: string }[] = [
+  { key: "id", label: "インドネシア" },
+  { key: "vn", label: "ベトナム" },
+];
+
+function countryOf(name: string): Country {
+  const n = name.toLowerCase();
+  if (/indonesia|\bid\b|_id\b|idn/.test(n)) return "id";
+  if (/vi[eệ]t|vn\b|viec\s*lam/.test(n)) return "vn";
+  return "other";
+}
+
+export default async function SnsPage() {
   const account = await requireCurrentAccount();
-  const { meta: metaResult, tiktok: tiktokResult } = await searchParams;
   const tiktokConn = await getTiktokConnection();
-  const tiktok = tiktokConn.accounts.length > 0 ? await getTiktokStats() : null;
-  const yt = youtubeConfigured() ? await getYoutubeStats() : null;
-  const meta = (await metaConfigured()) ? await getMetaStats() : null;
-  const conn = account.role === "admin" ? await getMetaConnection() : null;
+  const [tiktok, yt, meta] = await Promise.all([
+    tiktokConn.accounts.length > 0 ? getTiktokStats() : null,
+    youtubeConfigured() ? getYoutubeStats() : null,
+    (async () => ((await metaConfigured()) ? getMetaStats() : null))(),
+  ]);
+
+  const ytBy = (c: Country) => (yt?.channels ?? []).filter((x) => countryOf(`${x.title} ${x.handle ?? ""}`) === c);
+  const fbBy = (c: Country) => (meta?.pages ?? []).filter((x) => countryOf(x.name) === c);
+  const igBy = (c: Country) => (meta?.pages ?? []).filter((x) => x.instagram && countryOf(`${x.name} ${x.instagram.username}`) === c);
+  const ttBy = (c: Country) => (tiktok?.accounts ?? []).filter((x) => countryOf(x.displayName) === c);
+
+  const groups: ChartGroup[] = COUNTRY.map(({ key, label }) => {
+    const items: ChartItem[] = [];
+    for (const ch of ytBy(key)) for (const v of ch.videos) items.push({ platform: "youtube", date: v.publishedAt, views: v.views, title: v.title });
+    for (const pg of fbBy(key)) for (const v of pg.posts) items.push({ platform: "facebook", date: v.publishedAt, views: v.views ?? 0, title: v.text });
+    for (const pg of igBy(key)) for (const v of pg.instagram!.posts) items.push({ platform: "instagram", date: v.publishedAt, views: v.views ?? 0, title: v.text });
+    for (const a of ttBy(key)) for (const v of a.videos) items.push({ platform: "tiktok", date: v.publishedAt, views: v.views, title: v.title });
+    return { label, items };
+  });
+
+  const errors = [...(yt?.errors ?? []), ...(meta?.errors ?? []), ...(tiktok?.errors ?? [])];
+  const others = { yt: ytBy("other"), fb: fbBy("other"), ig: igBy("other"), tt: ttBy("other") };
+  const nothing = !yt && !meta && !tiktok;
 
   return (
     <div className="space-y-6 p-8">
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">SNS</h1>
-        <p className="mt-1 text-sm text-[var(--color-text-dark)]">候補者向けに投稿している動画の数字。1 時間ごとに更新</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">SNS</h1>
+          <p className="mt-1 text-sm text-[var(--color-text-dark)]">候補者向けに投稿している動画の数字。1 時間ごとに更新</p>
+        </div>
+        {account.role === "admin" ? (
+          <a href="/settings#sns" className="text-sm font-medium text-[var(--color-primary)] hover:underline">
+            接続の設定（YouTube / Meta / TikTok）
+          </a>
+        ) : null}
       </div>
 
-      {!yt ? (
-        <Card title="YouTube">
-          <p className="text-sm text-[var(--color-text-dark)]">まだ接続していません (API キーとチャンネルの設定が要ります)</p>
-        </Card>
-      ) : (
-        <>
-          {yt.errors.map((e) => (
-            <p key={e.id} className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {e.id}: {e.error}
-            </p>
-          ))}
-          {yt.channels.map((c) => (
-            <ChannelCard key={c.id} channel={c} />
-          ))}
-        </>
-      )}
+      {errors.map((e) => (
+        <p key={e.id} className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {e.id}: {e.error}
+        </p>
+      ))}
+      {nothing ? <p className="text-sm text-[var(--color-text-dark)]">まだどの SNS も接続していません。設定ページの「SNS 連携」から接続してください</p> : null}
 
-      {conn ? (
-        <Card title="Meta との接続（管理者）">
-          <MetaConnect
-            appId={conn.appId}
-            hasSecret={conn.hasSecret}
-            connected={conn.connected}
-            expiresAt={conn.expiresAt?.toISOString() ?? null}
-            result={metaResult ?? null}
-          />
-        </Card>
-      ) : null}
-      {!meta ? (
-        <Card title="Facebook / Instagram">
-          <p className="text-sm text-[var(--color-text-dark)]">まだ接続していません (管理者が上の「Meta と接続」をすると出ます)</p>
-        </Card>
-      ) : (
-        <>
-          {meta.errors.map((e) => (
-            <p key={e.id} className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {e.id}: {e.error}
-            </p>
-          ))}
-          {meta.pages.map((p) => (
-            <div key={p.id} className="space-y-6">
-              <Card
-                title={
-                  <a href={p.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                    Facebook ・ {p.name}
-                  </a>
-                }
-              >
-                <div className="grid grid-cols-3 gap-3">
-                  <Stat label="フォロワー" value={p.followers === null ? "-" : p.followers.toLocaleString("ja-JP")} />
-                </div>
-                <PostTable posts={p.posts} />
-              </Card>
-              {p.instagram ? (
-                <Card
-                  title={
-                    <a href={p.instagram.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                      Instagram ・ @{p.instagram.username}
-                    </a>
-                  }
-                >
-                  <div className="grid grid-cols-3 gap-3">
-                    <Stat label="フォロワー" value={p.instagram.followers === null ? "-" : p.instagram.followers.toLocaleString("ja-JP")} />
-                    <Stat label="投稿数" value={p.instagram.mediaCount === null ? "-" : p.instagram.mediaCount.toLocaleString("ja-JP")} />
-                  </div>
-                  <PostTable posts={p.instagram.posts} />
-                </Card>
-              ) : null}
+      <SnsChart groups={groups} />
+
+      {PLATFORMS.map((p) => (
+        <div key={p.key} className="grid gap-6 lg:grid-cols-2">
+          {COUNTRY.map(({ key }) => (
+            <div key={key} className="space-y-6">
+              {p.key === "youtube" ? ytBy(key).map((c) => <ChannelCard key={c.id} channel={c} />) : null}
+              {p.key === "facebook" ? fbBy(key).map((pg) => <FbCard key={pg.id} page={pg} />) : null}
+              {p.key === "instagram" ? igBy(key).map((pg) => <IgCard key={pg.id} page={pg} />) : null}
+              {p.key === "tiktok" ? ttBy(key).map((a) => <TiktokCard key={a.openId} account={a} />) : null}
             </div>
           ))}
-        </>
-      )}
+        </div>
+      ))}
 
-      {account.role === "admin" ? (
-        <Card title="TikTok との接続（管理者）">
-          <TiktokConnect clientKey={tiktokConn.clientKey} hasSecret={tiktokConn.hasSecret} accounts={tiktokConn.accounts} result={tiktokResult ?? null} />
-        </Card>
-      ) : null}
-      {!tiktok ? (
-        <Card title="TikTok">
-          <p className="text-sm text-[var(--color-text-dark)]">まだ接続していません (管理者が上の「TikTok と接続」をすると出ます)</p>
-        </Card>
-      ) : (
+      {others.yt.length + others.fb.length + others.ig.length + others.tt.length > 0 ? (
         <>
-          {tiktok.errors.map((e) => (
-            <p key={e.id} className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {e.id}: {e.error}
-            </p>
-          ))}
-          {tiktok.accounts.map((a) => (
-            <TiktokCard key={a.openId} account={a} />
-          ))}
+          <h2 className="text-lg font-bold text-[var(--color-text-dark)]">その他のアカウント</h2>
+          <div className="grid gap-6 lg:grid-cols-2">
+            {others.yt.map((c) => <ChannelCard key={c.id} channel={c} />)}
+            {others.fb.map((pg) => <FbCard key={pg.id} page={pg} />)}
+            {others.ig.map((pg) => <IgCard key={pg.id} page={pg} />)}
+            {others.tt.map((a) => <TiktokCard key={a.openId} account={a} />)}
+          </div>
         </>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+function FbCard({ page: p }: { page: MetaPage }) {
+  return (
+    <Card
+      title={
+        <a href={p.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+          Facebook ・ {p.name}
+        </a>
+      }
+    >
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="フォロワー" value={p.followers === null ? "-" : p.followers.toLocaleString("ja-JP")} />
+      </div>
+      <PostTable posts={p.posts} />
+    </Card>
+  );
+}
+
+function IgCard({ page: p }: { page: MetaPage }) {
+  const ig = p.instagram!;
+  return (
+    <Card
+      title={
+        <a href={ig.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+          Instagram ・ @{ig.username}
+        </a>
+      }
+    >
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="フォロワー" value={ig.followers === null ? "-" : ig.followers.toLocaleString("ja-JP")} />
+        <Stat label="投稿数" value={ig.mediaCount === null ? "-" : ig.mediaCount.toLocaleString("ja-JP")} />
+      </div>
+      <PostTable posts={ig.posts} />
+    </Card>
   );
 }
 

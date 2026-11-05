@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const back = (q: string) => Response.redirect(publicUrl(`/sns?meta=${q}`), 302);
+  const back = (q: string) => Response.redirect(publicUrl(`/settings?meta=${q}`), 302);
   try {
     await requireApiAdmin();
   } catch {

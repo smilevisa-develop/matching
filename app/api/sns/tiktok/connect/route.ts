@@ -38,7 +38,7 @@ export async function GET() {
   try {
     await requireApiAdmin();
     const s = await prisma.coreSettings.findUnique({ where: { id: 1 }, select: { snsTiktokClientKey: true, snsTiktokClientSecret: true } });
-    if (!s?.snsTiktokClientKey || !s.snsTiktokClientSecret) return Response.redirect(publicUrl("/sns?tiktok=noapp"), 302);
+    if (!s?.snsTiktokClientKey || !s.snsTiktokClientSecret) return Response.redirect(publicUrl("/settings?tiktok=noapp"), 302);
     const state = randomBytes(16).toString("base64url");
     const jar = await cookies();
     jar.set("sns_tiktok_state", state, { httpOnly: true, sameSite: "lax", secure: true, path: "/", maxAge: 600 });

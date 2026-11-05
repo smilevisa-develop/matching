@@ -19,7 +19,7 @@ export default function TiktokConnect({
   clientKey: string | null;
   hasSecret: boolean;
   accounts: { openId: string; displayName: string; refreshExpiresAt: string }[];
-  /** /sns?tiktok=ok|error|noapp */
+  /** /settings?tiktok=ok|error|noapp */
   result: string | null;
 }) {
   const [form, setForm] = useState({ clientKey: clientKey ?? "", clientSecret: "" });

@@ -21,7 +21,7 @@ export default function MetaConnect({
   hasSecret: boolean;
   connected: boolean;
   expiresAt: string | null;
-  /** /sns?meta=ok|error|noapp */
+  /** /settings?meta=ok|error|noapp */
   result: string | null;
 }) {
   const [form, setForm] = useState({ appId: appId ?? "", appSecret: "" });
