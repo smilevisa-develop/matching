@@ -159,6 +159,15 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   templates: Template[];
 }) {
   const [selectedId, setSelectedId] = useKeptState<string | null>("selectedId", null);
+  // ほかの画面から「/chat?partner=<id>」で来たら、そのパートナーのトークを開く (アンケート画面の LINE グループ名リンクなど)
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("partner");
+    if (!q) return;
+    const key = `p:${q}`;
+    if (conversations.some((c) => c.id === key)) setSelectedId(key);
+    window.history.replaceState(null, "", "/chat");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [messages, setMessages] = useState(initialMessages);
   const [lang, setLang] = useState<ChatLang>(initialLang);
   const [pinned, setPinned] = useState<Set<string>>(() => new Set(initialPinnedKeys));

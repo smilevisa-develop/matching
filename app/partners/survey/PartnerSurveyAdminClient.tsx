@@ -325,7 +325,13 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
                     r.channels.map((c) => (
                       <span key={c.name} className={`mr-3 inline-block break-all ${c.deliverable ? "text-[var(--color-text-dark)]" : "text-[#dc2626]"}`}>
                         {c.name} {c.deliverable ? "✓" : c.linked ? "届かない" : "✗"}
-                        {c.to ? <span className="ml-1 font-semibold">{c.to}</span> : null}
+                        {c.to && c.name === "LINE" ? (
+                          <Link href={`/chat?partner=${r.id}`} className="ml-1 font-semibold underline decoration-dotted hover:text-[var(--color-primary)]" title="このパートナーの LINE トークを開く">
+                            {c.to}
+                          </Link>
+                        ) : c.to ? (
+                          <span className="ml-1 font-semibold">{c.to}</span>
+                        ) : null}
                       </span>
                     ))
                   )}
