@@ -21,7 +21,7 @@ const COUNTRY: { key: Country; label: string }[] = [
 function countryOf(name: string): Country {
   const n = name.toLowerCase();
   if (/indonesia|\bid\b|_id\b|idn/.test(n)) return "id";
-  if (/vi[eệ]t|vn\b|viec\s*lam/.test(n)) return "vn";
+  if (/vi[eệ][tc]|vn\b|việc|l[aà]m\s*jp/.test(n)) return "vn";
   return "other";
 }
 
