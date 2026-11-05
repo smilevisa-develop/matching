@@ -303,6 +303,7 @@ export default function DailyClient({
 
 /** 今月の内定 (大きく)。目標があれば「現状 / 目標」と達成率。目標の数字を押すと設定の月次目標へ飛ぶ */
 function OfferHero({ value, target, offers }: { value: number; target: number | null; offers: MonthOffer[] }) {
+  const [showNames, setShowNames] = useState(false);
   const rate = target && target > 0 ? Math.round((value / target) * 100) : null;
   const barColor = rate === null ? "" : rate >= 100 ? "bg-emerald-500" : rate >= 50 ? "bg-[var(--color-primary)]" : "bg-amber-500";
   return (
@@ -311,10 +312,15 @@ function OfferHero({ value, target, offers }: { value: number; target: number | 
       <div className="mt-1 flex items-baseline justify-between gap-3">
         <p className="tabular-nums leading-none text-[var(--color-text-dark)]">
           {/* 数字にカーソルを合わせると、誰が内定したかを出す */}
-          <span className="group relative inline-block">
+          <span
+            className="relative inline-block"
+            onMouseEnter={() => setShowNames(true)}
+            onMouseLeave={() => setShowNames(false)}
+            onClick={() => setShowNames((v) => !v)}
+          >
             <span className={`text-5xl font-bold ${offers.length ? "cursor-help underline decoration-dotted decoration-gray-300 underline-offset-8" : ""}`}>{value}</span>
-            {offers.length ? (
-              <span className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-max max-w-[320px] rounded-lg border border-gray-200 bg-white p-3 text-left text-sm leading-6 text-[var(--color-text-dark)] shadow-lg group-hover:block">
+            {offers.length && showNames ? (
+              <span className="pointer-events-none absolute left-0 top-full z-20 mt-2 block w-max max-w-[320px] rounded-lg border border-gray-200 bg-white p-3 text-left text-sm leading-6 text-[var(--color-text-dark)] shadow-lg">
                 {offers.map((o, i) => (
                   <span key={i} className="block whitespace-nowrap">
                     <span className="font-semibold">{o.name}</span>
