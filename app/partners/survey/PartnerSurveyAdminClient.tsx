@@ -296,15 +296,15 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
 
       {/* 回答状況 */}
       <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
+        <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="bg-[var(--color-light)] text-left text-xs font-semibold text-[var(--color-text-dark)]">
-              <th className="px-4 py-3">パートナー</th>
-              <th className="px-3 py-3">送り先（紐づいている LINE グループなど）</th>
-              <th className="px-3 py-3 w-16">送信</th>
-              <th className="px-3 py-3 w-16">回答</th>
-              <th className="px-3 py-3">相手が入れた会社名</th>
-              <th className="px-3 py-3 w-24">会社の所在地</th>
+              <th className="px-4 py-3 w-56">パートナー</th>
+              <th className="px-3 py-3 w-72">送り先（紐づいている LINE グループなど）</th>
+              <th className="px-3 py-3 w-14">送信</th>
+              <th className="px-3 py-3 w-14">回答</th>
+              <th className="px-3 py-3 w-56">相手が入れた会社名</th>
+              <th className="px-3 py-3 w-20">会社の所在地</th>
               <th className="px-3 py-3 w-28">候補者が多い</th>
               <th className="px-3 py-3">紹介できる人材</th>
             </tr>
@@ -323,7 +323,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
                     <span className="text-[#dc2626]">未設定</span>
                   ) : (
                     r.channels.map((c) => (
-                      <span key={c.name} className={`mr-3 inline-block whitespace-nowrap ${c.deliverable ? "text-[var(--color-text-dark)]" : "text-[#dc2626]"}`}>
+                      <span key={c.name} className={`mr-3 inline-block break-all ${c.deliverable ? "text-[var(--color-text-dark)]" : "text-[#dc2626]"}`}>
                         {c.name} {c.deliverable ? "✓" : c.linked ? "届かない" : "✗"}
                         {c.to ? <span className="ml-1 font-semibold">{c.to}</span> : null}
                       </span>

@@ -54,7 +54,8 @@ export default async function PartnerSurveyAdminPage() {
       return { name, linked: false, deliverable: false, to: null };
     });
     const response = readSurveyResponse(p.surveyResponse);
-    const applied = !!p.surveyAppliedAt && !!p.surveyAnsweredAt && p.surveyAppliedAt >= p.surveyAnsweredAt;
+    // 回答そのものが無い (この仕組みより前の回答) はそのまま反映されていたので反映済み扱い
+    const applied = !response || (!!p.surveyAppliedAt && !!p.surveyAnsweredAt && p.surveyAppliedAt >= p.surveyAnsweredAt);
     return {
       id: p.id,
       name: p.name,
