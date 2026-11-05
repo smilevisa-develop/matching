@@ -12,7 +12,7 @@ import CandidateKanban, {
 import { dealGroup } from "@/lib/deal-stages";
 import { isTestCompany } from "@/lib/test-companies";
 import { buildDailyReport, type ReportFollowUp } from "@/lib/daily-report";
-import type { MonthStats } from "@/lib/month-stats";
+import type { MonthOffer, MonthStats } from "@/lib/month-stats";
 
 export type DailyDeal = {
   /** 行のキー (求人があれば deal-ID、無ければ company-ID) */
@@ -61,6 +61,7 @@ export default function DailyClient({
   deals,
   month,
   stats,
+  offers,
   offerTarget,
   recommendTarget,
   followUps,
@@ -70,6 +71,8 @@ export default function DailyClient({
   month: string;
   /** その月の実績 */
   stats: MonthStats;
+  /** その月に内定した人 (内定数にカーソルを合わせたときに出す) */
+  offers: MonthOffer[];
   /** 内定者フォローの状態 (要対応の判定つき) */
   followUps: ReportFollowUp[];
   offerTarget: number | null;
@@ -270,7 +273,7 @@ export default function DailyClient({
     <div className="space-y-5">
       {/* 主役は「内定の数と達成率」。他の数字はその下に小さく並べる (内定承諾は出さない) */}
       <div className="flex flex-wrap items-stretch gap-4">
-        <OfferHero value={stats.offers} target={offerTarget} />
+        <OfferHero value={stats.offers} target={offerTarget} offers={offers} />
         <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
           <div className="flex justify-end">
             <button
@@ -299,7 +302,7 @@ export default function DailyClient({
 }
 
 /** 今月の内定 (大きく)。目標があれば「現状 / 目標」と達成率。目標の数字を押すと設定の月次目標へ飛ぶ */
-function OfferHero({ value, target }: { value: number; target: number | null }) {
+function OfferHero({ value, target, offers }: { value: number; target: number | null; offers: MonthOffer[] }) {
   const rate = target && target > 0 ? Math.round((value / target) * 100) : null;
   const barColor = rate === null ? "" : rate >= 100 ? "bg-emerald-500" : rate >= 50 ? "bg-[var(--color-primary)]" : "bg-amber-500";
   return (
@@ -307,7 +310,21 @@ function OfferHero({ value, target }: { value: number; target: number | null }) 
       <p className="text-sm font-semibold text-gray-500">内定</p>
       <div className="mt-1 flex items-baseline justify-between gap-3">
         <p className="tabular-nums leading-none text-[var(--color-text-dark)]">
-          <span className="text-5xl font-bold">{value}</span>
+          {/* 数字にカーソルを合わせると、誰が内定したかを出す */}
+          <span className="group relative inline-block">
+            <span className={`text-5xl font-bold ${offers.length ? "cursor-help underline decoration-dotted decoration-gray-300 underline-offset-8" : ""}`}>{value}</span>
+            {offers.length ? (
+              <span className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-max max-w-[320px] rounded-lg border border-gray-200 bg-white p-3 text-left text-sm leading-6 text-[var(--color-text-dark)] shadow-lg group-hover:block">
+                {offers.map((o, i) => (
+                  <span key={i} className="block whitespace-nowrap">
+                    <span className="font-semibold">{o.name}</span>
+                    {o.company ? <span className="ml-2 text-gray-600">{o.company}</span> : null}
+                    {o.date ? <span className="ml-2 text-xs text-gray-500">{o.date.slice(5).replace("-", "/")}</span> : null}
+                  </span>
+                ))}
+              </span>
+            ) : null}
+          </span>
           <Link
             href="/settings#monthly-targets"
             className="ml-2 text-lg font-medium text-gray-400 underline decoration-dotted underline-offset-4 hover:text-[var(--color-primary)]"

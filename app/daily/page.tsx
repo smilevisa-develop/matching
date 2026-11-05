@@ -6,7 +6,7 @@ import RefreshOnFocus from "@/app/components/RefreshOnFocus";
 import { normalizeDealStatus, readStageDates } from "@/lib/deal-stages";
 import { isTestCompany } from "@/lib/test-companies";
 import { calcUrgency, HIDDEN_BOARD_STAGES, resolveStage } from "@/lib/onboarding-flow";
-import { computeMonthStats, currentMonthJst, isMonthKey, shiftMonth } from "@/lib/month-stats";
+import { computeMonthStats, currentMonthJst, isMonthKey, listMonthOffers, shiftMonth } from "@/lib/month-stats";
 import DailyClient, { type DailyDeal } from "./DailyClient";
 
 export const dynamic = "force-dynamic";
@@ -147,7 +147,7 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
   const target = settings.monthlyTargets.find((t) => t.month === month);
 
   // ── 選んだ月の実績 (lib/month-stats.ts。KPI シートへの転記と同じ数え方) ──
-  const stats = await computeMonthStats(month);
+  const [stats, offers] = await Promise.all([computeMonthStats(month), listMonthOffers(month)]);
 
   const rows: DailyDeal[] = [];
   for (const c of [...companies].sort(byExternalId)) {
@@ -238,6 +238,7 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
       <DailyClient
         month={month}
         stats={stats}
+        offers={offers}
         offerTarget={target?.offer ?? settings.monthlyOfferTarget}
         recommendTarget={target?.recommendCount ?? null}
         followUps={followUps}

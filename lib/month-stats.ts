@@ -130,3 +130,39 @@ export async function computeMonthStats(month: string): Promise<MonthStats> {
   stats.newDeals = newDeals;
   return stats;
 }
+
+export type MonthOffer = { name: string; company: string | null; date: string | null };
+
+/** その月に内定した人の名前 (computeMonthStats の「内定」と同じ数え方。進捗管理の内定数にカーソルを合わせたときに出す) */
+export async function listMonthOffers(month: string): Promise<MonthOffer[]> {
+  const range = monthRangeJst(month);
+  const out: MonthOffer[] = [];
+  const candidates = await prisma.dealCandidate.findMany({
+    where: { deal: { company: { NOT: { externalId: { in: TEST_COMPANY_EXTERNAL_IDS } } } } },
+    select: { stageDates: true, person: { select: { name: true } }, deal: { select: { company: { select: { name: true, externalId: true } } } } },
+  });
+  for (const cand of candidates) {
+    if (isTestCompany(cand.deal.company.externalId)) continue;
+    const d = readStageDates(cand.stageDates)["内定済み"];
+    if (d && d.startsWith(month)) out.push({ name: cand.person.name, company: cand.deal.company.name, date: d });
+  }
+  const placements = await prisma.personPlacement.findMany({
+    where: {
+      OR: [{ offerAt: range }, { offerAt: null, offerAcceptedAt: range }],
+      person: {
+        dealCandidates: { none: { stage: { in: ["内定済み", "内定承諾", "入社待ち", "入社済み", "内定辞退", "内定取り消し"] } } },
+        NOT: { dealCandidates: { some: { deal: { company: { externalId: { in: TEST_COMPANY_EXTERNAL_IDS } } } } } },
+      },
+    },
+    select: { offerAt: true, offerAcceptedAt: true, externalName: true, externalCompanyName: true, person: { select: { name: true } } },
+  });
+  for (const p of placements) {
+    const at = p.offerAt ?? p.offerAcceptedAt;
+    out.push({
+      name: p.person?.name ?? p.externalName ?? "(名前なし)",
+      company: p.externalCompanyName ?? null,
+      date: at ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(at) : null,
+    });
+  }
+  return out.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
+}
