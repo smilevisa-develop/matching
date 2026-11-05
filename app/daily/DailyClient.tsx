@@ -320,7 +320,7 @@ function OfferHero({ value, target, offers }: { value: number; target: number | 
           >
             <span className={`text-5xl font-bold ${offers.length ? "cursor-help underline decoration-dotted decoration-gray-300 underline-offset-8" : ""}`}>{value}</span>
             {offers.length && showNames ? (
-              <span className="pointer-events-none absolute left-0 top-full z-20 mt-2 block w-max max-w-[320px] rounded-lg border border-gray-200 bg-white p-3 text-left text-sm leading-6 text-[var(--color-text-dark)] shadow-lg">
+              <span className="pointer-events-none absolute left-0 top-full z-20 mt-2 block w-max max-w-[520px] rounded-lg border border-gray-200 bg-white p-3 text-left text-sm leading-6 text-[var(--color-text-dark)] shadow-lg">
                 {offers.map((o, i) => (
                   <span key={i} className="block whitespace-nowrap">
                     <span className="font-semibold">{o.name}</span>
