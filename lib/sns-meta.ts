@@ -56,13 +56,16 @@ async function call<T>(path: string, params: Record<string, string>): Promise<T>
 
 const n = (v: unknown): number => (typeof v === "number" ? v : typeof v === "string" ? Number(v) || 0 : 0);
 
-type FbReelRaw = { id: string; description?: string; updated_time?: string; permalink_url?: string; views?: number };
-type FbPostRaw = { id: string; message?: string; created_time?: string; permalink_url?: string; shares?: { count?: number } };
+type Summary = { summary?: { total_count?: number } };
+type FbReelRaw = { id: string; description?: string; updated_time?: string; permalink_url?: string; views?: number; likes?: Summary; comments?: Summary };
+type FbPostRaw = { id: string; message?: string; created_time?: string; permalink_url?: string; shares?: { count?: number }; likes?: Summary; comments?: Summary };
+const SUMMARIES = ",likes.summary(true).limit(0),comments.summary(true).limit(0)";
+const cnt = (s?: Summary): number | null => (typeof s?.summary?.total_count === "number" ? s.summary.total_count : null);
 
 /**
  * Facebook ページの投稿 (直近 25 件)。
- * 動画はリール (video_reels) で再生数が取れる。いいね・コメントの数は pages_read_user_content が要るので今は出さない (null)。
- * リール以外の投稿は posts から文章だけ
+ * 動画はリール (video_reels) で再生数が取れる。いいね・コメントの数は pages_read_user_content が要る (無いトークンなら null)。
+ * リール以外の投稿は posts から
  */
 async function fetchFbPosts(pageId: string, pageToken: string): Promise<MetaPost[]> {
   const get = async <T,>(path: string, fields: string) => {
@@ -72,25 +75,27 @@ async function fetchFbPosts(pageId: string, pageToken: string): Promise<MetaPost
     if (json.error) throw new Error(`Meta API ${path}: ${json.error.message}`);
     return json.data ?? [];
   };
-  const reels = await get<FbReelRaw>("video_reels", "id,description,updated_time,permalink_url,views");
+  // いいね・コメントの数は権限が無いと丸ごとエラーになるので、だめなら無しで取り直す
+  const getWithSummaries = <T,>(path: string, fields: string) => get<T>(path, fields + SUMMARIES).catch(() => get<T>(path, fields));
+  const reels = await getWithSummaries<FbReelRaw>("video_reels", "id,description,updated_time,permalink_url,views");
   const posts: MetaPost[] = reels.map((r) => ({
     id: r.id,
     text: (r.description ?? "").slice(0, 80),
     publishedAt: r.updated_time ?? "",
     url: r.permalink_url ? `https://www.facebook.com${r.permalink_url}` : null,
     views: typeof r.views === "number" ? r.views : null,
-    likes: null,
-    comments: null,
+    likes: cnt(r.likes),
+    comments: cnt(r.comments),
     shares: null,
   }));
   // リール以外の投稿 (リールと同じ文章のものは重ねて出さない)
   const texts = new Set(posts.map((p) => p.text));
-  const plain = await get<FbPostRaw>("posts", "id,message,created_time,permalink_url,shares").catch(() => []);
+  const plain = await getWithSummaries<FbPostRaw>("posts", "id,message,created_time,permalink_url,shares").catch(() => []);
   for (const p of plain) {
     const text = (p.message ?? "").slice(0, 80);
     // 文章の無い投稿 (リールや写真の自動投稿) と、リールと同じ文章のものは重ねて出さない
     if (!text || texts.has(text)) continue;
-    posts.push({ id: p.id, text, publishedAt: p.created_time ?? "", url: p.permalink_url ?? null, views: null, likes: null, comments: null, shares: p.shares?.count ?? null });
+    posts.push({ id: p.id, text, publishedAt: p.created_time ?? "", url: p.permalink_url ?? null, views: null, likes: cnt(p.likes), comments: cnt(p.comments), shares: p.shares?.count ?? null });
   }
   posts.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
   return posts;
@@ -119,8 +124,15 @@ async function fetchIgPosts(igId: string, pageToken: string): Promise<MetaPost[]
   if (json.error) throw new Error(`Meta API media: ${json.error.message}`);
   const posts: MetaPost[] = [];
   for (const m of json.data ?? []) {
-    // 再生数は instagram_manage_insights が要る (アプリに無い) ので出さない
-    const views: number | null = null;
+    // 再生数は instagram_manage_insights が要る。無いトークンなら null のまま
+    let views: number | null = null;
+    if (m.media_type === "VIDEO" || m.media_type === "REELS") {
+      const iq = new URLSearchParams({ metric: "views", access_token: pageToken });
+      const ir = await fetch(`${API}/${m.id}/insights?${iq}`, { cache: "no-store" }).catch(() => null);
+      const ij = ir ? ((await ir.json().catch(() => ({}))) as { data?: { values?: { value?: unknown }[] }[] }) : {};
+      const v = ij.data?.[0]?.values?.[0]?.value;
+      if (typeof v === "number") views = v;
+    }
     posts.push({
       id: m.id,
       text: (m.caption ?? "").slice(0, 80),

@@ -11,8 +11,16 @@ import { publicUrl } from "@/lib/public-url";
 
 const API = "https://graph.facebook.com/v21.0";
 
-/** 同意画面で求める権限 (アプリのユースケースに入れてあるものだけ。instagram_manage_insights はアプリに無いので入れない) */
-export const META_SCOPES = ["pages_show_list", "pages_read_engagement", "read_insights", "instagram_basic", "business_management"];
+/** 同意画面で求める権限 (アプリのユースケースに入れてあるものだけ)。pages_read_user_content = いいね・コメント数、instagram_manage_insights = IG の再生数 */
+export const META_SCOPES = [
+  "pages_show_list",
+  "pages_read_engagement",
+  "pages_read_user_content",
+  "read_insights",
+  "instagram_basic",
+  "instagram_manage_insights",
+  "business_management",
+];
 
 export const META_CALLBACK_PATH = "/api/sns/meta/callback";
 
