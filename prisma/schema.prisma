@@ -240,8 +240,12 @@ model Partner {
   surveySentAt     DateTime?
   /// 最後にアンケートに答えた日時
   surveyAnsweredAt DateTime?
-  /// 列が無い回答 (今すぐ紹介できる人数・日本語レベル・提示までの日数・連絡の言語)
+  /// 列が無い回答 (会社の所在地・候補者の多い場所)。反映したときに入る
   surveyAnswers    Json?
+  /// 最後に届いた回答そのもの (相手が入れた会社名を含む。lib/partner-survey.ts の SurveyResponse)
+  surveyResponse   Json?
+  /// 最後に回答をパートナー情報に反映した日時。回答より古い (または無い) = 会社名が合わず確認待ち
+  surveyAppliedAt  DateTime?
 
   // --- 紹介可能 (checkbox 選択, CSV 保存) ---
   /// 紹介可能な国籍 (CSV: "ベトナム,インドネシア,...")

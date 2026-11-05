@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { useKeptState } from "@/app/components/KeepOnBack";
 import { NOTICE_FRAME } from "@/lib/broadcast-message";
 import {
-  SURVEY_CHOICES,
   SURVEY_EMAIL_SUBJECT,
   SURVEY_EMAIL_TEXT,
   SURVEY_REQUEST_TEXT,
@@ -18,6 +17,8 @@ export type SurveyChannel = {
   linked: boolean;
   /** このページからの送信で届くか (WhatsApp は紐づいていても届かない) */
   deliverable: boolean;
+  /** 送り先の名前 (LINE グループ名・メールアドレス)。送る前に正しい相手か確かめる */
+  to: string | null;
 };
 
 export type SurveyRow = {
@@ -31,18 +32,25 @@ export type SurveyRow = {
   sentAt: string | null;
   answeredAt: string | null;
   answers: SurveyAnswers;
+  /** 相手がフォームに入れた会社名 (登録名と合うかの確認用)。未回答なら null */
+  typedName: string | null;
+  /** 入れた会社名が登録名と同じ会社とみなせるか */
+  nameMatches: boolean | null;
+  /** 最新の回答をパートナー情報に反映済みか (会社名が合わないと確認待ちで false) */
+  applied: boolean;
   scope: string | null;
   fields: string[];
   nationalities: string[];
 };
 
-type Filter = "all" | "unsent" | "unanswered" | "answered" | "unreachable";
+type Filter = "all" | "unsent" | "unanswered" | "answered" | "pending" | "unreachable";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "すべて" },
   { key: "unsent", label: "未送信" },
   { key: "unanswered", label: "送信済み・未回答" },
   { key: "answered", label: "回答済み" },
+  { key: "pending", label: "要確認" },
   { key: "unreachable", label: "届かない" },
 ];
 
@@ -69,6 +77,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
       if (filter === "unsent") return !r.sentAt;
       if (filter === "unanswered") return r.sentAt && !r.answeredAt;
       if (filter === "answered") return !!r.answeredAt;
+      if (filter === "pending") return !!r.answeredAt && !r.applied;
       if (filter === "unreachable") return !r.reachable;
       return true;
     });
@@ -84,6 +93,24 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
     reachable: rows.filter((r) => r.reachable).length,
     sent: rows.filter((r) => r.sentAt).length,
     answered: rows.filter((r) => r.answeredAt).length,
+    pending: rows.filter((r) => r.answeredAt && !r.applied).length,
+  };
+  const [applying, setApplying] = useState<number | null>(null);
+  /** 会社名が合わず止めていた回答を、中身を見たうえでパートナー情報に入れる */
+  const apply = async (r: SurveyRow) => {
+    if (!confirm(`「${r.typedName ?? ""}」と入力された回答を ${r.name} の情報として反映します。よろしいですか？`)) return;
+    setApplying(r.id);
+    try {
+      const res = await fetch(`/api/partners/${r.id}/survey-apply`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        alert(data.error ?? "反映できませんでした");
+        return;
+      }
+      window.location.reload();
+    } finally {
+      setApplying(null);
+    }
   };
   const sendable = visible.filter((r) => r.reachable);
   const unreachable = visible.length - sendable.length;
@@ -172,11 +199,12 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
         </a>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 md:max-w-xl">
+      <div className="grid grid-cols-5 gap-3 md:max-w-2xl">
         <Stat label="アクティブ" value={stats.total} />
         <Stat label="届く" value={stats.reachable} />
         <Stat label="送信済み" value={stats.sent} />
         <Stat label="回答済み" value={stats.answered} />
+        <Stat label="要確認" value={stats.pending} />
       </div>
 
       {/* 送る */}
@@ -272,18 +300,18 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
           <thead>
             <tr className="bg-[var(--color-light)] text-left text-xs font-semibold text-[var(--color-text-dark)]">
               <th className="px-4 py-3">パートナー</th>
-              <th className="px-3 py-3 w-40">連絡手段（紐づき）</th>
+              <th className="px-3 py-3">送り先（紐づいている LINE グループなど）</th>
               <th className="px-3 py-3 w-16">送信</th>
               <th className="px-3 py-3 w-16">回答</th>
-              <th className="px-3 py-3 w-24">今すぐの人数</th>
-              <th className="px-3 py-3 w-28">日本語</th>
-              <th className="px-3 py-3 w-24">提示まで</th>
+              <th className="px-3 py-3">相手が入れた会社名</th>
+              <th className="px-3 py-3 w-24">会社の所在地</th>
+              <th className="px-3 py-3 w-28">候補者が多い</th>
               <th className="px-3 py-3">紹介できる人材</th>
             </tr>
           </thead>
           <tbody>
             {visible.map((r) => (
-              <tr key={r.id} className="border-t border-gray-100 hover:bg-gray-50">
+              <tr key={r.id} className={`border-t border-gray-100 hover:bg-gray-50 ${r.answeredAt && !r.applied ? "bg-[#FFF7E6]" : ""}`}>
                 <td className="px-4 py-2">
                   <Link href={`/partners/${r.id}`} className="font-medium text-[var(--color-text-dark)] hover:underline">
                     {r.name}
@@ -295,8 +323,9 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
                     <span className="text-[#dc2626]">未設定</span>
                   ) : (
                     r.channels.map((c) => (
-                      <span key={c.name} className={`mr-2 whitespace-nowrap ${c.deliverable ? "text-[var(--color-text-dark)]" : "text-[#dc2626]"}`}>
+                      <span key={c.name} className={`mr-3 inline-block whitespace-nowrap ${c.deliverable ? "text-[var(--color-text-dark)]" : "text-[#dc2626]"}`}>
                         {c.name} {c.deliverable ? "✓" : c.linked ? "届かない" : "✗"}
+                        {c.to ? <span className="ml-1 font-semibold">{c.to}</span> : null}
                       </span>
                     ))
                   )}
@@ -305,9 +334,30 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
                 <td className="px-3 py-2 text-xs font-semibold text-[var(--color-text-dark)]">
                   {fmt(r.answeredAt) || <span className="font-normal text-disabled">-</span>}
                 </td>
-                <td className="px-3 py-2 text-xs text-[var(--color-text-dark)]">{(r.answers.poolSize ?? []).join("")}</td>
-                <td className="px-3 py-2 text-xs text-[var(--color-text-dark)]">{(r.answers.japaneseLevels ?? []).join("・")}</td>
-                <td className="px-3 py-2 text-xs text-[var(--color-text-dark)]">{(r.answers.responseDays ?? []).join("")}</td>
+                <td className="px-3 py-2 text-xs text-[var(--color-text-dark)]">
+                  {r.typedName ? (
+                    r.applied ? (
+                      <span>
+                        {r.typedName} <span className="font-semibold">✓ 反映済み</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-[#B45309]">{r.typedName}</span>
+                        <span className="text-[#B45309]">{r.nameMatches ? "未反映" : "登録名と違います"}</span>
+                        <button
+                          type="button"
+                          onClick={() => void apply(r)}
+                          disabled={applying === r.id}
+                          className="rounded border border-[var(--color-primary)] bg-white px-2 py-0.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-light)] disabled:opacity-50"
+                        >
+                          {applying === r.id ? "反映中…" : "この会社として反映"}
+                        </button>
+                      </span>
+                    )
+                  ) : null}
+                </td>
+                <td className="px-3 py-2 text-xs text-[var(--color-text-dark)]">{(r.answers.companyLocation ?? []).join("")}</td>
+                <td className="px-3 py-2 text-xs text-[var(--color-text-dark)]">{(r.answers.candidateLocation ?? []).join("")}</td>
                 <td className="px-3 py-2 text-xs text-[var(--color-text-dark)]">
                   {[r.scope, ...r.nationalities.slice(0, 3), ...r.fields.slice(0, 4)].filter(Boolean).join("・")}
                   {r.fields.length > 4 ? ` 他${r.fields.length - 4}` : ""}
@@ -325,9 +375,10 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
         </table>
       </section>
       <p className="text-xs text-[var(--color-text-dark)]">
-        連絡手段の ✓ は送り先が紐づいていて届くもの、✗ は紐づいていないもの（連絡先紐づけで直せます）。WhatsApp はお知らせの承認テンプレートが無いため、このページからは届きません。
-        回答の選択肢: 今すぐの人数 {SURVEY_CHOICES.poolSize.options.map((o) => o.value).join(" / ")}、提示まで{" "}
-        {SURVEY_CHOICES.responseDays.options.map((o) => o.value).join(" / ")}
+        送り先の ✓ は紐づいていて届くもの、✗ は紐づいていないもの（連絡先紐づけで直せます）。送る前に LINE グループ名がその会社のものか確かめてください。
+        回答のときに相手が入れた会社名が登録名と合えばそのまま反映します。合わないときは黄色で止めるので、中身を見て「この会社として反映」を押すか、
+        別の会社の回答なら連絡先紐づけで LINE グループを正しい会社に付け替えてから、その会社にもう一度送ってください。
+        WhatsApp はお知らせの承認テンプレートが無いため、このページからは届きません。
       </p>
     </div>
   );

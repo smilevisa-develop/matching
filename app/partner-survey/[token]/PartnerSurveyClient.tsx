@@ -1,23 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import {
-  INTRODUCIBLE_FIELDS,
-  INTRODUCIBLE_NATIONALITIES,
-  INTRODUCIBLE_RESIDENCE_STATUSES,
-  INTRODUCIBLE_SCOPES,
-} from "@/lib/partner-profile";
+import { INTRODUCIBLE_FIELDS, INTRODUCIBLE_NATIONALITIES, INTRODUCIBLE_RESIDENCE_STATUSES } from "@/lib/partner-profile";
 import { SURVEY_CHOICES, type SurveyAnswers, type SurveyChoiceKey } from "@/lib/partner-survey";
 
-const INPUT =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[var(--color-primary)] focus:outline-none";
+/*
+ * 見た目は Google フォームに合わせる (企業に送るので、見慣れた形にする)。
+ * 紫 #673ab7 のアクセント、薄紫の背景、白いカードに 1 問ずつ。文字は黒 (#202124) で薄くしない。
+ * アプリの緑 (--color-primary) はここでは使わない
+ */
+const ACCENT = "#673ab7";
+const TEXT = "#202124";
+const BORDER = "#dadce0";
 
 export type SurveyInitial = {
-  name: string;
-  contactName: string;
-  email: string;
-  contactPhone: string;
-  introducibleScope: string;
   introducibleNationalities: string[];
   introducibleFields: string[];
   introducibleResidenceStatuses: string[];
@@ -27,12 +23,33 @@ export type SurveyInitial = {
   answers: SurveyAnswers;
 };
 
+type Form = SurveyInitial & { companyName: string; contactName: string };
 type ListKey = "introducibleNationalities" | "introducibleFields" | "introducibleResidenceStatuses";
 
-/**
- * パートナーアンケート。今の登録内容が入った状態で開き、直して送ると そのままパートナー情報に入る。
- * 日本語 + 英語 (既存のパートナー登録フォームと同じ)
- */
+const NATIONALITY_EN: Record<string, string> = {
+  ベトナム: "Vietnam",
+  インドネシア: "Indonesia",
+  ミャンマー: "Myanmar",
+  フィリピン: "Philippines",
+  タイ: "Thailand",
+  ネパール: "Nepal",
+  中国: "China",
+  スリランカ: "Sri Lanka",
+  カンボジア: "Cambodia",
+  バングラデシュ: "Bangladesh",
+  インド: "India",
+  モンゴル: "Mongolia",
+  韓国: "Korea",
+};
+const STATUS_EN: Record<string, string> = {
+  技能実習: "Technical Intern Training",
+  特定技能1号: "Specified Skilled Worker (i)",
+  特定技能2号: "Specified Skilled Worker (ii)",
+  "技術・人文知識・国際業務": "Engineer / Specialist in Humanities / International Services",
+  留学生: "Student",
+  特定活動: "Designated Activities",
+};
+
 export default function PartnerSurveyClient({
   token,
   initial,
@@ -45,33 +62,32 @@ export default function PartnerSurveyClient({
   /** 社内確認用。送信ボタンは押せない */
   preview?: boolean;
 }) {
-  const [form, setForm] = useState(initial);
+  const [form, setForm] = useState<Form>({ ...initial, companyName: "", contactName: "" });
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tried, setTried] = useState(false);
 
-  const set = <K extends keyof SurveyInitial>(key: K, value: SurveyInitial[K]) => setForm((cur) => ({ ...cur, [key]: value }));
+  const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((cur) => ({ ...cur, [key]: value }));
   const toggle = (key: ListKey, v: string) =>
     setForm((cur) => ({ ...cur, [key]: cur[key].includes(v) ? cur[key].filter((x) => x !== v) : [...cur[key], v] }));
-  const pickAnswer = (key: SurveyChoiceKey, v: string) =>
-    setForm((cur) => {
-      const current = cur.answers[key] ?? [];
-      const next = SURVEY_CHOICES[key].multiple
-        ? current.includes(v)
-          ? current.filter((x) => x !== v)
-          : [...current, v]
-        : current[0] === v
-          ? []
-          : [v];
-      return { ...cur, answers: { ...cur.answers, [key]: next } };
-    });
+  const pickAnswer = (key: SurveyChoiceKey, v: string) => setForm((cur) => ({ ...cur, answers: { ...cur.answers, [key]: [v] } }));
+
+  const missingName = !form.companyName.trim();
+  const missingCompanyLocation = !(form.answers.companyLocation ?? [])[0];
+  const missingCandidateLocation = !(form.answers.candidateLocation ?? [])[0];
+  const missingNationalities = form.introducibleNationalities.length === 0;
+  const missingFields = form.introducibleFields.length === 0;
+  const missingStatuses = form.introducibleResidenceStatuses.length === 0;
+  const invalid = missingName || missingCompanyLocation || missingCandidateLocation || missingNationalities || missingFields || missingStatuses;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setTried(true);
     if (preview) return;
-    if (!form.email.trim() && !form.contactPhone.trim()) {
-      setError("メールか電話番号のどちらかを入力してください / Email or phone is required");
+    if (invalid) {
+      setError("必須の質問に答えてください / Please answer the required questions");
       return;
     }
     setSending(true);
@@ -87,6 +103,7 @@ export default function PartnerSurveyClient({
         return;
       }
       setDone(true);
+      window.scrollTo(0, 0);
     } finally {
       setSending(false);
     }
@@ -94,190 +111,240 @@ export default function PartnerSurveyClient({
 
   if (done) {
     return (
-      <main className="mx-auto max-w-xl px-4 py-16 text-center">
-        <p className="text-2xl font-bold text-[var(--color-text-dark)]">ありがとうございます</p>
-        <p className="mt-3 text-sm text-[var(--color-text-dark)]">
-          回答を受け付けました。内容はこちらの登録情報に反映されました。
-          <br />
-          Thank you. Your answers have been saved.
-        </p>
-      </main>
+      <Page>
+        <Card top>
+          <h1 className="text-[32px] font-normal leading-tight" style={{ color: TEXT }}>
+            パートナーアンケート
+          </h1>
+          <p className="mt-4 text-[14px] leading-6" style={{ color: TEXT }}>
+            回答を送信しました。ご協力ありがとうございます。
+            <br />
+            Your response has been recorded. Thank you.
+          </p>
+        </Card>
+      </Page>
     );
   }
 
   return (
-    <main className="mx-auto max-w-xl px-4 py-8">
+    <Page>
       {preview ? (
-        <p className="mb-4 rounded-lg bg-[#FEF3C7] px-3 py-2 text-sm font-semibold text-[#92400E]">
-          プレビューです。パートナーにはこの画面が、その会社の登録内容が入った状態で届きます。送信はできません
+        <p className="mb-3 rounded-lg bg-[#FEF3C7] px-3 py-2 text-sm font-semibold text-[#92400E]">
+          プレビューです。パートナーにはこの画面が届きます。送信はできません
         </p>
       ) : null}
-      <h1 className="text-xl font-bold text-[var(--color-text-dark)]">パートナーアンケート / Partner Survey</h1>
-      <p className="mt-2 text-sm text-[var(--color-text-dark)]">
-        {form.name} 様
-        <br />
-        ご紹介いただける人材について、最新の状況を教えてください。今の登録内容が入っています。変わったところだけ直してください。
-        <br />
-        Please tell us the latest status of the candidates you can introduce. Your current information is pre-filled; just update what has changed.
-      </p>
-      {answeredAt ? (
-        <p className="mt-2 text-xs text-[var(--color-text-dark)]">
-          前回の回答: {new Date(answeredAt).toLocaleDateString("ja-JP")} / Last answered
-        </p>
-      ) : null}
+      <form onSubmit={submit} noValidate className="space-y-3">
+        <Card top>
+          <h1 className="text-[32px] font-normal leading-tight" style={{ color: TEXT }}>
+            パートナーアンケート
+          </h1>
+          <p className="mt-1 text-[14px]" style={{ color: TEXT }}>
+            Partner Survey
+          </p>
+          <p className="mt-4 text-[14px] leading-6" style={{ color: TEXT }}>
+            株式会社CROSLAN です。ご紹介いただける人材について、貴社の現在の状況を教えてください。所要時間は約3分です。
+            <br />
+            This is CROSLAN Inc. Please tell us about the candidates your company can introduce. It takes about 3 minutes.
+          </p>
+          {answeredAt ? (
+            <p className="mt-3 text-[13px]" style={{ color: TEXT }}>
+              前回の回答 / Last answered: {new Date(answeredAt).toLocaleDateString("ja-JP")}
+            </p>
+          ) : null}
+          <p className="mt-4 border-t pt-3 text-[14px] text-[#d93025]" style={{ borderColor: BORDER }}>
+            * 必須の質問です / Required
+          </p>
+        </Card>
 
-      <form onSubmit={submit} className="mt-6 space-y-6">
-        <Section title="連絡先 / Contact">
-          <Field label="担当者名 (Contact person)">
-            <input className={INPUT} value={form.contactName} onChange={(e) => set("contactName", e.target.value)} />
-          </Field>
-          <Field label="メール (Email)">
-            <input className={INPUT} type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
-          </Field>
-          <Field label="電話番号 (Phone)">
-            <input className={INPUT} value={form.contactPhone} onChange={(e) => set("contactPhone", e.target.value)} />
-          </Field>
-          <Choice label={`${SURVEY_CHOICES.language.label} (${SURVEY_CHOICES.language.en})`}>
-            {SURVEY_CHOICES.language.options.map((o) => (
-              <Chip key={o.value} active={(form.answers.language ?? []).includes(o.value)} onClick={() => pickAnswer("language", o.value)}>
-                {o.value} / {o.en}
-              </Chip>
-            ))}
-          </Choice>
-        </Section>
+        <Question title="会社名" en="Company name" required error={tried && missingName}>
+          <TextInput value={form.companyName} onChange={(v) => set("companyName", v)} placeholder="回答を入力 / Your answer" />
+        </Question>
+        <Question title="ご担当者名" en="Your name">
+          <TextInput value={form.contactName} onChange={(v) => set("contactName", v)} placeholder="回答を入力 / Your answer" />
+        </Question>
 
-        <Section title="今の候補者 / Your candidates now">
-          <Choice label={`${SURVEY_CHOICES.poolSize.label} (${SURVEY_CHOICES.poolSize.en})`}>
-            {SURVEY_CHOICES.poolSize.options.map((o) => (
-              <Chip key={o.value} active={(form.answers.poolSize ?? []).includes(o.value)} onClick={() => pickAnswer("poolSize", o.value)}>
-                {o.value} / {o.en}
-              </Chip>
-            ))}
-          </Choice>
-          <Choice label={`${SURVEY_CHOICES.japaneseLevels.label} (${SURVEY_CHOICES.japaneseLevels.en})`}>
-            {SURVEY_CHOICES.japaneseLevels.options.map((o) => (
-              <Chip
-                key={o.value}
-                active={(form.answers.japaneseLevels ?? []).includes(o.value)}
-                onClick={() => pickAnswer("japaneseLevels", o.value)}
-              >
-                {o.value} / {o.en}
-              </Chip>
-            ))}
-          </Choice>
-          <Choice label={`${SURVEY_CHOICES.responseDays.label} (${SURVEY_CHOICES.responseDays.en})`}>
-            {SURVEY_CHOICES.responseDays.options.map((o) => (
-              <Chip
-                key={o.value}
-                active={(form.answers.responseDays ?? []).includes(o.value)}
-                onClick={() => pickAnswer("responseDays", o.value)}
-              >
-                {o.value} / {o.en}
-              </Chip>
-            ))}
-          </Choice>
-        </Section>
-
-        <Section title="紹介できる人材 / Candidates you can introduce">
-          <Choice label="候補者がいる場所 (Location of candidates)">
-            {INTRODUCIBLE_SCOPES.map((s) => (
-              <Chip key={s} active={form.introducibleScope === s} onClick={() => set("introducibleScope", form.introducibleScope === s ? "" : s)}>
-                {s === "国内" ? "日本国内 / In Japan" : s === "国外" ? "海外 / Overseas" : "両方 / Both"}
-              </Chip>
-            ))}
-          </Choice>
-          <Choice label="国籍 (Nationality)">
-            {INTRODUCIBLE_NATIONALITIES.map((n) => (
-              <Chip key={n} active={form.introducibleNationalities.includes(n)} onClick={() => toggle("introducibleNationalities", n)}>
-                {n}
-              </Chip>
-            ))}
-          </Choice>
-          <Choice label="分野 (Industry)">
-            {INTRODUCIBLE_FIELDS.map((f) => (
-              <Chip key={f} active={form.introducibleFields.includes(f)} onClick={() => toggle("introducibleFields", f)}>
-                {f}
-              </Chip>
-            ))}
-          </Choice>
-          <Choice label="在留資格 (Visa status)">
-            {INTRODUCIBLE_RESIDENCE_STATUSES.map((r) => (
-              <Chip key={r} active={form.introducibleResidenceStatuses.includes(r)} onClick={() => toggle("introducibleResidenceStatuses", r)}>
-                {r}
-              </Chip>
-            ))}
-          </Choice>
-        </Section>
-
-        <Section title="手数料・強み / Fee and strengths">
-          <Field label="紹介手数料の目安 (Standard fee)">
-            <input className={INPUT} value={form.feeAmount} onChange={(e) => set("feeAmount", e.target.value)} placeholder="例: 1 名あたり 150,000 円" />
-          </Field>
-          <Field label="最低金額 (Minimum fee)">
-            <input className={INPUT} value={form.minFeeAmount} onChange={(e) => set("minFeeAmount", e.target.value)} placeholder="例: 100,000 円" />
-          </Field>
-          <Field label="貴社の強み・特徴 (Your strengths)">
-            <textarea
-              className={`${INPUT} min-h-24`}
-              value={form.features}
-              onChange={(e) => set("features", e.target.value)}
-              placeholder="例: 介護の経験者が多い / 日本語学校を持っている / 面接まで 3 日で調整できる"
+        <Question title={SURVEY_CHOICES.companyLocation.label} en={SURVEY_CHOICES.companyLocation.en} required error={tried && missingCompanyLocation}>
+          {SURVEY_CHOICES.companyLocation.options.map((o) => (
+            <Option
+              key={o.value}
+              type="radio"
+              checked={(form.answers.companyLocation ?? [])[0] === o.value}
+              onChange={() => pickAnswer("companyLocation", o.value)}
+              label={`${o.value} / ${o.en}`}
             />
-          </Field>
-        </Section>
+          ))}
+        </Question>
 
-        {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={sending || preview}
-          className="w-full rounded-lg bg-[var(--color-primary)] px-4 py-3 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+        <Question
+          title={SURVEY_CHOICES.candidateLocation.label}
+          en={SURVEY_CHOICES.candidateLocation.en}
+          required
+          error={tried && missingCandidateLocation}
         >
-          {sending ? "送信中…" : "送信する / Submit"}
-        </button>
+          {SURVEY_CHOICES.candidateLocation.options.map((o) => (
+            <Option
+              key={o.value}
+              type="radio"
+              checked={(form.answers.candidateLocation ?? [])[0] === o.value}
+              onChange={() => pickAnswer("candidateLocation", o.value)}
+              label={`${o.value} / ${o.en}`}
+            />
+          ))}
+        </Question>
+
+        <Question title="紹介できる国籍" en="Nationalities you can introduce (select all that apply)" required error={tried && missingNationalities}>
+          {INTRODUCIBLE_NATIONALITIES.map((n) => (
+            <Option
+              key={n}
+              type="checkbox"
+              checked={form.introducibleNationalities.includes(n)}
+              onChange={() => toggle("introducibleNationalities", n)}
+              label={NATIONALITY_EN[n] ? `${n} / ${NATIONALITY_EN[n]}` : n}
+            />
+          ))}
+        </Question>
+
+        <Question title="紹介できる分野" en="Industries you can introduce (select all that apply)" required error={tried && missingFields}>
+          {INTRODUCIBLE_FIELDS.map((f) => (
+            <Option key={f} type="checkbox" checked={form.introducibleFields.includes(f)} onChange={() => toggle("introducibleFields", f)} label={f} />
+          ))}
+        </Question>
+
+        <Question title="紹介できる在留資格" en="Visa status you can introduce (select all that apply)" required error={tried && missingStatuses}>
+          {INTRODUCIBLE_RESIDENCE_STATUSES.map((r) => (
+            <Option
+              key={r}
+              type="checkbox"
+              checked={form.introducibleResidenceStatuses.includes(r)}
+              onChange={() => toggle("introducibleResidenceStatuses", r)}
+              label={STATUS_EN[r] ? `${r} / ${STATUS_EN[r]}` : r}
+            />
+          ))}
+        </Question>
+
+        <Question title="紹介手数料の目安" en="Standard referral fee">
+          <TextInput value={form.feeAmount} onChange={(v) => set("feeAmount", v)} placeholder="例: 1名あたり 150,000円 / e.g. 150,000 JPY per person" />
+        </Question>
+        <Question title="最低金額" en="Minimum fee">
+          <TextInput value={form.minFeeAmount} onChange={(v) => set("minFeeAmount", v)} placeholder="例: 100,000円 / e.g. 100,000 JPY" />
+        </Question>
+        <Question title="貴社の強み・特徴" en="Your strengths">
+          <textarea
+            value={form.features}
+            onChange={(e) => set("features", e.target.value)}
+            rows={3}
+            placeholder="回答を入力 / Your answer"
+            className="w-full resize-y border-0 border-b bg-transparent px-0 py-1 text-[14px] outline-none focus:border-b-2"
+            style={{ color: TEXT, borderColor: BORDER, borderBottomColor: BORDER }}
+            onFocus={(e) => (e.currentTarget.style.borderBottomColor = ACCENT)}
+            onBlur={(e) => (e.currentTarget.style.borderBottomColor = BORDER)}
+          />
+        </Question>
+
+        {error ? (
+          <p className="rounded-lg bg-white px-4 py-3 text-[14px] text-[#d93025]" style={{ border: `1px solid #d93025` }}>
+            {error}
+          </p>
+        ) : null}
+        <div className="flex items-center justify-between pt-1">
+          <button
+            type="submit"
+            disabled={sending || preview}
+            className="rounded px-6 py-2 text-[14px] font-medium text-white disabled:opacity-60"
+            style={{ backgroundColor: ACCENT }}
+          >
+            {sending ? "送信中…" : "送信 / Submit"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setForm({ ...initial, companyName: "", contactName: "" });
+              setTried(false);
+              setError(null);
+            }}
+            className="text-[14px] font-medium"
+            style={{ color: ACCENT }}
+          >
+            フォームをクリア
+          </button>
+        </div>
+        <p className="pt-4 text-center text-[12px]" style={{ color: TEXT }}>
+          株式会社CROSLAN 人材事業部
+        </p>
       </form>
-    </main>
+    </Page>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Page({ children }: { children: React.ReactNode }) {
   return (
-    <section className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-semibold text-[var(--color-text-dark)]">{title}</h2>
+    <div className="min-h-screen" style={{ backgroundColor: "#f0ebf8" }}>
+      <main className="mx-auto w-full max-w-[640px] px-3 py-3 sm:py-4">{children}</main>
+    </div>
+  );
+}
+
+/** 白いカード。top = 先頭のカード (上に紫の帯) */
+function Card({ top = false, error = false, children }: { top?: boolean; error?: boolean; children: React.ReactNode }) {
+  return (
+    <section
+      className="relative overflow-hidden rounded-lg bg-white px-6 pb-6 pt-5"
+      style={{ border: `1px solid ${error ? "#d93025" : BORDER}`, paddingTop: top ? 22 + 10 : undefined }}
+    >
+      {top ? <div className="absolute inset-x-0 top-0 h-[10px]" style={{ backgroundColor: ACCENT }} /> : null}
       {children}
     </section>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Question({
+  title,
+  en,
+  required = false,
+  error = false,
+  children,
+}: {
+  title: string;
+  en: string;
+  required?: boolean;
+  error?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-[var(--color-text-dark)]">{label}</span>
-      {children}
+    <Card error={error}>
+      <p className="text-[16px] font-medium leading-6" style={{ color: TEXT }}>
+        {title}
+        {required ? <span className="ml-1 text-[#d93025]">*</span> : null}
+      </p>
+      <p className="mt-0.5 text-[13px] leading-5" style={{ color: TEXT }}>
+        {en}
+      </p>
+      <div className="mt-4 space-y-1">{children}</div>
+      {error ? <p className="mt-3 text-[13px] text-[#d93025]">この質問は必須です / This is a required question</p> : null}
+    </Card>
+  );
+}
+
+function TextInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full border-0 border-b bg-transparent px-0 py-1 text-[14px] outline-none sm:w-1/2"
+      style={{ color: TEXT, borderBottomColor: BORDER }}
+      onFocus={(e) => (e.currentTarget.style.borderBottomColor = ACCENT)}
+      onBlur={(e) => (e.currentTarget.style.borderBottomColor = BORDER)}
+    />
+  );
+}
+
+/** Google フォームの選択肢 (丸 = 1 つ選ぶ、四角 = いくつでも) */
+function Option({ type, checked, onChange, label }: { type: "radio" | "checkbox"; checked: boolean; onChange: () => void; label: string }) {
+  return (
+    <label className="flex cursor-pointer items-center gap-3 py-1.5 text-[14px]" style={{ color: TEXT }}>
+      <input type={type} checked={checked} onChange={onChange} className="h-5 w-5 shrink-0 cursor-pointer" style={{ accentColor: ACCENT }} />
+      <span className="leading-5">{label}</span>
     </label>
-  );
-}
-
-function Choice({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <span className="mb-1 block text-xs font-medium text-[var(--color-text-dark)]">{label}</span>
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </div>
-  );
-}
-
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full border px-3 py-1 text-xs ${
-        active
-          ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
-          : "border-gray-300 bg-white text-[var(--color-text-dark)] hover:border-gray-400"
-      }`}
-    >
-      {children}
-    </button>
   );
 }

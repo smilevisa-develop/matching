@@ -5,14 +5,9 @@ import { readSurveyAnswers } from "@/lib/partner-survey";
 import PartnerSurveyClient, { type SurveyInitial } from "./PartnerSurveyClient";
 
 const PREVIEW_INITIAL: SurveyInitial = {
-  name: "（パートナー名）",
-  contactName: "",
-  email: "",
-  contactPhone: "",
-  introducibleScope: "国外",
-  introducibleNationalities: ["ベトナム"],
-  introducibleFields: ["介護"],
-  introducibleResidenceStatuses: ["特定技能1号"],
+  introducibleNationalities: [],
+  introducibleFields: [],
+  introducibleResidenceStatuses: [],
   feeAmount: "",
   minFeeAmount: "",
   features: "",
@@ -21,16 +16,16 @@ const PREVIEW_INITIAL: SurveyInitial = {
 
 export const dynamic = "force-dynamic";
 
-/** パートナーアンケート (認証不要。パートナーごとのリンクで判定)。今の登録内容を入れた状態で出す */
+/**
+ * パートナーアンケート (認証不要。パートナーごとのリンクで判定)。
+ * 会社名と担当者名は相手に入れてもらう (LINE が正しい会社に紐づいているかの確認に使う)。選択式は今の登録内容を入れておく
+ */
 export default async function PartnerSurveyPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   // 社内確認用のプレビュー (送信はできない)
   if (token === "preview") return <PartnerSurveyClient token="preview" preview answeredAt={null} initial={PREVIEW_INITIAL} />;
   if (!token || token.length < 8) notFound();
-  const partner = await prisma.partner.findUnique({
-    where: { surveyToken: token },
-    include: { contacts: { where: { isPrimary: true }, take: 1 } },
-  });
+  const partner = await prisma.partner.findUnique({ where: { surveyToken: token } });
   if (!partner) notFound();
 
   return (
@@ -38,11 +33,6 @@ export default async function PartnerSurveyPage({ params }: { params: Promise<{ 
       token={token}
       answeredAt={partner.surveyAnsweredAt?.toISOString() ?? null}
       initial={{
-        name: partner.name,
-        contactName: partner.contactName ?? partner.contacts[0]?.name ?? "",
-        email: partner.email ?? partner.contacts[0]?.email ?? "",
-        contactPhone: partner.contactPhone ?? partner.contacts[0]?.phone ?? "",
-        introducibleScope: partner.introducibleScope ?? "",
         introducibleNationalities: parseCsv(partner.introducibleNationalities),
         introducibleFields: parseCsv(partner.introducibleFields),
         introducibleResidenceStatuses: parseCsv(partner.introducibleResidenceStatuses),

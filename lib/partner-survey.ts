@@ -2,53 +2,31 @@
  * パートナーアンケート (2026/11)。
  *
  * 一斉連絡の本文に {{アンケートURL}} を書くと、パートナーごとのリンク (/partner-survey/[token]) に置き換わる。
- * 回答はそのままパートナー情報 (紹介可能・手数料・特徴・連絡先) に入り、
- * 列が無い項目 (今すぐ紹介できる人数・日本語レベル・提示までの日数・連絡の言語) は Partner.surveyAnswers に入る。
- * 案件の段階配信 (優先度の高いパートナーから順に案内する) の材料にする。
- * サーバーだけで使うもの (リンクの発行) は lib/partner-survey-server.ts
+ * 回答はまず Partner.surveyResponse にそのまま入り、相手が入れた会社名が登録名と合えばすぐパートナー情報
+ * (紹介可能・手数料・特徴) に反映する。合わなければ「確認待ち」にして、管理者が /partners/survey で反映する
+ * (LINE グループが別の会社に紐づいていたときに、間違った会社の情報を上書きしないため)。
+ * 列が無い項目 (会社の所在地・候補者の多い場所) は Partner.surveyAnswers に入る。
+ * サーバーだけで使うもの (リンクの発行・反映) は lib/partner-survey-server.ts
  */
 
 /** 列が無い回答の選択肢。value は保存値 (日本語)、en はフォームの英語表示 */
 export const SURVEY_CHOICES = {
-  poolSize: {
-    label: "今すぐ紹介できる候補者の人数",
-    en: "How many candidates can you introduce right now?",
+  companyLocation: {
+    label: "会社の所在地",
+    en: "Where is your company located?",
     options: [
-      { value: "0人", en: "None" },
-      { value: "1〜5人", en: "1-5" },
-      { value: "6〜20人", en: "6-20" },
-      { value: "21人以上", en: "21 or more" },
+      { value: "日本", en: "Japan" },
+      { value: "海外", en: "Overseas" },
     ],
     multiple: false,
   },
-  japaneseLevels: {
-    label: "候補者の日本語レベル (多いもの)",
-    en: "Japanese level of your candidates (most common)",
+  candidateLocation: {
+    label: "候補者が多いのはどちらか",
+    en: "Where are most of your candidates?",
     options: [
-      { value: "N5以下", en: "N5 or below" },
-      { value: "N4", en: "N4" },
-      { value: "N3", en: "N3" },
-      { value: "N2以上", en: "N2 or above" },
-    ],
-    multiple: true,
-  },
-  responseDays: {
-    label: "求人をもらってから候補者を出せるまで",
-    en: "How soon can you present candidates after receiving a job?",
-    options: [
-      { value: "3日以内", en: "Within 3 days" },
-      { value: "1週間", en: "About 1 week" },
-      { value: "2週間以上", en: "2 weeks or more" },
-    ],
-    multiple: false,
-  },
-  language: {
-    label: "連絡に使う言語",
-    en: "Language for communication",
-    options: [
-      { value: "日本語", en: "Japanese" },
-      { value: "英語", en: "English" },
-      { value: "その他", en: "Other" },
+      { value: "日本国内が多い", en: "Mostly in Japan" },
+      { value: "海外が多い", en: "Mostly overseas" },
+      { value: "同じくらい", en: "About the same" },
     ],
     multiple: false,
   },
@@ -57,6 +35,13 @@ export const SURVEY_CHOICES = {
 export type SurveyChoiceKey = keyof typeof SURVEY_CHOICES;
 /** 列が無い回答の形 (Partner.surveyAnswers) */
 export type SurveyAnswers = Partial<Record<SurveyChoiceKey, string[]>>;
+
+/** 候補者の多い場所 → 紹介可能の「国内 / 国外 / 両方」 */
+export const CANDIDATE_LOCATION_TO_SCOPE: Record<string, "国内" | "国外" | "両方"> = {
+  日本国内が多い: "国内",
+  海外が多い: "国外",
+  同じくらい: "両方",
+};
 
 /** Partner.surveyAnswers (Json) を安全に読む */
 export function readSurveyAnswers(value: unknown): SurveyAnswers {
@@ -71,6 +56,58 @@ export function readSurveyAnswers(value: unknown): SurveyAnswers {
     if (list.length > 0) out[key] = list;
   }
   return out;
+}
+
+/** フォームから届く回答そのもの (Partner.surveyResponse にこの形で入る) */
+export type SurveyResponse = {
+  /** 相手が入れた会社名 (登録名と合うかの確認に使う) */
+  companyName: string;
+  contactName: string;
+  answers: SurveyAnswers;
+  introducibleNationalities: string[];
+  introducibleFields: string[];
+  introducibleResidenceStatuses: string[];
+  feeAmount: string;
+  minFeeAmount: string;
+  features: string;
+};
+
+/** Partner.surveyResponse (Json) を安全に読む */
+export function readSurveyResponse(value: unknown): SurveyResponse | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  const str = (x: unknown) => (typeof x === "string" ? x : "");
+  const list = (x: unknown) => (Array.isArray(x) ? x.filter((y): y is string => typeof y === "string") : []);
+  if (!str(v.companyName)) return null;
+  return {
+    companyName: str(v.companyName),
+    contactName: str(v.contactName),
+    answers: readSurveyAnswers(v.answers),
+    introducibleNationalities: list(v.introducibleNationalities),
+    introducibleFields: list(v.introducibleFields),
+    introducibleResidenceStatuses: list(v.introducibleResidenceStatuses),
+    feeAmount: str(v.feeAmount),
+    minFeeAmount: str(v.minFeeAmount),
+    features: str(v.features),
+  };
+}
+
+/** 会社名の比べ方: 全角→半角、小文字、空白と記号、「株式会社」「Co., Ltd.」などの法人格を除く */
+export function normalizeCompanyName(name: string): string {
+  return name
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/株式会社|有限会社|合同会社|合資会社|一般社団法人|社会福祉法人|学校法人|\(株\)|\(有\)|㈱|㈲/g, "")
+    .replace(/\b(co\.?,?\s*ltd\.?|ltd\.?|inc\.?|corp\.?|corporation|company|limited|llc|pte\.?|pt\.?|cv\.?|jsc|co\.?)\b/g, "")
+    .replace(/[\s　,.、。・･\-–—_()（）\[\]「」『』'"’”&＆/／]/g, "");
+}
+
+/** 相手が入れた会社名が登録名と同じ会社とみなせるか (片方がもう片方を含めば同じ) */
+export function companyNameMatches(typed: string, registered: string): boolean {
+  const a = normalizeCompanyName(typed);
+  const b = normalizeCompanyName(registered);
+  if (a.length < 2 || b.length < 2) return false;
+  return a === b || a.includes(b) || b.includes(a);
 }
 
 /** 一斉連絡の変数名。本文にこれがあるときだけリンクを作る */

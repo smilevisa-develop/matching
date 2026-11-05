@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
 import { parseCsv } from "@/lib/partner-profile";
-import { readSurveyAnswers } from "@/lib/partner-survey";
+import { companyNameMatches, readSurveyAnswers, readSurveyResponse } from "@/lib/partner-survey";
 import PartnerSurveyAdminClient, { type SurveyChannel, type SurveyRow } from "./PartnerSurveyAdminClient";
 
 export const dynamic = "force-dynamic";
@@ -25,11 +25,13 @@ export default async function PartnerSurveyAdminPage() {
       surveySentAt: true,
       surveyAnsweredAt: true,
       surveyAnswers: true,
+      surveyResponse: true,
+      surveyAppliedAt: true,
       introducibleScope: true,
       introducibleFields: true,
       introducibleNationalities: true,
       // 一斉連絡の送り先と同じ判定: 紐づいた LINE グループ、主担当のメール
-      lineGroups: { where: { isActive: true, chatOnly: false }, select: { id: true }, take: 1 },
+      lineGroups: { where: { isActive: true, chatOnly: false }, select: { id: true, groupName: true }, take: 3 },
       contacts: { where: { isPrimary: true }, select: { email: true }, take: 1 },
     },
   });
@@ -38,14 +40,21 @@ export default async function PartnerSurveyAdminPage() {
     const chosen = names.length > 0 ? names : p.channel && p.channel !== "未設定" ? [p.channel] : [];
     const email = p.email ?? p.contacts[0]?.email ?? null;
     // 連絡手段ごとに、送り先が実際に紐づいているか (一斉連絡で届くか)
+    // 送り先の名前も出す (送る前に、正しい LINE グループに紐づいているか目で確かめるため)
+    const lineTo = p.lineGroups.length > 0 ? p.lineGroups.map((g) => g.groupName || "(名前なしのグループ)").join(" / ") : p.lineUserId ? "個人 LINE" : null;
     const channels: SurveyChannel[] = chosen.map((name) => {
-      if (name === "LINE") return { name, linked: p.lineGroups.length > 0 || !!p.lineUserId, deliverable: p.lineGroups.length > 0 || !!p.lineUserId };
-      if (name === "Messenger") return { name, linked: !!p.messengerPsid, deliverable: !!p.messengerPsid };
+      if (name === "LINE") return { name, linked: !!lineTo, deliverable: !!lineTo, to: lineTo };
+      if (name === "Messenger") return { name, linked: !!p.messengerPsid, deliverable: !!p.messengerPsid, to: p.messengerPsid ? "Messenger" : null };
       // WhatsApp はお知らせの承認テンプレートが無いので、紐づいていても届かない
-      if (name === "WhatsApp") return { name, linked: !!p.whatsappId, deliverable: false };
-      if (name === "mail" || name === "メール" || name === "Email") return { name: "mail", linked: !!email && /@/.test(email), deliverable: !!email && /@/.test(email) };
-      return { name, linked: false, deliverable: false };
+      if (name === "WhatsApp") return { name, linked: !!p.whatsappId, deliverable: false, to: null };
+      if (name === "mail" || name === "メール" || name === "Email") {
+        const ok = !!email && /@/.test(email);
+        return { name: "mail", linked: ok, deliverable: ok, to: ok ? email : null };
+      }
+      return { name, linked: false, deliverable: false, to: null };
     });
+    const response = readSurveyResponse(p.surveyResponse);
+    const applied = !!p.surveyAppliedAt && !!p.surveyAnsweredAt && p.surveyAppliedAt >= p.surveyAnsweredAt;
     return {
       id: p.id,
       name: p.name,
@@ -54,7 +63,10 @@ export default async function PartnerSurveyAdminPage() {
       reachable: channels.some((c) => c.deliverable),
       sentAt: p.surveySentAt?.toISOString() ?? null,
       answeredAt: p.surveyAnsweredAt?.toISOString() ?? null,
-      answers: readSurveyAnswers(p.surveyAnswers),
+      answers: applied ? readSurveyAnswers(p.surveyAnswers) : (response?.answers ?? {}),
+      typedName: response?.companyName ?? null,
+      nameMatches: response ? companyNameMatches(response.companyName, p.name) : null,
+      applied,
       scope: p.introducibleScope,
       fields: parseCsv(p.introducibleFields),
       nationalities: parseCsv(p.introducibleNationalities),
