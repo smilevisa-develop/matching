@@ -316,7 +316,7 @@ function OfferHero({ value, target, offers }: { value: number; target: number | 
             className="relative inline-block"
             onMouseEnter={() => setShowNames(true)}
             onMouseLeave={() => setShowNames(false)}
-            onClick={() => setShowNames((v) => !v)}
+            onClick={() => setShowNames(true)}
           >
             <span className={`text-5xl font-bold ${offers.length ? "cursor-help underline decoration-dotted decoration-gray-300 underline-offset-8" : ""}`}>{value}</span>
             {offers.length && showNames ? (
