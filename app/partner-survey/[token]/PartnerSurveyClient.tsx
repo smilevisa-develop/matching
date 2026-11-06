@@ -272,7 +272,8 @@ export default function PartnerSurveyClient({
           <button
             type="button"
             onClick={() => {
-              setForm({ ...initial, companyName: "", contactName: "" });
+              setForm({ ...initial, introducibleNationalities: [], otherNationality: "", companyName: "", contactName: "" });
+              setOtherOpen(false);
               setTried(false);
               setError(null);
             }}
