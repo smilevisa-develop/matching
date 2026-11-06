@@ -51,9 +51,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       return Response.json({ ok: false, error: "会社名を入力してください / Company name is required" }, { status: 400 });
     }
 
-    await prisma.partner.update({ where: { id: partner.id }, data: { surveyAnsweredAt: new Date(), surveyResponse: response } });
     // 会社名が登録名と合うときだけ、そのまま反映する (LINE が別の会社に紐づいていたときの上書きを防ぐ)
-    if (companyNameMatches(response.companyName, partner.name)) await applySurveyResponse(partner.id, response);
+    const matches = companyNameMatches(response.companyName, partner.name);
+    // 先に履歴へ残す (反映に失敗しても、同じ会社が後からもう一度答えても、届いた回答は消えない)
+    await prisma.partnerSurveyResponseLog.create({ data: { partnerId: partner.id, companyName: response.companyName, response, applied: matches } });
+    await prisma.partner.update({ where: { id: partner.id }, data: { surveyAnsweredAt: new Date(), surveyResponse: response } });
+    if (matches) {
+      try {
+        await applySurveyResponse(partner.id, response);
+      } catch (e) {
+        // 反映に失敗しても回答は保存済みなので、相手には成功を返す (管理画面で「未反映」として見える)
+        console.warn("アンケート回答の反映に失敗:", e instanceof Error ? e.message : e);
+      }
+    }
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json({ ok: false, error: error instanceof Error ? error.message : "error" }, { status: 500 });

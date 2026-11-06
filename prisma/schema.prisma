@@ -289,6 +289,7 @@ model Partner {
   ratingHistory PartnerRatingHistory[]
   messages      Message[]
   lineGroups    LineGroup[]
+  surveyResponses PartnerSurveyResponseLog[]
   chatPins      ChatPin[]
   contacts      PartnerContact[]
 }
@@ -1227,4 +1228,20 @@ model DuplicateMergeReview {
   reviewedBy String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+/// パートナーアンケートの回答の履歴。届いた回答は全部ここに残す (同じ会社が 2 回答えても上書きで消えない。反映は Partner 側)
+model PartnerSurveyResponseLog {
+  id          Int      @id @default(autoincrement())
+  partnerId   Int
+  partner     Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  /// 相手が入れた会社名
+  companyName String
+  /// 回答そのもの (lib/partner-survey.ts の SurveyResponse)
+  response    Json
+  /// 届いたときに自動で反映したか
+  applied     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([partnerId, createdAt])
 }
