@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useKeptState } from "@/app/components/KeepOnBack";
-import { NOTICE_FRAME } from "@/lib/broadcast-message";
 import {
   SURVEY_EMAIL_SUBJECT,
   SURVEY_EMAIL_TEXT,
@@ -120,10 +119,12 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
   const unreachable = visible.length - sendable.length;
 
   const sender = senderLastName || "（担当者姓）";
-  /** チャット用。一斉連絡の「お知らせ」と同じ型。{{パートナー名}} {{担当者名}} {{アンケートURL}} は送るときにパートナーごとに入る */
+  /**
+   * チャット用。一斉連絡の「お知らせ」の型から、冒頭の【お知らせ】・会社名・ご担当者様を外したもの
+   * (登録してある会社名が正しいか分からないので、相手の会社名は出さない。2026/11)。{{アンケートURL}} は送るときにパートナーごとに入る
+   */
   const message = useMemo(
-    () =>
-      NOTICE_FRAME.replace("{{1}}", "{{パートナー名}}").replace("{{2}}", "{{担当者名}}").replace("{{3}}", sender).replace("{{4}}", body.trim()),
+    () => `お世話になっております。株式会社CROSLANの${sender}です。\n\n${body.trim()}\n\nご不明な点がございましたら、お気軽にご連絡いただけますと幸いです。`,
     [body, sender],
   );
   const emailMessage = useMemo(() => emailBody.replaceAll("{{送信者}}", sender), [emailBody, sender]);
