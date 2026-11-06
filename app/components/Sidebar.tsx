@@ -38,8 +38,6 @@ import {
  * 行き先 (名詞) だけを置き、「〜を追加」などの動作は各画面の右上のボタンにする。アイコンは項目ごとに別のものを使う。
  */
 type NavItem = {
-  /** 管理者だけに出す項目 */
-  adminOnly?: boolean;
   label: string;
   href: string;
   icon: (props: { size?: number }) => React.ReactNode;
@@ -79,7 +77,7 @@ const SECTIONS: { heading?: string; items: NavItem[] }[] = [
     heading: "パートナー",
     items: [
       { label: "パートナーリスト", href: "/partners", icon: GlobeIcon },
-      { label: "パートナーアンケート", href: "/partners/survey", icon: ClipboardIcon, adminOnly: true },
+      { label: "パートナーアンケート", href: "/partners/survey", icon: ClipboardIcon },
       { label: "連絡先紐づけ", href: "/partners/link", icon: LinkIcon },
       { label: "一斉連絡", href: "/broadcast", icon: MegaphoneIcon },
       { label: "連絡テンプレート", href: "/broadcast/templates", icon: FormIcon },
@@ -119,7 +117,6 @@ export default function Sidebar() {
   // 修正依頼の未対応件数
   const [openFeedbackCount, setOpenFeedbackCount] = useState(0);
   const [accountName, setAccountName] = useState("読み込み中...");
-  const [isAdmin, setIsAdmin] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncReport, setSyncReport] = useState<{ ok: boolean; lines: SyncLine[] } | null>(null);
   const current = activeHref(pathname);
@@ -163,7 +160,6 @@ export default function Sidebar() {
         const data = await res.json();
         if (data.ok && data.account) {
           setAccountName(data.account.name);
-          setIsAdmin(data.account.role === "admin");
         } else {
           setAccountName("未ログイン");
         }
@@ -296,7 +292,7 @@ export default function Sidebar() {
           {SECTIONS.map((section, index) => (
             <div key={section.heading ?? "other"} className={index === 0 ? "pt-2" : "mt-4 border-t border-side-line pt-4"}>
               {section.heading && <p className="px-2 pb-2 text-body font-bold text-white">{section.heading}</p>}
-              <div className="flex flex-col">{section.items.filter((item) => !item.adminOnly || isAdmin).map(renderItem)}</div>
+              <div className="flex flex-col">{section.items.map(renderItem)}</div>
             </div>
           ))}
         </nav>

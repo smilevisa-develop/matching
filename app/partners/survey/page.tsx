@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdminAccount } from "@/lib/auth";
+import { requireCurrentAccount } from "@/lib/auth";
 import { parseCsv } from "@/lib/partner-profile";
 import { companyNameMatches, readSurveyAnswers, readSurveyResponse } from "@/lib/partner-survey";
 import PartnerSurveyAdminClient, { type SurveyChannel, type SurveyRow } from "./PartnerSurveyAdminClient";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** パートナーアンケート: 文面の確認・送信・回答状況を 1 か所で見る */
 export default async function PartnerSurveyAdminPage() {
-  const account = await requireAdminAccount();
+  const account = await requireCurrentAccount();
   const partners = await prisma.partner.findMany({
     where: { isActive: true },
     orderBy: { id: "desc" },
