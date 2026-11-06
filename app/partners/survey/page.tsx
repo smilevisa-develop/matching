@@ -32,6 +32,8 @@ export default async function PartnerSurveyAdminPage() {
       introducibleNationalities: true,
       // 一斉連絡の送り先と同じ判定: 紐づいた LINE グループ、主担当のメール
       lineGroups: { where: { isActive: true, chatOnly: false }, select: { id: true, groupName: true }, take: 3 },
+      // まだ反映していない回答 (会社名が合わず止めたもの)。同じ会社が何回か答えていれば全部出す
+      surveyResponses: { where: { applied: false }, orderBy: { createdAt: "desc" }, select: { id: true, companyName: true, createdAt: true } },
       contacts: { where: { isPrimary: true }, select: { email: true }, take: 1 },
     },
   });
@@ -68,6 +70,7 @@ export default async function PartnerSurveyAdminPage() {
       typedName: response?.companyName ?? null,
       nameMatches: response ? companyNameMatches(response.companyName, p.name) : null,
       applied,
+      pending: applied ? [] : p.surveyResponses.map((l) => ({ logId: l.id, typedName: l.companyName, answeredAt: l.createdAt.toISOString() })),
       scope: p.introducibleScope,
       fields: parseCsv(p.introducibleFields),
       nationalities: parseCsv(p.introducibleNationalities),

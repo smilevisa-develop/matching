@@ -37,6 +37,8 @@ export type SurveyRow = {
   nameMatches: boolean | null;
   /** 最新の回答をパートナー情報に反映済みか (会社名が合わないと確認待ちで false) */
   applied: boolean;
+  /** 反映していない回答 (新しい順)。1 件ずつ中身を見て反映できる */
+  pending: { logId: number; typedName: string; answeredAt: string }[];
   scope: string | null;
   fields: string[];
   nationalities: string[];
@@ -100,11 +102,15 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
   };
   const [applying, setApplying] = useState<number | null>(null);
   /** 会社名が合わず止めていた回答を、中身を見たうえでパートナー情報に入れる */
-  const apply = async (r: SurveyRow) => {
-    if (!confirm(`「${r.typedName ?? ""}」と入力された回答を ${r.name} の情報として反映します。よろしいですか？`)) return;
+  const apply = async (r: SurveyRow, item?: { logId: number; typedName: string }) => {
+    if (!confirm(`「${item?.typedName ?? r.typedName ?? ""}」と入力された回答を ${r.name} の情報として反映します。よろしいですか？`)) return;
     setApplying(r.id);
     try {
-      const res = await fetch(`/api/partners/${r.id}/survey-apply`, { method: "POST" });
+      const res = await fetch(`/api/partners/${r.id}/survey-apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logId: item?.logId ?? null }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         alert(data.error ?? "反映できませんでした");
@@ -359,17 +365,22 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
                         {r.typedName} <span className="font-semibold">✓ 反映済み</span>
                       </span>
                     ) : (
-                      <span className="inline-flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-[#B45309]">{r.typedName}</span>
-                        <span className="text-[#B45309]">{r.nameMatches ? "未反映" : "登録名と違います"}</span>
-                        <button
-                          type="button"
-                          onClick={() => void apply(r)}
-                          disabled={applying === r.id}
-                          className="rounded border border-[var(--color-primary)] bg-white px-2 py-0.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-light)] disabled:opacity-50"
-                        >
-                          {applying === r.id ? "反映中…" : "この会社として反映"}
-                        </button>
+                      <span className="flex flex-col gap-1">
+                        {(r.pending.length > 0 ? r.pending : [{ logId: 0, typedName: r.typedName, answeredAt: r.answeredAt ?? "" }]).map((it) => (
+                          <span key={it.logId} className="inline-flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-[#B45309]">{it.typedName}</span>
+                            {r.pending.length > 1 ? <span className="text-[#B45309]">{fmt(it.answeredAt)}</span> : null}
+                            <span className="text-[#B45309]">{r.nameMatches && it.typedName === r.typedName ? "未反映" : "登録名と違います"}</span>
+                            <button
+                              type="button"
+                              onClick={() => void apply(r, it.logId ? it : undefined)}
+                              disabled={applying === r.id}
+                              className="rounded border border-[var(--color-primary)] bg-white px-2 py-0.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-light)] disabled:opacity-50"
+                            >
+                              {applying === r.id ? "反映中…" : r.pending.length > 1 ? "この回答を反映" : "この会社として反映"}
+                            </button>
+                          </span>
+                        ))}
                       </span>
                     )
                   ) : null}
