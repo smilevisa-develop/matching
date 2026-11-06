@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { parseCsv } from "@/lib/partner-profile";
@@ -15,6 +16,23 @@ const PREVIEW_INITIAL: SurveyInitial = {
 };
 
 export const dynamic = "force-dynamic";
+
+/** LINE などのリンクプレビュー用。企業に送るので、社内向けアプリのアイコンではなくアンケート専用の画像と題名を出す */
+export const metadata: Metadata = {
+  // og:image は絶対 URL でないと LINE が読まない
+  metadataBase: new URL("https://matching.smilereach.jp"),
+  title: "パートナーアンケート | 株式会社CROSLAN",
+  description: "ご紹介いただける人材について教えてください（約3分）/ Please tell us about the candidates you can introduce (about 3 min)",
+  icons: { icon: "/partner-survey-icon.png", shortcut: "/partner-survey-icon.png", apple: "/partner-survey-icon.png" },
+  openGraph: {
+    title: "パートナーアンケート | 株式会社CROSLAN",
+    description: "ご紹介いただける人材について教えてください（約3分）",
+    siteName: "株式会社CROSLAN",
+    type: "website",
+    images: [{ url: "/partner-survey-og.png", width: 1200, height: 630 }],
+  },
+  twitter: { card: "summary_large_image" },
+};
 
 /**
  * パートナーアンケート (認証不要。パートナーごとのリンクで判定)。
