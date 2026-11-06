@@ -122,6 +122,7 @@ export async function POST(req: Request) {
       whatsappParams,
       fileIds,
       kind,
+      onlyChannels,
       emailMessage,
     } = body as {
       mode: "filter" | "group";
@@ -155,6 +156,8 @@ export async function POST(req: Request) {
       fileIds?: string[];
       /** job = 求人情報 (テンプレの各項目を入力) / notice = お知らせ (本文を自由入力) */
       kind?: "job" | "notice";
+      /** この連絡手段だけに送る (例: ["LINE"])。無ければパートナーの連絡手段すべてに送る */
+      onlyChannels?: string[] | null;
     };
     const logTitle = kind === "notice" ? "一斉配信 お知らせ (パートナー)" : "一斉配信 (パートナー)";
 
@@ -741,8 +744,10 @@ export async function POST(req: Request) {
     //   partner.preferredChannels の 全チャネル に対して送信を実行
     //   (メール + LINE 両方選択されていれば両方に送る)
     // ─────────────────────────────────────────────
+    const only = Array.isArray(onlyChannels) && onlyChannels.length > 0 ? new Set(onlyChannels) : null;
     for (const t of targets) {
       const personalizedMessage = renderFor(t);
+      if (only) t.preferredChannels = t.preferredChannels.filter((ch) => only.has(ch));
 
       if (t.preferredChannels.length === 0) {
         failedCount++;

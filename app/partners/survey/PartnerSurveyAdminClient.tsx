@@ -112,7 +112,9 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
       setApplying(null);
     }
   };
-  const sendable = visible.filter((r) => r.reachable);
+  // LINE だけに送る (2026/11 の回はメールを使わず LINE だけ)。外すと紐づいている連絡手段すべてに送る
+  const [lineOnly, setLineOnly] = useKeptState("lineOnly", true);
+  const sendable = visible.filter((r) => (lineOnly ? r.channels.some((c) => c.name === "LINE" && c.deliverable) : r.reachable));
   const unreachable = visible.length - sendable.length;
 
   const sender = senderLastName || "（担当者姓）";
@@ -138,7 +140,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
       alert("送れる相手がいません");
       return;
     }
-    if (!confirm(`${sendable.length} 社にアンケートの依頼を送ります。よろしいですか？`)) return;
+    if (!confirm(`${sendable.length} 社にアンケートの依頼を${lineOnly ? " LINE だけで" : ""}送ります。よろしいですか？`)) return;
     setSending(true);
     setResult(null);
     try {
@@ -161,6 +163,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
           whatsappParams: [],
           kind: "notice",
           fileIds: [],
+          onlyChannels: lineOnly ? ["LINE"] : null,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -281,11 +284,15 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
             disabled={sending || sendable.length === 0}
             className="rounded-lg bg-[var(--color-primary)] px-5 py-2 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
           >
-            {sending ? "送信中..." : `表示中の ${sendable.length} 社に送る`}
+            {sending ? "送信中..." : `表示中の ${sendable.length} 社に${lineOnly ? " LINE で" : ""}送る`}
           </button>
+          <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-dark)]">
+            <input type="checkbox" checked={lineOnly} onChange={(e) => setLineOnly(e.target.checked)} />
+            LINE だけに送る（メールなどには送らない）
+          </label>
           {unreachable > 0 ? (
             <span className="text-xs text-[var(--color-text-dark)]">
-              表示中の {unreachable} 社は連絡手段が紐づいていないため送れません（「届かない」で絞り込めます）
+              表示中の {unreachable} 社は{lineOnly ? "LINE" : "連絡手段"}が紐づいていないため送れません
             </span>
           ) : null}
         </div>
