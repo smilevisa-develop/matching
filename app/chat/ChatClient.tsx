@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, Fragment } from "react";
 import { useKeptState } from "@/app/components/KeepOnBack";
 import Link from "next/link";
-import { partnerConvKey } from "@/lib/chat-messages";
 import {
   CHAT_LANGUAGES,
   COUNTRY_LANG,
@@ -165,7 +164,8 @@ export default function ChatClient({ conversations, initialMessages, initialLang
     if (typeof window === "undefined") return null;
     const q = new URLSearchParams(window.location.search).get("partner");
     if (!q) return null;
-    const key = partnerConvKey(Number(q));
+    // lib/chat-messages.ts の partnerConvKey と同じ形 ("p:<partnerId>")。あちらは prisma を読むのでクライアントからは import しない
+    const key = `p:${Number(q)}`;
     return conversations.some((c) => c.id === key) ? key : null;
   }, [conversations]);
   const [selectedId, setSelectedId] = useKeptState<string | null>("selectedId", null);
