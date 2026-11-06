@@ -70,9 +70,13 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
+  // LINE だけに送る (2026/11 の回はメールを使わず LINE だけ)。オンのあいだは LINE の無い会社を一覧にも出さない
+  const [lineOnly, setLineOnly] = useKeptState("lineOnly", true);
+  const hasLine = (r: SurveyRow) => r.channels.some((c) => c.name === "LINE" && c.deliverable);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = rows.filter((r) => {
+      if (lineOnly && !hasLine(r)) return false;
       if (q && !`${r.name} ${r.country ?? ""}`.toLowerCase().includes(q)) return false;
       if (filter === "unsent") return !r.sentAt;
       if (filter === "unanswered") return r.sentAt && !r.answeredAt;
@@ -86,7 +90,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
       (a, b) =>
         (b.answeredAt ?? "").localeCompare(a.answeredAt ?? "") || (b.sentAt ?? "").localeCompare(a.sentAt ?? "") || a.id - b.id,
     );
-  }, [rows, filter, search]);
+  }, [rows, filter, search, lineOnly]);
 
   const stats = {
     total: rows.length,
@@ -112,9 +116,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
       setApplying(null);
     }
   };
-  // LINE だけに送る (2026/11 の回はメールを使わず LINE だけ)。外すと紐づいている連絡手段すべてに送る
-  const [lineOnly, setLineOnly] = useKeptState("lineOnly", true);
-  const sendable = visible.filter((r) => (lineOnly ? r.channels.some((c) => c.name === "LINE" && c.deliverable) : r.reachable));
+  const sendable = visible.filter((r) => (lineOnly ? hasLine(r) : r.reachable));
   const unreachable = visible.length - sendable.length;
 
   const sender = senderLastName || "（担当者姓）";
@@ -132,7 +134,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
       .replaceAll("{{アンケートURL}}", "https://matching.smilereach.jp/partner-survey/（会社ごとのリンク）");
 
   const send = async () => {
-    if (!body.includes("{{アンケートURL}}") || !emailMessage.includes("{{アンケートURL}}")) {
+    if (!body.includes("{{アンケートURL}}") || (!lineOnly && !emailMessage.includes("{{アンケートURL}}"))) {
       alert("文面に {{アンケートURL}} がありません。これが無いとパートナーが回答できません");
       return;
     }
@@ -236,10 +238,10 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
           <span className="text-xs text-[var(--color-text-dark)]">{visible.length} 社</span>
         </div>
 
-        <div className="mt-4 grid gap-5 md:grid-cols-2">
+        <div className={`mt-4 grid gap-5 ${lineOnly ? "md:max-w-2xl" : "md:grid-cols-2"}`}>
           <div className="space-y-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-[var(--color-text-dark)]">LINE・Messenger に送る文</span>
+              <span className="mb-1 block text-xs font-medium text-[var(--color-text-dark)]">{lineOnly ? "LINE に送る文" : "LINE・Messenger に送る文"}</span>
               <textarea
                 rows={9}
                 value={body}
@@ -254,6 +256,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
               </pre>
             </div>
           </div>
+          {lineOnly ? null : (
           <div className="space-y-3">
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-[var(--color-text-dark)]">メールの件名</span>
@@ -275,6 +278,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
               />
             </label>
           </div>
+          )}
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -288,7 +292,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
           </button>
           <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-dark)]">
             <input type="checkbox" checked={lineOnly} onChange={(e) => setLineOnly(e.target.checked)} />
-            LINE だけに送る（メールなどには送らない）
+            LINE だけに送る（LINE の無い会社は一覧に出さない）
           </label>
           {unreachable > 0 ? (
             <span className="text-xs text-[var(--color-text-dark)]">
