@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-/** 開いたままでもポータルの最新の出勤を出すため、1 分ごとに取り直す (裏のタブでは取り直さない) */
+/** 開いたままでもSlack 勤怠の最新の予定を出すため、1 分ごとに取り直す (裏のタブでは取り直さない) */
 export default function AutoRefresh() {
   const router = useRouter();
   useEffect(() => {

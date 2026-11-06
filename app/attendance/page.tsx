@@ -15,7 +15,7 @@ const shiftDay = (key: string, n: number) => {
 };
 const dayOfWeek = (key: string) => new Date(`${key}T00:00:00Z`).getUTCDay();
 const todayJst = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-/** その日を含む週の日曜 (ポータルの出勤表と同じ日曜始まり) */
+/** その日を含む週の日曜 (日曜始まり) */
 const weekStart = (key: string) => shiftDay(key, -dayOfWeek(key));
 const shortDate = (key: string) => `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}`;
 
