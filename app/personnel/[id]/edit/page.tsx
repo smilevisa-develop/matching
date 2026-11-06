@@ -79,7 +79,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
     }),
     prisma.deal.findMany({
       orderBy: { updatedAt: "desc" },
-      select: { id: true, title: true, company: { select: { name: true } } },
+      select: { id: true, title: true, status: true, companyId: true, company: { select: { name: true } } },
     }),
     prisma.company.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, externalId: true } }),
   ]);
@@ -93,9 +93,22 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
         .filter(Boolean),
     ),
   );
-  const companyOptions = companies
-    .map((c) => ({ id: c.id, label: companyLabel(c.externalId, c.name) }))
-    .filter((c) => c.label);
+  // 案件 (求人) が 2 つ以上ある企業は、どの案件に推薦するか選べるように案件ごとに出す
+  const dealsByCompany = new Map<number, typeof deals>();
+  for (const d of deals) dealsByCompany.set(d.companyId, [...(dealsByCompany.get(d.companyId) ?? []), d]);
+  type CompanyOption = { id: string; companyId: number; dealId: number | null; label: string };
+  const companyOptions: CompanyOption[] = companies.flatMap((c): CompanyOption[] => {
+    const label = companyLabel(c.externalId, c.name);
+    if (!label) return [];
+    const ds = dealsByCompany.get(c.id) ?? [];
+    if (ds.length < 2) return [{ id: `c:${c.id}`, companyId: c.id, dealId: null, label }];
+    return ds.map((d) => ({
+      id: `d:${d.id}`,
+      companyId: c.id,
+      dealId: d.id,
+      label: `${label}（${d.title}${d.status && d.status !== "募集中" ? `・${d.status}` : ""}）`,
+    }));
+  });
 
   // ── 母国語チェックリスト: 前提(推薦先企業の求人情報の有無) と 送信履歴 ──
   // 実効的な推薦先 = 手動上書き(recommendedCompany) があればそれ、無ければ案件由来(dealCompanies)

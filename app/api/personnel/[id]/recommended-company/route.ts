@@ -2,9 +2,11 @@
  * 候補者詳細の「推薦先企業」(要ログイン)。
  *
  * POST /api/personnel/[id]/recommended-company
- *   body: { companyId: number | null, removeCompanyId?: number | null }
+ *   body: { companyId: number | null, dealId?: number | null, removeDealId?: number | null, removeCompanyId?: number | null }
  *     companyId       … この企業のカンバンに候補者を入れる (既にいれば何もしない。新規は「接続済み」)
- *     removeCompanyId … この企業のカンバンから候補者を外す (取り消したとき)
+ *     dealId          … 案件が複数ある企業で、どの案件に入れるか (無ければ最後に更新した案件)
+ *     removeDealId    … この案件のカンバンから候補者を外す (取り消したとき)
+ *     removeCompanyId … この企業の全案件から外す (古い呼び方)
  *
  * 1 人の候補者は同時に最大 5 社まで (A 社で不採用でも別の企業に推薦できるように。2026/10)。
  *
@@ -40,6 +42,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
     const body = await req.json().catch(() => ({}));
     const companyId = toId(body?.companyId);
+    const dealId = toId(body?.dealId);
+    const removeDealId = toId(body?.removeDealId);
     const removeCompanyId = toId(body?.removeCompanyId);
 
     const person = await prisma.person.findUnique({ where: { id: personId }, select: { id: true } });
@@ -48,9 +52,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     await prisma.$transaction(async (tx) => {
-      if (removeCompanyId && removeCompanyId !== companyId) {
+      if (removeDealId || (removeCompanyId && removeCompanyId !== companyId)) {
         const links = await tx.dealCandidate.findMany({
-          where: { personId, deal: { companyId: removeCompanyId } },
+          where: removeDealId ? { personId, dealId: removeDealId } : { personId, deal: { companyId: removeCompanyId! } },
           select: { id: true, stage: true, dealId: true },
         });
         for (const link of links) {
@@ -82,6 +86,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         });
         // 企業を開いたときと同じく最後に更新した求人を使い、無ければ作る (求人が複数ある企業は企業詳細で入れ替えられる)
         const deal =
+          (dealId ? await tx.deal.findFirst({ where: { id: dealId, companyId }, select: { id: true } }) : null) ??
           (await tx.deal.findFirst({
             where: { companyId },
             orderBy: { updatedAt: "desc" },
