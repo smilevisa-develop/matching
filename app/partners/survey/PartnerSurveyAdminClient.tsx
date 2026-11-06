@@ -77,7 +77,8 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = rows.filter((r) => {
-      if (lineOnly && !hasLine(r)) return false;
+      // LINE だけのときも、回答が届いている会社は出す (要確認を見落とさないため)
+      if (lineOnly && !hasLine(r) && !r.answeredAt) return false;
       if (q && !`${r.name} ${r.country ?? ""}`.toLowerCase().includes(q)) return false;
       if (filter === "unsent") return !r.sentAt;
       if (filter === "unanswered") return r.sentAt && !r.answeredAt;
@@ -299,7 +300,7 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
           </button>
           <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-dark)]">
             <input type="checkbox" checked={lineOnly} onChange={(e) => setLineOnly(e.target.checked)} />
-            LINE だけに送る（LINE の無い会社は一覧に出さない）
+            LINE だけに送る（LINE の無い会社は、回答済みを除いて一覧に出さない）
           </label>
           {unreachable > 0 ? (
             <span className="text-xs text-[var(--color-text-dark)]">
@@ -368,7 +369,9 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
                       <span className="flex flex-col gap-1">
                         {(r.pending.length > 0 ? r.pending : [{ logId: 0, typedName: r.typedName, answeredAt: r.answeredAt ?? "" }]).map((it) => (
                           <span key={it.logId} className="inline-flex flex-wrap items-center gap-2">
-                            <span className="font-semibold text-[#B45309]">{it.typedName}</span>
+                            <span className="font-semibold text-[#B45309]" title={it.typedName ?? ""}>
+                              {(it.typedName ?? "").length > 40 ? `${(it.typedName ?? "").slice(0, 40)}…` : it.typedName}
+                            </span>
                             {r.pending.length > 1 ? <span className="text-[#B45309]">{fmt(it.answeredAt)}</span> : null}
                             <span className="text-[#B45309]">{r.nameMatches && it.typedName === r.typedName ? "未反映" : "登録名と違います"}</span>
                             <button
