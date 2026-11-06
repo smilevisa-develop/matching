@@ -43,11 +43,13 @@ const NATIONALITY_EN: Record<string, string> = {
 };
 const STATUS_EN: Record<string, string> = {
   技能実習: "Technical Intern Training",
+  育成就労: "Employment for Skill Development (Ikusei Shuro)",
   特定技能1号: "Specified Skilled Worker (i)",
   特定技能2号: "Specified Skilled Worker (ii)",
   "技術・人文知識・国際業務": "Engineer / Specialist in Humanities / International Services",
   留学生: "Student",
   特定活動: "Designated Activities",
+  家族滞在: "Dependent (Family)",
 };
 
 export default function PartnerSurveyClient({

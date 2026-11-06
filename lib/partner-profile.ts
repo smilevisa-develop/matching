@@ -68,11 +68,13 @@ export const INTRODUCIBLE_FIELDS = [
 
 export const INTRODUCIBLE_RESIDENCE_STATUSES = [
   "技能実習",
+  "育成就労",
   "特定技能1号",
   "特定技能2号",
   "技術・人文知識・国際業務",
   "留学生",
   "特定活動",
+  "家族滞在",
 ] as const;
 
 // --- CSV ↔ 配列 変換ヘルパー ---
