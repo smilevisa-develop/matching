@@ -302,7 +302,8 @@ export async function POST(req: Request) {
       where: { id: { in: targetIds } },
       include: {
         lineGroups: {
-          where: { isActive: true },
+          // chatOnly (内定後のグループなど、パートナーではないグループ) には送らない
+          where: { isActive: true, chatOnly: false },
           orderBy: { lastSeenAt: "desc" as const },
           take: 1,
         },
@@ -747,6 +748,7 @@ export async function POST(req: Request) {
     const only = Array.isArray(onlyChannels) && onlyChannels.length > 0 ? new Set(onlyChannels) : null;
     for (const t of targets) {
       const personalizedMessage = renderFor(t);
+      const hadChannels = t.preferredChannels.length > 0;
       if (only) t.preferredChannels = t.preferredChannels.filter((ch) => only.has(ch));
 
       if (t.preferredChannels.length === 0) {
@@ -754,7 +756,9 @@ export async function POST(req: Request) {
         failures.push({
           name: t.name,
           channel: "-",
-          error: "連絡手段が未設定です。パートナー詳細で設定してください",
+          error: hadChannels && only
+            ? `${[...only].join("/")} が連絡手段に入っていないため送っていません`
+            : "連絡手段が未設定です。パートナー詳細で設定してください",
         });
         continue;
       }

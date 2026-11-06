@@ -38,7 +38,7 @@ export type SurveyRow = {
   /** 最新の回答をパートナー情報に反映済みか (会社名が合わないと確認待ちで false) */
   applied: boolean;
   /** 反映していない回答 (新しい順)。1 件ずつ中身を見て反映できる */
-  pending: { logId: number; typedName: string; answeredAt: string }[];
+  pending: { logId: number; typedName: string; answeredAt: string; nameMatches: boolean }[];
   scope: string | null;
   fields: string[];
   nationalities: string[];
@@ -367,13 +367,16 @@ export default function PartnerSurveyAdminClient({ rows, senderLastName }: { row
                       </span>
                     ) : (
                       <span className="flex flex-col gap-1">
-                        {(r.pending.length > 0 ? r.pending : [{ logId: 0, typedName: r.typedName, answeredAt: r.answeredAt ?? "" }]).map((it) => (
+                        {(r.pending.length > 0
+                          ? r.pending
+                          : [{ logId: 0, typedName: r.typedName, answeredAt: r.answeredAt ?? "", nameMatches: !!r.nameMatches }]
+                        ).map((it) => (
                           <span key={it.logId} className="inline-flex flex-wrap items-center gap-2">
                             <span className="font-semibold text-[#B45309]" title={it.typedName ?? ""}>
                               {(it.typedName ?? "").length > 40 ? `${(it.typedName ?? "").slice(0, 40)}…` : it.typedName}
                             </span>
                             {r.pending.length > 1 ? <span className="text-[#B45309]">{fmt(it.answeredAt)}</span> : null}
-                            <span className="text-[#B45309]">{r.nameMatches && it.typedName === r.typedName ? "未反映" : "登録名と違います"}</span>
+                            <span className="text-[#B45309]">{it.nameMatches ? "未反映" : "登録名と違います"}</span>
                             <button
                               type="button"
                               onClick={() => void apply(r, it.logId ? it : undefined)}

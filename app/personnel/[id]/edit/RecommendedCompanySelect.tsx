@@ -70,11 +70,15 @@ export default function RecommendedCompanySelect({
     if (ok) void save(null, link.dealId);
   };
 
-  const canAdd = new Set(links.map((l) => l.companyId)).size < MAX_RECOMMENDED_COMPANIES;
-  // 既に入っている案件は出さない (企業単位の選択肢は、その企業に入っていれば出さない)
-  const addable = companies.filter((c) =>
-    c.dealId ? !links.some((l) => l.dealId === c.dealId) : !links.some((l) => l.companyId === c.companyId),
-  );
+  const linkedCompanies = new Set(links.map((l) => l.companyId));
+  const underLimit = linkedCompanies.size < MAX_RECOMMENDED_COMPANIES;
+  // 既に入っている案件は出さない (企業単位の選択肢は、その企業に入っていれば出さない)。
+  // 上限 (5 社) に達していても、既に入っている企業の別の案件は足せる
+  const addable = companies.filter((c) => {
+    if (c.dealId) return !links.some((l) => l.dealId === c.dealId) && (underLimit || linkedCompanies.has(c.companyId));
+    return !linkedCompanies.has(c.companyId) && underLimit;
+  });
+  const canAdd = addable.length > 0;
   const showSelect = links.length === 0 || adding;
 
   return (

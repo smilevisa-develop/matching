@@ -85,6 +85,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           select: { id: true, name: true, hiringStatus: true },
         });
         // 企業を開いたときと同じく最後に更新した求人を使い、無ければ作る (求人が複数ある企業は企業詳細で入れ替えられる)
+        if (dealId) {
+          const exists = await tx.deal.findFirst({ where: { id: dealId, companyId }, select: { id: true } });
+          if (!exists) throw new Error("選んだ案件が見つかりません。ページを読み直してから、もう一度選んでください");
+        }
         const deal =
           (dealId ? await tx.deal.findFirst({ where: { id: dealId, companyId }, select: { id: true } }) : null) ??
           (await tx.deal.findFirst({

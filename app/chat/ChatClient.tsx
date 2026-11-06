@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, Fragment } from "react";
 import { useKeptState } from "@/app/components/KeepOnBack";
 import Link from "next/link";
+import { partnerConvKey } from "@/lib/chat-messages";
 import {
   CHAT_LANGUAGES,
   COUNTRY_LANG,
@@ -158,16 +159,16 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   initialPinnedKeys: string[];
   templates: Template[];
 }) {
-  const [selectedId, setSelectedId] = useKeptState<string | null>("selectedId", null);
-  // ほかの画面から「/chat?partner=<id>」で来たら、そのパートナーのトークを開く (アンケート画面の LINE グループ名リンクなど)
-  useEffect(() => {
+  // ほかの画面から「/chat?partner=<id>」で来たら、そのパートナーのトークを開く (アンケート画面の LINE グループ名リンクなど)。
+  // 「一番上のトークを開く」より先に決めるため、初期値として読む
+  const deepLinkId = useMemo(() => {
+    if (typeof window === "undefined") return null;
     const q = new URLSearchParams(window.location.search).get("partner");
-    if (!q) return;
-    const key = `p:${q}`;
-    if (conversations.some((c) => c.id === key)) setSelectedId(key);
-    window.history.replaceState(null, "", "/chat");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!q) return null;
+    const key = partnerConvKey(Number(q));
+    return conversations.some((c) => c.id === key) ? key : null;
+  }, [conversations]);
+  const [selectedId, setSelectedId] = useKeptState<string | null>("selectedId", null);
   const [messages, setMessages] = useState(initialMessages);
   const [lang, setLang] = useState<ChatLang>(initialLang);
   const [pinned, setPinned] = useState<Set<string>>(() => new Set(initialPinnedKeys));
@@ -191,6 +192,13 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   const stickToBottomRef = useRef(true);
   /** スマホでトーク画面を開いているか (スマホは一覧とトーク画面を切り替える。PC は両方出す) */
   const [mobileRoom, setMobileRoom] = useKeptState("mobileRoom", false);
+  useEffect(() => {
+    if (!deepLinkId) return;
+    setSelectedId(deepLinkId);
+    setMobileRoom(true);
+    window.history.replaceState(null, "", "/chat");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkId]);
   /** 入力欄の「翻訳」: 訳す前の文と、確認用の訳し戻し */
   const [draft, setDraft] = useState<{ original: string; back: string | null; target: DraftLang } | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
@@ -245,10 +253,11 @@ export default function ChatClient({ conversations, initialMessages, initialLang
 
   // PC は一番上のトークを開いておく。スマホは一覧から選ぶまで開かない (開くと既読になるため)
   useEffect(() => {
+    if (deepLinkId) return;
     if (selectedId && conversations.some((p) => p.id === selectedId)) return;
     if (!window.matchMedia("(min-width: 768px)").matches) return;
     setSelectedId(sortedPartners[0]?.id ?? null);
-  }, [selectedId, conversations, sortedPartners, setSelectedId]);
+  }, [selectedId, conversations, sortedPartners, setSelectedId, deepLinkId]);
 
   /** スマホ: トーク一覧へ戻る (トークを閉じる。開いたままだと新着が既読になってしまう) */
   const backToList = () => {

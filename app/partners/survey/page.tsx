@@ -70,7 +70,14 @@ export default async function PartnerSurveyAdminPage() {
       typedName: response?.companyName ?? null,
       nameMatches: response ? companyNameMatches(response.companyName, p.name) : null,
       applied,
-      pending: applied ? [] : p.surveyResponses.map((l) => ({ logId: l.id, typedName: l.companyName, answeredAt: l.createdAt.toISOString() })),
+      pending: applied
+        ? []
+        : p.surveyResponses.map((l) => ({
+            logId: l.id,
+            typedName: l.companyName,
+            answeredAt: l.createdAt.toISOString(),
+            nameMatches: companyNameMatches(l.companyName, p.name),
+          })),
       scope: p.introducibleScope,
       fields: parseCsv(p.introducibleFields),
       nationalities: parseCsv(p.introducibleNationalities),

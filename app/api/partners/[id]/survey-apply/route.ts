@@ -27,7 +27,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!response) return Response.json({ ok: false, error: "回答がありません" }, { status: 404 });
       await applySurveyResponse(partnerId, response);
       await prisma.partner.update({ where: { id: partnerId }, data: { surveyResponse: response } });
-      await prisma.partnerSurveyResponseLog.update({ where: { id: logId }, data: { applied: true } });
+      // 選んだ回答と、それより前の未反映は「確認済み」にする (後から古い回答が要確認に戻らないように)。それより新しい未反映は残す
+      const chosen = await prisma.partnerSurveyResponseLog.findUniqueOrThrow({ where: { id: logId }, select: { createdAt: true } });
+      await prisma.partnerSurveyResponseLog.updateMany({
+        where: { partnerId, applied: false, createdAt: { lte: chosen.createdAt } },
+        data: { applied: true },
+      });
       return Response.json({ ok: true });
     }
     const partner = await prisma.partner.findUnique({ where: { id: partnerId }, select: { surveyResponse: true } });
