@@ -5,7 +5,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { AuthError, requireApiAccount } from "@/lib/auth";
+import { AuthError, requireApiAdmin } from "@/lib/auth";
 import { readSurveyResponse } from "@/lib/partner-survey";
 import { applySurveyResponse } from "@/lib/partner-survey-server";
 
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireApiAccount();
+    await requireApiAdmin();
     const { id } = await params;
     const partnerId = Number(id);
     if (!Number.isFinite(partnerId)) return Response.json({ ok: false, error: "id が不正です" }, { status: 400 });
