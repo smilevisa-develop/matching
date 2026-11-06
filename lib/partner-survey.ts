@@ -119,13 +119,16 @@ export const SURVEY_URL_VARIABLE = "アンケートURL";
  */
 export const SURVEY_REQUEST_TEXT = [
   "日頃よりご協力いただき、誠にありがとうございます。",
+  "",
   "ご紹介いただける人材の最新の状況を確認させていただきたく、アンケートへのご協力をお願いいたします。",
   "所要時間は約3分です。ご回答の内容は、今後の求人のご案内に活用いたします。",
   "",
   "▼ご回答はこちら",
   "{{アンケートURL}}",
   "",
-  "Thank you for your continued support. We would appreciate it if you could update the status of the candidates you can introduce (about 3 minutes). Your answers will help us send you job offers that fit your candidates.",
+  "※今後もお取引を継続させていただくため、お手数ですが必ずご回答をお願いいたします。",
+  "",
+  "Thank you for your continued support. We would appreciate it if you could update the status of the candidates you can introduce (about 3 minutes). Your answers will help us send you job offers that fit your candidates. Please be sure to reply so that we can continue working together.",
 ].join("\n");
 
 /** メールの件名の既定 */
