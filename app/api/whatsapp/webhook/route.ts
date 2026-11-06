@@ -2,7 +2,7 @@
  * WhatsApp Cloud API Webhook (Meta → SMILE MATCHING)
  *
  * Meta WhatsApp Business Manager の Webhook 設定で:
- *   Callback URL = https://matching.up.railway.app/api/whatsapp/webhook
+ *   Callback URL = https://matching.smilereach.jp/api/whatsapp/webhook
  *   Verify Token  = WA_VERIFY_TOKEN (Railway 環境変数)
  *   購読フィールド = messages, message_template_status_update
  *

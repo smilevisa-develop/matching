@@ -22,7 +22,7 @@ jobs:
       - name: 同期エンドポイントを呼ぶ
         env:
           # 本番 URL が変わったときだけ APP_URL secret を設定すれば上書きできる
-          APP_URL: ${{ secrets.APP_URL || 'https://matching.up.railway.app' }}
+          APP_URL: ${{ secrets.APP_URL || 'https://matching.smilereach.jp' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail

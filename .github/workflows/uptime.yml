@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: 本番の応答を確認する
         env:
-          APP_URL: ${{ secrets.APP_URL || 'https://matching.up.railway.app' }}
+          APP_URL: ${{ secrets.APP_URL || 'https://matching.smilereach.jp' }}
         run: |
           for i in 1 2 3; do
             if curl -fsS -m 20 -o /dev/null "${APP_URL%/}/api/health"; then echo "OK"; exit 0; fi
@@ -25,7 +25,7 @@ jobs:
       - name: 応答がないときはメールする
         if: failure()
         env:
-          APP_URL: ${{ secrets.APP_URL || 'https://matching.up.railway.app' }}
+          APP_URL: ${{ secrets.APP_URL || 'https://matching.smilereach.jp' }}
           SCRIPT_URL: ${{ secrets.APPS_SCRIPT_EMAIL_URL }}
           SCRIPT_SECRET: ${{ secrets.APPS_SCRIPT_EMAIL_SECRET }}
         run: |

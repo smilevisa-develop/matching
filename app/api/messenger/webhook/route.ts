@@ -2,7 +2,7 @@
  * Messenger Webhook (Meta Page → SMILE MATCHING)
  *
  * Meta for Developers の Webhooks 設定で:
- *   Callback URL = https://matching.up.railway.app/api/messenger/webhook
+ *   Callback URL = https://matching.smilereach.jp/api/messenger/webhook
  *   Verify Token  = FB_VERIFY_TOKEN (Railway 環境変数)
  *   購読フィールド = messages, messaging_postbacks
  *
