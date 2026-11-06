@@ -23,7 +23,7 @@ export type SurveyInitial = {
   answers: SurveyAnswers;
 };
 
-type Form = SurveyInitial & { companyName: string; contactName: string };
+type Form = SurveyInitial & { companyName: string; contactName: string; otherNationality: string };
 type ListKey = "introducibleNationalities" | "introducibleFields" | "introducibleResidenceStatuses";
 
 const NATIONALITY_EN: Record<string, string> = {
@@ -64,7 +64,13 @@ export default function PartnerSurveyClient({
   /** 社内確認用。送信ボタンは押せない */
   preview?: boolean;
 }) {
-  const [form, setForm] = useState<Form>({ ...initial, companyName: "", contactName: "" });
+  // 選択肢に無い国籍 (登録済みの値のうち選択肢に無いものは「その他」の欄に入れておく)
+  const [form, setForm] = useState<Form>(() => {
+    const known = initial.introducibleNationalities.filter((n) => (INTRODUCIBLE_NATIONALITIES as readonly string[]).includes(n));
+    const other = initial.introducibleNationalities.filter((n) => !known.includes(n));
+    return { ...initial, introducibleNationalities: known, otherNationality: other.join("、"), companyName: "", contactName: "" };
+  });
+  const [otherOpen, setOtherOpen] = useState(() => initial.introducibleNationalities.some((n) => !(INTRODUCIBLE_NATIONALITIES as readonly string[]).includes(n)));
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +84,7 @@ export default function PartnerSurveyClient({
   const missingName = !form.companyName.trim();
   const missingCompanyLocation = !(form.answers.companyLocation ?? [])[0];
   const missingCandidateLocation = !(form.answers.candidateLocation ?? [])[0];
-  const missingNationalities = form.introducibleNationalities.length === 0;
+  const missingNationalities = form.introducibleNationalities.length === 0 && !(otherOpen && form.otherNationality.trim());
   const missingFields = form.introducibleFields.length === 0;
   const missingStatuses = form.introducibleResidenceStatuses.length === 0;
   const invalid = missingName || missingCompanyLocation || missingCandidateLocation || missingNationalities || missingFields || missingStatuses;
@@ -97,7 +103,7 @@ export default function PartnerSurveyClient({
       const res = await fetch(`/api/partner-survey/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, otherNationality: otherOpen ? form.otherNationality : "" }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
@@ -204,6 +210,12 @@ export default function PartnerSurveyClient({
               label={NATIONALITY_EN[n] ? `${n} / ${NATIONALITY_EN[n]}` : n}
             />
           ))}
+          <Option type="checkbox" checked={otherOpen} onChange={() => setOtherOpen((v) => !v)} label="その他 / Other" />
+          {otherOpen ? (
+            <div className="pl-8">
+              <TextInput value={form.otherNationality} onChange={(v) => set("otherNationality", v)} placeholder="国名を入力 / Country name (comma separated)" />
+            </div>
+          ) : null}
         </Question>
 
         <Question title="紹介できる分野" en="Industries you can introduce (select all that apply)" required error={tried && missingFields}>

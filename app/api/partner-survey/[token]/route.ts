@@ -32,7 +32,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       companyName: str(body.companyName, 200),
       contactName: str(body.contactName, 200),
       answers: readSurveyAnswers(body.answers),
-      introducibleNationalities: pick(body.introducibleNationalities, INTRODUCIBLE_NATIONALITIES),
+      // 選択肢に無い国籍は「その他」の自由入力 (読点・カンマ区切り、1 つ 30 文字まで、5 つまで)
+      introducibleNationalities: [
+        ...pick(body.introducibleNationalities, INTRODUCIBLE_NATIONALITIES),
+        ...str(body.otherNationality, 200)
+          .split(/[、,，/／]/)
+          .map((x) => x.trim().slice(0, 30))
+          .filter((x) => x && !(INTRODUCIBLE_NATIONALITIES as readonly string[]).includes(x))
+          .slice(0, 5),
+      ],
       introducibleFields: pick(body.introducibleFields, INTRODUCIBLE_FIELDS),
       introducibleResidenceStatuses: pick(body.introducibleResidenceStatuses, INTRODUCIBLE_RESIDENCE_STATUSES),
       feeAmount: str(body.feeAmount, 200),
