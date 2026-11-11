@@ -47,15 +47,12 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "total", desc: true });
   const [platforms, setPlatforms] = useState<PlatformKey[]>(PLATFORMS.map((p) => p.key));
   const [q, setQ] = useState("");
-  const [allOnly, setAllOnly] = useState(false);
-  const [min, setMin] = useState("");
 
   const cols = PLATFORMS.filter((p) => platforms.includes(p.key));
   const picked = (r: VideoRow) => cols.map((p) => r.cells[p.key]).filter((c): c is VideoCell => !!c);
 
   const shown = useMemo(() => {
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const minN = Number(min);
     const sortVal = (r: VideoRow): number | string => {
       if (sort.key === "date") return r.date;
       if (sort.key === "title") return r.title.toLowerCase();
@@ -66,8 +63,6 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
     return rows
       .filter((r) => words.every((w) => r.title.toLowerCase().includes(w)))
       .filter((r) => picked(r).length > 0)
-      .filter((r) => !allOnly || cols.every((p) => r.cells[p.key]))
-      .filter((r) => !min || metric === "rate" || (valueOf(picked(r), metric) ?? 0) >= minN)
       .sort((a, b) => {
         const x = sortVal(a);
         const y = sortVal(b);
@@ -75,7 +70,7 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
         return sort.desc ? -d : d;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, q, min, allOnly, metric, sort, platforms]);
+  }, [rows, q, metric, sort, platforms]);
 
   const head = (key: SortKey, label: React.ReactNode, right = true) => (
     <th className={`whitespace-nowrap px-3 py-2.5 ${right ? "text-right" : "text-left"}`}>
@@ -118,15 +113,6 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
             </label>
           ))}
         </div>
-        <label className="flex items-center gap-2 font-medium">
-          合計が
-          <input type="number" min={0} className={`${SELECT} w-24`} value={min} onChange={(e) => setMin(e.target.value)} disabled={metric === "rate"} />
-          以上
-        </label>
-        <label className="flex items-center gap-1.5 font-medium">
-          <input type="checkbox" checked={allOnly} onChange={(e) => setAllOnly(e.target.checked)} />
-          選んだ媒体すべてに上げた動画だけ
-        </label>
         <input type="search" placeholder="題名で探す" className={`${SELECT} w-48`} value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 

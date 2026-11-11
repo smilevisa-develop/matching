@@ -6,7 +6,7 @@ import { getTiktokConnection, getTiktokStats } from "@/lib/sns-tiktok";
 import SnsChart from "./SnsChart";
 import VideoTable, { type VideoRow } from "./VideoTable";
 import { PLATFORMS, type PlatformKey } from "@/lib/sns-platforms";
-import { FUNNEL_PLATFORMS, getFunnelCounts, type FunnelCounts } from "@/lib/sns-funnel";
+import { FUNNEL_PLATFORMS, getFunnelCounts, type FunnelCounts, type FunnelPlatform } from "@/lib/sns-funnel";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +14,9 @@ export const dynamic = "force-dynamic";
  * SNS の数字。目的は「SNS で求職者を集めて、Facebook ページでの相談につなげる」こと。
  * 一番上で国 (インドネシア / ベトナム / 比較 = 2 か国を横に並べる) と期間 (1 週間 / 2 週間 / 30 日 / 60 日) を選ぶ。どちらもページ全体に効く。
  * 1. 公開日ごとの再生数 (媒体別の積み上げ)
- * 2. まとめ: 投稿 → 再生 → リンクのクリック → Facebook で相談。前の同じ日数と比べる
- * 3. 相談につながった数: どの媒体のリンクから Facebook ページに来たか
- * 4. 媒体ごと: フォロワー・投稿数・再生・1 本あたりの再生・反応
- * 5. 動画ごと: 行 = 動画、列 = 媒体。並び替え・絞り込みは VideoTable.tsx
+ * 2. まとめ: 投稿 → 再生 → リンクのクリック → Facebook で相談 (と別枠の LINE)。前の同じ日数と比べる
+ * 3. 媒体ごと: フォロワー・投稿数・再生・1 本あたりの再生・反応・リンクのクリック
+ * 4. 動画ごと: 行 = 動画、列 = 媒体。並び替え・絞り込みは VideoTable.tsx
  * 接続は設定ページの「SNS 連携」
  */
 type Country = "id" | "vn" | "other";
@@ -55,6 +54,11 @@ function publishedWithin(date: string, days: number, offset = 0) {
   const until = Date.now() - offset * 86400_000;
   const t = new Date(date).getTime();
   return t >= until - days * 86400_000 && t < until;
+}
+/** 期間のすべての日 (日本時間の YYYY-MM-DD、古い順) */
+function periodDates(days: number) {
+  const today = Date.now() + 9 * 3600_000;
+  return Array.from({ length: days }, (_, i) => new Date(today - (days - 1 - i) * 86400_000).toISOString().slice(0, 10));
 }
 const platformOf = (k: PlatformKey) => PLATFORMS.find((p) => p.key === k)!;
 
@@ -130,28 +134,30 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
       </div>
 
       {/* 国のタブと期間。ページ全体 (グラフも) に効く */}
-      <div className="sticky top-0 z-20 -mx-8 flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 bg-white/95 px-8 py-3 backdrop-blur">
-        <nav className="flex gap-1">
+      <div className="sticky top-0 z-20 -mx-8 flex flex-wrap items-end justify-between gap-4 border-b border-gray-300 bg-white px-8 pt-2">
+        <nav className="flex gap-2">
           {TABS.map((t) => (
             <Link
               key={t.key}
               href={href({ c: t.key })}
-              className={`rounded-lg px-5 py-2 text-base font-semibold ${t.key === tab ? "bg-[var(--color-primary)] text-white" : "text-[var(--color-text-dark)] hover:bg-gray-100"}`}
+              className={`-mb-px border-b-[3px] px-5 pb-3 pt-2 text-base font-bold ${
+                t.key === tab ? "border-[var(--color-primary)] text-[var(--color-primary)]" : "border-transparent text-[var(--color-text-dark)] hover:border-gray-300"
+              }`}
             >
               {t.label}
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
+        <div className="mb-2 flex items-center gap-2">
           <span className="text-sm font-semibold text-[var(--color-text-dark)]">期間</span>
-          <div className="inline-flex overflow-hidden rounded-lg border border-gray-300">
+          <div className="inline-flex rounded-lg bg-gray-100 p-1">
             {PERIODS.map((p) => (
               <Link
                 key={p.days}
                 href={href({ d: p.days })}
-                className={`px-3.5 py-1.5 text-sm font-medium ${p.days === days ? "bg-[var(--color-primary)] text-white" : "bg-white text-[var(--color-text-dark)] hover:bg-gray-50"}`}
+                className={`rounded-md px-3 py-1 text-sm font-semibold ${p.days === days ? "bg-white text-[var(--color-text-dark)] shadow" : "text-[var(--color-text-dark)] hover:bg-white/60"}`}
               >
-                {p.label}
+                {p.label.replace("直近 ", "")}
               </Link>
             ))}
           </div>
@@ -167,6 +173,7 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
 
       {/* 1. 公開日ごとの再生数 */}
       <SnsChart
+        dates={periodDates(days)}
         groups={shown.map((c) => ({
           label: tab === "compare" ? c.label : "",
           items: cur.filter((v) => v.country === c.key).map((v) => ({ platform: v.platform, date: v.date, views: v.views, title: v.title })),
@@ -180,58 +187,30 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
           const pv = prev.filter((x) => x.country === c.key);
           const clicks = (f: FunnelCounts) => sum(FUNNEL_PLATFORMS.map((p) => f.clicks[c.key][p.key]));
           return (
-            <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}${periodLabel}のまとめ（その前の${periodLabel.replace("直近 ", "")}と比べて）`}>
-              <div className={`grid grid-cols-2 gap-3 ${tab === "compare" ? "2xl:grid-cols-4" : "md:grid-cols-4"}`}>
+            <section key={c.key} className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <h2 className="border-b border-gray-100 px-6 py-3 text-sm font-semibold text-[var(--color-text-dark)]">
+                {tab === "compare" ? `${c.label}　` : ""}
+                {periodLabel}（その前の {periodLabel.replace("直近 ", "")}と比べて）
+              </h2>
+              <div className="grid grid-cols-2 divide-gray-100 sm:grid-cols-5 sm:divide-x">
                 <Kpi label="投稿" value={v.length} prev={pv.length} unit="本" />
                 <Kpi label="再生" value={sum(v.map((x) => x.views))} prev={sum(pv.map((x) => x.views))} />
-                <Kpi label="リンク" value={clicks(funnel)} prev={clicks(funnelPrev)} />
+                <Kpi label="リンクのクリック" value={clicks(funnel)} prev={clicks(funnelPrev)} />
                 <Kpi label="Facebook で相談" value={funnel.inquiries[c.key].Messenger} prev={funnelPrev.inquiries[c.key].Messenger} unit="人" strong />
+                <Kpi label="LINE（別枠）" value={funnel.inquiries[c.key].LINE} prev={funnelPrev.inquiries[c.key].LINE} unit="人" />
               </div>
-              <p className="mt-3 text-xs text-[var(--color-text-dark)]">再生はこの期間に公開した動画の再生。リンクはプロフィールのリンクが押された回数</p>
-            </Card>
+            </section>
           );
         })}
       </div>
 
-      {/* 3. 相談につながった数 */}
-      <div className={grid}>
-        {shown.map((c) => (
-          <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}相談につながった数`}>
-            <Table
-              head={[...FUNNEL_PLATFORMS.map((p) => `${p.label} のリンク`), "リンクの合計", "Facebook で相談", "LINE（別枠）"]}
-              align={FUNNEL_PLATFORMS.map(() => "right" as const).concat(["right", "right", "right"])}
-              rows={[
-                [
-                  ...FUNNEL_PLATFORMS.map((p) => fmt(funnel.clicks[c.key][p.key])),
-                  <span key="t" className="font-semibold">{fmt(sum(FUNNEL_PLATFORMS.map((p) => funnel.clicks[c.key][p.key])))}</span>,
-                  <span key="m" className="text-base font-bold">{fmt(funnel.inquiries[c.key].Messenger)} 人</span>,
-                  `${fmt(funnel.inquiries[c.key].LINE)} 人`,
-                ],
-              ]}
-            />
-          </Card>
-        ))}
-      </div>
-      <p className="-mt-3 text-xs text-[var(--color-text-dark)]">
-        「リンク」はプロフィールのリンクが押されて Facebook ページに来た回数（同じ人の 2 回目も数える）。「Facebook で相談」は Facebook ページに初めてメッセージをした人数（どの媒体から来たかは分からない）。LINE は別の窓口
-        {account.role === "admin" ? (
-          <>
-            {"（リンクは "}
-            <a href="/settings#sns" className="font-medium text-[var(--color-primary)] hover:underline">
-              設定の「相談リンク」
-            </a>
-            {"）"}
-          </>
-        ) : null}
-      </p>
-
-      {/* 4. 媒体ごと */}
+      {/* 3. 媒体ごと */}
       <div className={grid}>
         {shown.map((c) => (
           <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}媒体ごと`}>
             <Table
-              head={["媒体", "フォロワー", "投稿", "再生", "1 本あたり", "いいね", "コメント"]}
-              align={["left", "right", "right", "right", "right", "right", "right"]}
+              head={["媒体", "フォロワー", "投稿", "再生", "1 本あたり", "いいね", "コメント", "リンクのクリック"]}
+              align={["left", "right", "right", "right", "right", "right", "right", "right"]}
               rows={PLATFORMS.flatMap((p) => {
                 const as = accts.filter((a) => a.country === c.key && a.platform === p.key);
                 if (as.length === 0) return [];
@@ -246,6 +225,7 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
                     fmt(v.length ? Math.round(views / v.length) : null),
                     fmt(sum(v.map((x) => x.likes))),
                     fmt(sum(v.map((x) => x.comments))),
+                    p.key === "facebook" ? "-" : fmt(funnel.clicks[c.key][p.key as FunnelPlatform]),
                   ],
                 ];
               })}
@@ -254,7 +234,11 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
         ))}
       </div>
 
-      {/* 5. 動画ごと (行 = 動画、列 = 媒体) */}
+      <p className="-mt-3 text-xs text-[var(--color-text-dark)]">
+        再生・いいね・コメントはこの期間に公開した動画の分。「リンクのクリック」はプロフィールのリンクが押されて Facebook ページに来た回数（同じ人の 2 回目も数える）。「Facebook で相談」は Facebook ページに初めてメッセージをした人数（どの媒体から来たかは分からない）。LINE は別の窓口
+      </p>
+
+      {/* 4. 動画ごと (行 = 動画、列 = 媒体) */}
       <div className={grid}>
         {shown.map((c) => (
           <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}動画ごと`}>
@@ -287,24 +271,23 @@ function toRows(videos: Video[], countryLabel: string): VideoRow[] {
 }
 const add = (a: number | null, b: number | null) => (a === null && b === null ? null : (a ?? 0) + (b ?? 0));
 
-/** 数字のカード。前の期間と比べた増減を出す */
+/** 数字 1 つ。前の期間と比べた増減を出す (Google アナリティクスの概要の形) */
 function Kpi({ label, value, prev, unit = "", strong = false }: { label: string; value: number; prev: number; unit?: string; strong?: boolean }) {
   const diff = value - prev;
   const pct = prev > 0 ? Math.round((diff / prev) * 100) : null;
   return (
-    <div className={`rounded-xl px-4 py-3 ${strong ? "border-2 border-[var(--color-primary)] bg-white" : "bg-[var(--color-light)]"}`}>
-      <p className="text-sm font-medium text-[var(--color-text-dark)]">{label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--color-text-dark)]">
+    <div className={`px-6 py-4 ${strong ? "border-t-[3px] border-[var(--color-primary)]" : "border-t-[3px] border-transparent"}`}>
+      <p className="text-sm font-semibold text-[var(--color-text-dark)]">{label}</p>
+      <p className="mt-1 text-3xl font-bold tabular-nums text-[var(--color-text-dark)]">
         {fmt(value)}
-        {unit ? <span className="ml-0.5 text-sm font-semibold">{unit}</span> : null}
+        {unit ? <span className="ml-1 text-base font-semibold">{unit}</span> : null}
       </p>
-      <p className="mt-1 text-xs font-semibold tabular-nums">
+      <p className="mt-1 text-sm font-semibold tabular-nums">
         <span className={diff > 0 ? "text-green-700" : diff < 0 ? "text-red-700" : "text-[var(--color-text-dark)]"}>
-          {diff > 0 ? "▲" : diff < 0 ? "▼" : "±"}
-          {fmt(Math.abs(diff))}
-          {pct !== null ? `（${diff >= 0 ? "+" : ""}${pct}%）` : ""}
+          {diff > 0 ? "↑" : diff < 0 ? "↓" : ""}
+          {pct !== null ? `${Math.abs(pct)}%` : diff === 0 ? "変化なし" : `${fmt(Math.abs(diff))}`}
         </span>
-        <span className="ml-1 font-normal text-[var(--color-text-dark)]">前 {fmt(prev)}</span>
+        <span className="ml-1.5 font-normal text-[var(--color-text-dark)]">前 {fmt(prev)}</span>
       </p>
     </div>
   );

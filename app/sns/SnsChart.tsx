@@ -12,7 +12,8 @@ const WIDE = 1120;
 const H = 260;
 const PAD = { top: 12, right: 12, bottom: 44, left: 52 };
 
-export default function SnsChart({ groups }: { groups: ChartGroup[] }) {
+/** dates = 期間のすべての日 (日本時間の YYYY-MM-DD)。投稿のない日も空けて並べる */
+export default function SnsChart({ groups, dates }: { groups: ChartGroup[]; dates: string[] }) {
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -28,7 +29,7 @@ export default function SnsChart({ groups }: { groups: ChartGroup[] }) {
       </div>
       <div className={`mt-4 grid gap-6 ${groups.length > 1 ? "lg:grid-cols-2" : ""}`}>
         {groups.map((g) => (
-          <OneChart key={g.label} group={g} W={groups.length > 1 ? NARROW : WIDE} />
+          <OneChart key={g.label} group={g} dates={dates} W={groups.length > 1 ? NARROW : WIDE} />
         ))}
       </div>
     </section>
@@ -37,13 +38,15 @@ export default function SnsChart({ groups }: { groups: ChartGroup[] }) {
 
 type Bar = { date: string; total: number; parts: { platform: PlatformKey; views: number; titles: string[] }[] };
 
-function OneChart({ group, W }: { group: ChartGroup; W: number }) {
+function OneChart({ group, dates, W }: { group: ChartGroup; dates: string[]; W: number }) {
   const [hover, setHover] = useState<number | null>(null);
-  const byDate = new Map<string, Bar>();
+  const byDate = new Map<string, Bar>(dates.map((d) => [d, { date: d, total: 0, parts: PLATFORMS.map((p) => ({ platform: p.key, views: 0, titles: [] })) }]));
   for (const it of group.items) {
     if (!it.date) continue;
-    const d = it.date.slice(0, 10);
-    const bar = byDate.get(d) ?? { date: d, total: 0, parts: PLATFORMS.map((p) => ({ platform: p.key, views: 0, titles: [] })) };
+    // 日本時間の日付
+    const d = new Date(new Date(it.date).getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+    const bar = byDate.get(d);
+    if (!bar) continue;
     const part = bar.parts.find((p) => p.platform === it.platform)!;
     part.views += it.views;
     if (it.title) part.titles.push(it.title);
@@ -55,7 +58,7 @@ function OneChart({ group, W }: { group: ChartGroup; W: number }) {
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
   const slot = bars.length ? plotW / bars.length : plotW;
-  const barW = Math.max(6, Math.min(36, slot * 0.7));
+  const barW = Math.max(4, Math.min(48, slot * 0.6));
   const y = (v: number) => PAD.top + plotH - (v / max) * plotH;
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(max * t));
   const fmt = (v: number) => v.toLocaleString("ja-JP");
@@ -66,8 +69,8 @@ function OneChart({ group, W }: { group: ChartGroup; W: number }) {
   return (
     <div>
       {group.label ? <h3 className="text-sm font-semibold text-[var(--color-text-dark)]">{group.label}</h3> : null}
-      {bars.length === 0 ? (
-        <p className="mt-2 text-sm text-[var(--color-text-dark)]">まだ動画がありません</p>
+      {bars.every((b) => b.total === 0) ? (
+        <p className="mt-2 text-sm text-[var(--color-text-dark)]">この期間に公開した動画はありません</p>
       ) : (
         <div className="relative mt-2">
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`${group.label} の公開日ごとの再生数`} onMouseLeave={() => setHover(null)}>
