@@ -121,21 +121,22 @@ export default async function ShareListPage({ params }: { params: Promise<{ toke
                 {r.map((c, ci) => (
                   <td
                     key={ci}
-                    className={`max-w-[260px] border-b border-r border-[#e2e3e3] px-2 py-1.5 align-middle ${numeric(ci, c.text) ? "text-right" : "text-left"}`}
+                    title={c.text || undefined}
+                    className={`h-[25px] max-w-[240px] overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-[#e2e3e3] px-2 py-0.5 align-middle ${numeric(ci, c.text) ? "text-right" : "text-left"}`}
                   >
                     {c.chip && c.text ? (
-                      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[#e6e6e6] py-0.5 pl-2.5 pr-1.5 text-[12px] text-[#202124]">
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[#e6e6e6] py-px pl-2.5 pr-1.5 text-[12px] text-[#202124]">
                         {c.text}
                         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden>
                           <path d="M2 3.5l3 3 3-3" fill="none" stroke="#444746" strokeWidth="1.4" />
                         </svg>
                       </span>
                     ) : c.href ? (
-                      <a href={c.href} target="_blank" rel="noopener noreferrer" className="break-all text-[#1155cc] underline">
+                      <a href={c.href} target="_blank" rel="noopener noreferrer" className="text-[#1155cc] underline">
                         {c.text}
                       </a>
                     ) : (
-                      <span className="whitespace-pre-wrap break-words">{c.text}</span>
+                      c.text
                     )}
                   </td>
                 ))}
