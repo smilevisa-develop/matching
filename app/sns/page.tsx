@@ -152,12 +152,13 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
           const clicks = (f: FunnelCounts) => sum(FUNNEL_PLATFORMS.map((p) => f.clicks[c.key][p.key]));
           return (
             <Card key={c.key} title={c.label}>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Kpi label="投稿した動画" value={v.length} prev={pv.length} unit="本" />
-                <Kpi label="その動画の再生" value={sum(v.map((x) => x.views))} prev={sum(pv.map((x) => x.views))} />
-                <Kpi label="リンクのクリック" value={clicks(funnel)} prev={clicks(funnelPrev)} />
+              <div className="grid grid-cols-2 gap-3 2xl:grid-cols-4">
+                <Kpi label="投稿" value={v.length} prev={pv.length} unit="本" />
+                <Kpi label="再生" value={sum(v.map((x) => x.views))} prev={sum(pv.map((x) => x.views))} />
+                <Kpi label="リンク" value={clicks(funnel)} prev={clicks(funnelPrev)} />
                 <Kpi label="Facebook で相談" value={funnel.inquiries[c.key].Messenger} prev={funnelPrev.inquiries[c.key].Messenger} unit="人" strong />
               </div>
+              <p className="mt-3 text-xs text-[var(--color-text-dark)]">再生はこの期間に公開した動画の再生。リンクはプロフィールのリンクが押された回数</p>
             </Card>
           );
         })}
@@ -201,7 +202,7 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
         <Table
           head={["", "媒体", "フォロワー", "投稿した動画", "その動画の再生", "1 本あたりの再生", "いいね", "コメント"]}
           align={["left", "left", "right", "right", "right", "right", "right", "right"]}
-          rows={[...COUNTRIES, { key: "other" as const, label: "その他" }].flatMap((c) =>
+          rows={COUNTRIES.flatMap((c) =>
             PLATFORMS.flatMap((p) => {
               const as = accts.filter((a) => a.country === c.key && a.platform === p.key);
               if (as.length === 0) return [];
