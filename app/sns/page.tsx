@@ -180,63 +180,55 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
         }))}
       />
 
-      {/* 2. まとめ (前の同じ日数と比べる) */}
+      {/* 2. まとめ (前の同じ日数と比べる) と 3. 媒体ごと。1 か国のときは左右に並べる */}
       <div className={grid}>
         {shown.map((c) => {
           const v = cur.filter((x) => x.country === c.key);
           const pv = prev.filter((x) => x.country === c.key);
           const clicks = (f: FunnelCounts) => sum(FUNNEL_PLATFORMS.map((p) => f.clicks[c.key][p.key]));
+          const name = tab === "compare" ? `${c.label}　` : "";
           return (
-            <section key={c.key} className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-              <h2 className="border-b border-gray-100 px-6 py-3 text-sm font-semibold text-[var(--color-text-dark)]">
-                {tab === "compare" ? `${c.label}　` : ""}
-                {periodLabel}（その前の {periodLabel.replace("直近 ", "")}と比べて）
-              </h2>
-              <div className="grid grid-cols-2 divide-gray-100 sm:grid-cols-5 sm:divide-x">
-                <Kpi label="投稿" value={v.length} prev={pv.length} unit="本" />
-                <Kpi label="再生" value={sum(v.map((x) => x.views))} prev={sum(pv.map((x) => x.views))} />
-                <Kpi label="リンクのクリック" value={clicks(funnel)} prev={clicks(funnelPrev)} />
-                <Kpi label="Facebook で相談" value={funnel.inquiries[c.key].Messenger} prev={funnelPrev.inquiries[c.key].Messenger} unit="人" strong />
-                <Kpi label="LINE" value={funnel.inquiries[c.key].LINE} prev={funnelPrev.inquiries[c.key].LINE} unit="人" />
-              </div>
-            </section>
+            <div key={c.key} className={tab === "compare" ? "space-y-6" : "grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"}>
+              <Card title={`${name}${periodLabel}（その前の ${periodLabel.replace("直近 ", "")}と比べて）`}>
+                <div className="-my-1 divide-y divide-gray-100">
+                  <Kpi label="投稿" value={v.length} prev={pv.length} unit="本" />
+                  <Kpi label="再生" value={sum(v.map((x) => x.views))} prev={sum(pv.map((x) => x.views))} />
+                  <Kpi label="リンクのクリック" value={clicks(funnel)} prev={clicks(funnelPrev)} />
+                  <Kpi label="Facebook で相談" value={funnel.inquiries[c.key].Messenger} prev={funnelPrev.inquiries[c.key].Messenger} unit="人" strong />
+                  <Kpi label="LINE" value={funnel.inquiries[c.key].LINE} prev={funnelPrev.inquiries[c.key].LINE} unit="人" />
+                </div>
+              </Card>
+              <Card title={`${name}媒体ごと`}>
+                <Table
+                  head={["媒体", "フォロワー", "投稿", "再生", "1 本あたり", "いいね", "コメント", "リンク"]}
+                  align={["left", "right", "right", "right", "right", "right", "right", "right"]}
+                  rows={PLATFORMS.flatMap((p) => {
+                    const as = accts.filter((a) => a.country === c.key && a.platform === p.key);
+                    if (as.length === 0) return [];
+                    const pvids = v.filter((x) => x.platform === p.key);
+                    const views = sum(pvids.map((x) => x.views));
+                    return [
+                      [
+                        <PlatformName key="p" platform={p.key} url={as[0].url} />,
+                        fmt(as.some((a) => a.followers !== null) ? sum(as.map((a) => a.followers)) : null),
+                        fmt(pvids.length),
+                        <span key="v" className="font-semibold">{fmt(views)}</span>,
+                        fmt(pvids.length ? Math.round(views / pvids.length) : null),
+                        fmt(sum(pvids.map((x) => x.likes))),
+                        fmt(sum(pvids.map((x) => x.comments))),
+                        p.key === "facebook" ? "-" : fmt(funnel.clicks[c.key][p.key as FunnelPlatform]),
+                      ],
+                    ];
+                  })}
+                />
+                <p className="mt-3 text-xs text-[var(--color-text-dark)]">
+                  再生・いいね・コメントはこの期間に公開した動画の分。リンクはプロフィールのリンクが押されて Facebook ページに来た回数。Facebook で相談は Facebook ページに初めてメッセージをした人数
+                </p>
+              </Card>
+            </div>
           );
         })}
       </div>
-
-      {/* 3. 媒体ごと */}
-      <div className={grid}>
-        {shown.map((c) => (
-          <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}媒体ごと`}>
-            <Table
-              head={["媒体", "フォロワー", "投稿", "再生", "1 本あたり", "いいね", "コメント", "リンクのクリック"]}
-              align={["left", "right", "right", "right", "right", "right", "right", "right"]}
-              rows={PLATFORMS.flatMap((p) => {
-                const as = accts.filter((a) => a.country === c.key && a.platform === p.key);
-                if (as.length === 0) return [];
-                const v = cur.filter((x) => x.country === c.key && x.platform === p.key);
-                const views = sum(v.map((x) => x.views));
-                return [
-                  [
-                    <PlatformName key="p" platform={p.key} url={as[0].url} />,
-                    fmt(as.some((a) => a.followers !== null) ? sum(as.map((a) => a.followers)) : null),
-                    fmt(v.length),
-                    <span key="v" className="font-semibold">{fmt(views)}</span>,
-                    fmt(v.length ? Math.round(views / v.length) : null),
-                    fmt(sum(v.map((x) => x.likes))),
-                    fmt(sum(v.map((x) => x.comments))),
-                    p.key === "facebook" ? "-" : fmt(funnel.clicks[c.key][p.key as FunnelPlatform]),
-                  ],
-                ];
-              })}
-            />
-          </Card>
-        ))}
-      </div>
-
-      <p className="-mt-3 text-xs text-[var(--color-text-dark)]">
-        再生・いいね・コメントはこの期間に公開した動画の分。「リンクのクリック」はプロフィールのリンクが押されて Facebook ページに来た回数（同じ人の 2 回目も数える）。「Facebook で相談」は Facebook ページに初めてメッセージをした人数（どの媒体から来たかは分からない）。LINE は別の窓口
-      </p>
 
       {/* 4. 動画ごと (行 = 動画、列 = 媒体) */}
       <div className={grid}>
@@ -271,24 +263,26 @@ function toRows(videos: Video[], countryLabel: string): VideoRow[] {
 }
 const add = (a: number | null, b: number | null) => (a === null && b === null ? null : (a ?? 0) + (b ?? 0));
 
-/** 数字 1 つ。前の期間と比べた増減を出す (Google アナリティクスの概要の形) */
+/** 数字 1 行。左に名前、右に数字と前の期間からの増減 (Google アナリティクスの主な指標の形) */
 function Kpi({ label, value, prev, unit = "", strong = false }: { label: string; value: number; prev: number; unit?: string; strong?: boolean }) {
   const diff = value - prev;
   const pct = prev > 0 ? Math.round((diff / prev) * 100) : null;
   return (
-    <div className="px-6 py-4">
+    <div className="flex items-center justify-between gap-4 py-3">
       <p className="text-sm font-semibold text-[var(--color-text-dark)]">{label}</p>
-      <p className={`mt-1 text-3xl font-bold tabular-nums ${strong ? "text-[var(--color-primary)]" : "text-[var(--color-text-dark)]"}`}>
-        {fmt(value)}
-        {unit ? <span className="ml-1 text-base font-semibold">{unit}</span> : null}
-      </p>
-      <p className="mt-1 text-sm font-semibold tabular-nums">
-        <span className={diff > 0 ? "text-green-700" : diff < 0 ? "text-red-700" : "text-[var(--color-text-dark)]"}>
-          {diff > 0 ? "↑" : diff < 0 ? "↓" : ""}
-          {pct !== null ? `${Math.abs(pct)}%` : diff === 0 ? "変化なし" : `${fmt(Math.abs(diff))}`}
-        </span>
-        <span className="ml-1.5 font-normal text-[var(--color-text-dark)]">前 {fmt(prev)}</span>
-      </p>
+      <div className="text-right">
+        <p className={`text-2xl font-bold leading-tight tabular-nums ${strong ? "text-[var(--color-primary)]" : "text-[var(--color-text-dark)]"}`}>
+          {fmt(value)}
+          {unit ? <span className="ml-1 text-sm font-semibold">{unit}</span> : null}
+        </p>
+        <p className="text-xs font-semibold tabular-nums">
+          <span className={diff > 0 ? "text-green-700" : diff < 0 ? "text-red-700" : "text-[var(--color-text-dark)]"}>
+            {diff > 0 ? "↑" : diff < 0 ? "↓" : ""}
+            {pct !== null ? `${Math.abs(pct)}%` : diff === 0 ? "変化なし" : fmt(Math.abs(diff))}
+          </span>
+          <span className="ml-1.5 font-normal text-[var(--color-text-dark)]">前 {fmt(prev)}</span>
+        </p>
+      </div>
     </div>
   );
 }

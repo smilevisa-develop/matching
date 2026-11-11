@@ -176,9 +176,6 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs text-[var(--color-text-dark)]">
-        {shown.length} 本。列の名前を押すと並び替え（もう一度押すと逆順）。数字を押すとその媒体の投稿が開きます。反応率は（いいね＋コメント＋シェア）÷ 再生。「-」はその媒体に上げていないか、数字が取れないもの
-      </p>
     </div>
   );
 }
