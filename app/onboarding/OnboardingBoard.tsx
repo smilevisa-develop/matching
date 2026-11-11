@@ -1461,10 +1461,15 @@ function methodText(applicant: string, receive: string): string {
   return [applicant && `申請: ${applicant}`, receive && `受取: ${receive}`].filter(Boolean).join(" / ");
 }
 
+/** 申請種別が「申請なし」のときに聞かない項目 */
+const NO_APPLICATION_SKIP: InfoField[] = ["applicationPlannedAt", "applicantName", "applicationAt", "visaExpiryDate", "applicationResultAt", "receiveMethod", "entryAt"];
+
 /** 聞く必要がある項目か (内定日・内定承諾日は書類作成のみの人には聞かない。在留期日 (申請前) は日本にいる人だけ、入国日は海外から来る「認定」の人だけ) */
 function infoApplies(field: InfoField, v: Partial<Record<InfoField, string>>, card: OnboardingCard): boolean {
   // 書類作成のみの内定者は内定の経緯に関わっていないので、内定日・内定承諾日は聞かない
   if ((field === "offerAt" || field === "offerAcceptedAt") && card.documentsOnly) return false;
+  // 在留申請をしない人 (技人国の転職など) は、申請まわりと入国日を聞かない
+  if (v.applicationType === "申請なし" && NO_APPLICATION_SKIP.includes(field)) return false;
   if (field === "visaExpiryDate") return !!card.personId && v.applicationType !== "認定";
   if (field === "entryAt") return v.applicationType === "認定";
   return true;
