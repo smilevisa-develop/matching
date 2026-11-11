@@ -3,27 +3,40 @@ import { requireCurrentAccount } from "@/lib/auth";
 import { getYoutubeStats, youtubeConfigured } from "@/lib/sns-youtube";
 import { getMetaStats, metaConfigured } from "@/lib/sns-meta";
 import { getTiktokConnection, getTiktokStats } from "@/lib/sns-tiktok";
-import SnsChart, { type ChartGroup } from "./SnsChart";
+import SnsChart from "./SnsChart";
+import VideoTable, { type VideoRow } from "./VideoTable";
 import { PLATFORMS, type PlatformKey } from "@/lib/sns-platforms";
 import { FUNNEL_PLATFORMS, getFunnelCounts, type FunnelCounts } from "@/lib/sns-funnel";
 
 export const dynamic = "force-dynamic";
 
 /**
- * SNS の数字。目的は「SNS で求職者を集めて、Facebook ページでの相談につなげる」こと。上から順に:
- * 1. 公開日ごとの再生数 (媒体別の積み上げ。国ごと)
- * 2. 期間のまとめ (国ごと): 再生 → リンクのクリック → Facebook で相談。前の同じ日数と比べる
+ * SNS の数字。目的は「SNS で求職者を集めて、Facebook ページでの相談につなげる」こと。
+ * 一番上で国 (インドネシア / ベトナム / 比較 = 2 か国を横に並べる) と期間 (1 週間 / 2 週間 / 30 日 / 60 日) を選ぶ。どちらもページ全体に効く。
+ * 1. 公開日ごとの再生数 (媒体別の積み上げ)
+ * 2. まとめ: 投稿 → 再生 → リンクのクリック → Facebook で相談。前の同じ日数と比べる
  * 3. 相談につながった数: どの媒体のリンクから Facebook ページに来たか
  * 4. 媒体ごと: フォロワー・投稿数・再生・1 本あたりの再生・反応
- * 5. 動画ごと: 期間内に公開した動画を再生の多い順に
- * 期間は上の 7 日 / 30 日 / 90 日 で切り替える (1 のグラフは直近 30 公開日のまま)。接続は設定ページの「SNS 連携」
+ * 5. 動画ごと: 行 = 動画、列 = 媒体。並び替え・絞り込みは VideoTable.tsx
+ * 接続は設定ページの「SNS 連携」
  */
 type Country = "id" | "vn" | "other";
 const COUNTRIES: { key: Exclude<Country, "other">; label: string }[] = [
   { key: "id", label: "インドネシア" },
   { key: "vn", label: "ベトナム" },
 ];
-const PERIODS = [7, 30, 90] as const;
+const PERIODS = [
+  { days: 7, label: "直近 1 週間" },
+  { days: 14, label: "直近 2 週間" },
+  { days: 30, label: "直近 30 日" },
+  { days: 60, label: "直近 60 日" },
+] as const;
+type Tab = "id" | "vn" | "compare";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "id", label: "インドネシア" },
+  { key: "vn", label: "ベトナム" },
+  { key: "compare", label: "比較" },
+];
 
 function countryOf(name: string): Country {
   const n = name.toLowerCase();
@@ -45,11 +58,12 @@ function publishedWithin(date: string, days: number, offset = 0) {
 }
 const platformOf = (k: PlatformKey) => PLATFORMS.find((p) => p.key === k)!;
 
-export default async function SnsPage({ searchParams }: { searchParams: Promise<{ days?: string; c?: string }> }) {
+export default async function SnsPage({ searchParams }: { searchParams: Promise<{ d?: string; c?: string }> }) {
   const account = await requireCurrentAccount();
   const sp = await searchParams;
-  const days = PERIODS.find((d) => String(d) === sp.days) ?? 30;
-  const only = sp.c === "id" || sp.c === "vn" ? sp.c : null;
+  const days = PERIODS.find((p) => String(p.days) === sp.d)?.days ?? 30;
+  const tab: Tab = sp.c === "vn" || sp.c === "compare" ? sp.c : "id";
+  const shown = tab === "compare" ? COUNTRIES : COUNTRIES.filter((c) => c.key === tab);
 
   const tiktokConn = await getTiktokConnection();
   const [tiktok, yt, meta, funnel, funnelPrev] = await Promise.all([
@@ -87,22 +101,19 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
 
   const cur = videos.filter((v) => publishedWithin(v.date, days));
   const prev = videos.filter((v) => publishedWithin(v.date, days, days));
-
-  const groups: ChartGroup[] = COUNTRIES.map(({ key, label }) => ({
-    label,
-    items: videos.filter((v) => v.country === key).map((v) => ({ platform: v.platform, date: v.date, views: v.views, title: v.title })),
-  }));
   const errors = [...(yt?.errors ?? []), ...(meta?.errors ?? []), ...(tiktok?.errors ?? [])];
   const nothing = !yt && !meta && !tiktok;
-  const href = (q: { days?: number; c?: string | null }) => {
+  const href = (q: { d?: number; c?: Tab }) => {
     const p = new URLSearchParams();
-    const d = q.days ?? days;
-    if (d !== 30) p.set("days", String(d));
-    const c = q.c === undefined ? only : q.c;
-    if (c) p.set("c", c);
-    const s = p.toString();
-    return s ? `/sns?${s}` : "/sns";
+    const d = q.d ?? days;
+    const c = q.c ?? tab;
+    if (c !== "id") p.set("c", c);
+    if (d !== 30) p.set("d", String(d));
+    const str = p.toString();
+    return str ? `/sns?${str}` : "/sns";
   };
+  const grid = tab === "compare" ? "grid gap-6 lg:grid-cols-2" : "space-y-6";
+  const periodLabel = PERIODS.find((p) => p.days === days)!.label;
 
   return (
     <div className="space-y-6 p-8">
@@ -118,6 +129,35 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
         ) : null}
       </div>
 
+      {/* 国のタブと期間。ページ全体 (グラフも) に効く */}
+      <div className="sticky top-0 z-20 -mx-8 flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 bg-white/95 px-8 py-3 backdrop-blur">
+        <nav className="flex gap-1">
+          {TABS.map((t) => (
+            <Link
+              key={t.key}
+              href={href({ c: t.key })}
+              className={`rounded-lg px-5 py-2 text-base font-semibold ${t.key === tab ? "bg-[var(--color-primary)] text-white" : "text-[var(--color-text-dark)] hover:bg-gray-100"}`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </nav>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-[var(--color-text-dark)]">期間</span>
+          <div className="inline-flex overflow-hidden rounded-lg border border-gray-300">
+            {PERIODS.map((p) => (
+              <Link
+                key={p.days}
+                href={href({ d: p.days })}
+                className={`px-3.5 py-1.5 text-sm font-medium ${p.days === days ? "bg-[var(--color-primary)] text-white" : "bg-white text-[var(--color-text-dark)] hover:bg-gray-50"}`}
+              >
+                {p.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {errors.map((e) => (
         <p key={e.id} className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {e.id}: {e.error}
@@ -125,34 +165,23 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
       ))}
       {nothing ? <p className="text-sm text-[var(--color-text-dark)]">まだどの SNS も接続していません。設定ページの「SNS 連携」から接続してください</p> : null}
 
-      <SnsChart groups={groups} />
+      {/* 1. 公開日ごとの再生数 */}
+      <SnsChart
+        groups={shown.map((c) => ({
+          label: tab === "compare" ? c.label : "",
+          items: cur.filter((v) => v.country === c.key).map((v) => ({ platform: v.platform, date: v.date, views: v.views, title: v.title })),
+        }))}
+      />
 
-      {/* 期間の切り替え (ここから下に効く) */}
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm font-semibold text-[var(--color-text-dark)]">期間</span>
-        <div className="inline-flex overflow-hidden rounded-lg border border-gray-300">
-          {PERIODS.map((d) => (
-            <Link
-              key={d}
-              href={href({ days: d })}
-              className={`px-4 py-1.5 text-sm font-medium ${d === days ? "bg-[var(--color-primary)] text-white" : "bg-white text-[var(--color-text-dark)] hover:bg-gray-50"}`}
-            >
-              直近 {d} 日
-            </Link>
-          ))}
-        </div>
-        <span className="text-sm text-[var(--color-text-dark)]">↓ はこの期間の数字。「前の {days} 日」と比べています</span>
-      </div>
-
-      {/* 2. 期間のまとめ (国ごと) */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {COUNTRIES.map((c) => {
+      {/* 2. まとめ (前の同じ日数と比べる) */}
+      <div className={grid}>
+        {shown.map((c) => {
           const v = cur.filter((x) => x.country === c.key);
           const pv = prev.filter((x) => x.country === c.key);
           const clicks = (f: FunnelCounts) => sum(FUNNEL_PLATFORMS.map((p) => f.clicks[c.key][p.key]));
           return (
-            <Card key={c.key} title={c.label}>
-              <div className="grid grid-cols-2 gap-3 2xl:grid-cols-4">
+            <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}${periodLabel}のまとめ（前の${periodLabel}と比べて）`}>
+              <div className={`grid grid-cols-2 gap-3 ${tab === "compare" ? "2xl:grid-cols-4" : "md:grid-cols-4"}`}>
                 <Kpi label="投稿" value={v.length} prev={pv.length} unit="本" />
                 <Kpi label="再生" value={sum(v.map((x) => x.views))} prev={sum(pv.map((x) => x.views))} />
                 <Kpi label="リンク" value={clicks(funnel)} prev={clicks(funnelPrev)} />
@@ -165,113 +194,98 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
       </div>
 
       {/* 3. 相談につながった数 */}
-      <Card title="相談につながった数">
-        <Table
-          head={[
-            "",
-            ...FUNNEL_PLATFORMS.map((p) => `${p.label} のリンク`),
-            "リンクの合計",
-            "Facebook で相談",
-            "LINE 友だち（別枠）",
-          ]}
-          align={["left", "right", "right", "right", "right", "right", "right"]}
-          rows={COUNTRIES.map((c) => [
-            <span key="c" className="font-semibold">{c.label}</span>,
-            ...FUNNEL_PLATFORMS.map((p) => fmt(funnel.clicks[c.key][p.key])),
-            <span key="t" className="font-semibold">{fmt(sum(FUNNEL_PLATFORMS.map((p) => funnel.clicks[c.key][p.key])))}</span>,
-            <span key="m" className="text-base font-bold">{fmt(funnel.inquiries[c.key].Messenger)}</span>,
-            fmt(funnel.inquiries[c.key].LINE),
-          ])}
-        />
-        <p className="mt-3 text-sm text-[var(--color-text-dark)]">
-          「リンク」はプロフィールのリンクが押されて Facebook ページに来た回数（同じ人の 2 回目も数える）。「Facebook で相談」は Facebook ページに初めてメッセージをした人数（どの媒体から来たかは分からない）。LINE は別の窓口
-          {account.role === "admin" ? (
-            <>
-              {"（リンクは "}
-              <a href="/settings#sns" className="font-medium text-[var(--color-primary)] hover:underline">
-                設定の「相談リンク」
-              </a>
-              {"）"}
-            </>
-          ) : null}
-        </p>
-      </Card>
+      <div className={grid}>
+        {shown.map((c) => (
+          <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}相談につながった数`}>
+            <Table
+              head={[...FUNNEL_PLATFORMS.map((p) => `${p.label} のリンク`), "リンクの合計", "Facebook で相談", "LINE（別枠）"]}
+              align={FUNNEL_PLATFORMS.map(() => "right" as const).concat(["right", "right", "right"])}
+              rows={[
+                [
+                  ...FUNNEL_PLATFORMS.map((p) => fmt(funnel.clicks[c.key][p.key])),
+                  <span key="t" className="font-semibold">{fmt(sum(FUNNEL_PLATFORMS.map((p) => funnel.clicks[c.key][p.key])))}</span>,
+                  <span key="m" className="text-base font-bold">{fmt(funnel.inquiries[c.key].Messenger)} 人</span>,
+                  `${fmt(funnel.inquiries[c.key].LINE)} 人`,
+                ],
+              ]}
+            />
+          </Card>
+        ))}
+      </div>
+      <p className="-mt-3 text-xs text-[var(--color-text-dark)]">
+        「リンク」はプロフィールのリンクが押されて Facebook ページに来た回数（同じ人の 2 回目も数える）。「Facebook で相談」は Facebook ページに初めてメッセージをした人数（どの媒体から来たかは分からない）。LINE は別の窓口
+        {account.role === "admin" ? (
+          <>
+            {"（リンクは "}
+            <a href="/settings#sns" className="font-medium text-[var(--color-primary)] hover:underline">
+              設定の「相談リンク」
+            </a>
+            {"）"}
+          </>
+        ) : null}
+      </p>
 
       {/* 4. 媒体ごと */}
-      <Card title="媒体ごと">
-        <Table
-          head={["", "媒体", "フォロワー", "投稿した動画", "その動画の再生", "1 本あたりの再生", "いいね", "コメント"]}
-          align={["left", "left", "right", "right", "right", "right", "right", "right"]}
-          rows={COUNTRIES.flatMap((c) =>
-            PLATFORMS.flatMap((p) => {
-              const as = accts.filter((a) => a.country === c.key && a.platform === p.key);
-              if (as.length === 0) return [];
-              const v = cur.filter((x) => x.country === c.key && x.platform === p.key);
-              const views = sum(v.map((x) => x.views));
-              return [
-                [
-                  <span key="c" className="font-semibold">{c.label}</span>,
-                  <PlatformName key="p" platform={p.key} url={as[0].url} />,
-                  fmt(as.some((a) => a.followers !== null) ? sum(as.map((a) => a.followers)) : null),
-                  fmt(v.length),
-                  <span key="v" className="font-semibold">{fmt(views)}</span>,
-                  fmt(v.length ? Math.round(views / v.length) : null),
-                  fmt(sum(v.map((x) => x.likes))),
-                  fmt(sum(v.map((x) => x.comments))),
-                ],
-              ];
-            }),
-          )}
-        />
-      </Card>
+      <div className={grid}>
+        {shown.map((c) => (
+          <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}媒体ごと`}>
+            <Table
+              head={["媒体", "フォロワー", "投稿", "再生", "1 本あたり", "いいね", "コメント"]}
+              align={["left", "right", "right", "right", "right", "right", "right"]}
+              rows={PLATFORMS.flatMap((p) => {
+                const as = accts.filter((a) => a.country === c.key && a.platform === p.key);
+                if (as.length === 0) return [];
+                const v = cur.filter((x) => x.country === c.key && x.platform === p.key);
+                const views = sum(v.map((x) => x.views));
+                return [
+                  [
+                    <PlatformName key="p" platform={p.key} url={as[0].url} />,
+                    fmt(as.some((a) => a.followers !== null) ? sum(as.map((a) => a.followers)) : null),
+                    fmt(v.length),
+                    <span key="v" className="font-semibold">{fmt(views)}</span>,
+                    fmt(v.length ? Math.round(views / v.length) : null),
+                    fmt(sum(v.map((x) => x.likes))),
+                    fmt(sum(v.map((x) => x.comments))),
+                  ],
+                ];
+              })}
+            />
+          </Card>
+        ))}
+      </div>
 
-      {/* 5. 動画ごと */}
-      <Card
-        title={
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>動画ごと（再生の多い順）</span>
-            <div className="flex gap-4 text-sm font-medium">
-              {[{ key: null, label: "すべて" }, ...COUNTRIES].map((c) => (
-                <Link
-                  key={c.label}
-                  href={href({ c: c.key })}
-                  className={only === c.key ? "text-[var(--color-text-dark)] underline underline-offset-4" : "text-[var(--color-primary)] hover:underline"}
-                >
-                  {c.label}
-                </Link>
-              ))}
-            </div>
-          </div>
-        }
-      >
-        <Table
-          head={["動画", "国", "媒体", "公開日", "再生", "いいね", "コメント", "シェア"]}
-          align={["left", "left", "left", "left", "right", "right", "right", "right"]}
-          empty="この期間に公開した動画はありません"
-          rows={cur
-            .filter((v) => !only || v.country === only)
-            .sort((a, b) => b.views - a.views)
-            .map((v) => [
-              v.url ? (
-                <a key="t" href={v.url} target="_blank" rel="noopener noreferrer" className="line-clamp-2 text-[var(--color-primary)] hover:underline">
-                  {v.title || "(本文なし)"}
-                </a>
-              ) : (
-                <span key="t" className="line-clamp-2">{v.title || "(本文なし)"}</span>
-              ),
-              COUNTRIES.find((c) => c.key === v.country)?.label ?? "その他",
-              <PlatformName key="p" platform={v.platform} />,
-              new Date(v.date).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }),
-              <span key="v" className="font-semibold">{fmt(v.views)}</span>,
-              fmt(v.likes),
-              fmt(v.comments),
-              fmt(v.shares),
-            ])}
-        />
-      </Card>
+      {/* 5. 動画ごと (行 = 動画、列 = 媒体) */}
+      <div className={grid}>
+        {shown.map((c) => (
+          <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}動画ごと`}>
+            <VideoTable rows={toRows(cur.filter((v) => v.country === c.key), c.label)} showCountry={false} />
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
+
+/** 同じ動画を全媒体に上げているので、国と題名 (「👉 …」の前、記号を除いた頭の部分) でまとめる */
+function toRows(videos: Video[], countryLabel: string): VideoRow[] {
+  const keyOf = (v: Video) => `${v.country}:${v.title.split("👉")[0].toLowerCase().replace(/[^\p{L}\p{N}]/gu, "").slice(0, 24)}`;
+  const clean = (t: string) => t.split("👉")[0].split("\n")[0].trim();
+  const map = new Map<string, VideoRow>();
+  for (const v of videos) {
+    const k = keyOf(v);
+    const row = map.get(k) ?? { key: k, title: clean(v.title), date: v.date, country: countryLabel, cells: {} };
+    if (v.date < row.date) row.date = v.date;
+    if (v.platform === "youtube" || !row.title) row.title = clean(v.title);
+    const c = row.cells[v.platform];
+    // 同じ媒体に同じ動画が 2 本あれば足す
+    row.cells[v.platform] = c
+      ? { views: c.views + v.views, likes: add(c.likes, v.likes), comments: add(c.comments, v.comments), shares: add(c.shares, v.shares), url: c.url ?? v.url }
+      : { views: v.views, likes: v.likes, comments: v.comments, shares: v.shares, url: v.url };
+    map.set(k, row);
+  }
+  return [...map.values()];
+}
+const add = (a: number | null, b: number | null) => (a === null && b === null ? null : (a ?? 0) + (b ?? 0));
 
 /** 数字のカード。前の期間と比べた増減を出す */
 function Kpi({ label, value, prev, unit = "", strong = false }: { label: string; value: number; prev: number; unit?: string; strong?: boolean }) {

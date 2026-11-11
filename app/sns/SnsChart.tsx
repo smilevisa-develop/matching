@@ -7,7 +7,8 @@ import { PLATFORMS, type PlatformKey } from "@/lib/sns-platforms";
 export type ChartItem = { platform: PlatformKey; date: string; views: number; title: string };
 export type ChartGroup = { label: string; items: ChartItem[] };
 
-const W = 560;
+const NARROW = 560;
+const WIDE = 1120;
 const H = 260;
 const PAD = { top: 12, right: 12, bottom: 44, left: 52 };
 
@@ -25,9 +26,9 @@ export default function SnsChart({ groups }: { groups: ChartGroup[] }) {
           ))}
         </ul>
       </div>
-      <div className="mt-4 grid gap-6 lg:grid-cols-2">
+      <div className={`mt-4 grid gap-6 ${groups.length > 1 ? "lg:grid-cols-2" : ""}`}>
         {groups.map((g) => (
-          <OneChart key={g.label} group={g} />
+          <OneChart key={g.label} group={g} W={groups.length > 1 ? NARROW : WIDE} />
         ))}
       </div>
     </section>
@@ -36,7 +37,7 @@ export default function SnsChart({ groups }: { groups: ChartGroup[] }) {
 
 type Bar = { date: string; total: number; parts: { platform: PlatformKey; views: number; titles: string[] }[] };
 
-function OneChart({ group }: { group: ChartGroup }) {
+function OneChart({ group, W }: { group: ChartGroup; W: number }) {
   const [hover, setHover] = useState<number | null>(null);
   const byDate = new Map<string, Bar>();
   for (const it of group.items) {
@@ -49,7 +50,7 @@ function OneChart({ group }: { group: ChartGroup }) {
     bar.total += it.views;
     byDate.set(d, bar);
   }
-  const bars = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-30);
+  const bars = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   const max = Math.max(1, ...bars.map((b) => b.total));
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
@@ -64,7 +65,7 @@ function OneChart({ group }: { group: ChartGroup }) {
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-[var(--color-text-dark)]">{group.label}</h3>
+      {group.label ? <h3 className="text-sm font-semibold text-[var(--color-text-dark)]">{group.label}</h3> : null}
       {bars.length === 0 ? (
         <p className="mt-2 text-sm text-[var(--color-text-dark)]">まだ動画がありません</p>
       ) : (
