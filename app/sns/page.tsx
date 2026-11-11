@@ -276,9 +276,9 @@ function Kpi({ label, value, prev, unit = "", strong = false }: { label: string;
   const diff = value - prev;
   const pct = prev > 0 ? Math.round((diff / prev) * 100) : null;
   return (
-    <div className={`px-6 py-4 ${strong ? "border-t-[3px] border-[var(--color-primary)]" : "border-t-[3px] border-transparent"}`}>
+    <div className="px-6 py-4">
       <p className="text-sm font-semibold text-[var(--color-text-dark)]">{label}</p>
-      <p className="mt-1 text-3xl font-bold tabular-nums text-[var(--color-text-dark)]">
+      <p className={`mt-1 text-3xl font-bold tabular-nums ${strong ? "text-[var(--color-primary)]" : "text-[var(--color-text-dark)]"}`}>
         {fmt(value)}
         {unit ? <span className="ml-1 text-base font-semibold">{unit}</span> : null}
       </p>
