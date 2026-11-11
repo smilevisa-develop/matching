@@ -253,11 +253,13 @@ export function resolveStage(input: {
   return "offer";
 }
 
-/**
- * 申請種別。必要書類が変わる (書類準備手続き.docx)。
- * 申請なし = 今の在留資格のまま働ける人 (技人国の転職など)。在留申請の項目は聞かず、入社日だけ確かめる (2026/11)
- */
-export const APPLICATION_TYPES = ["認定", "変更", "更新", "特定活動", "申請なし"] as const;
+/** 申請種別。必要書類が変わる (書類準備手続き.docx) */
+export const APPLICATION_TYPES = ["認定", "変更", "更新", "特定活動"] as const;
+
+/** 在留資格が技人国 (技術・人文知識・国際業務) の人。転職でも在留申請が要らないので、申請まわりの項目は聞かず入社日だけ確かめる (2026/11) */
+export function isGijinkoku(residenceStatus: string | null | undefined): boolean {
+  return !!residenceStatus && /技術・人文知識・国際業務|技人国/.test(residenceStatus);
+}
 export type ApplicationType = (typeof APPLICATION_TYPES)[number];
 
 /** 入管への退社・入社報告が要る人 (変更・特定活動。実習生は対象外) */
