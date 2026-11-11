@@ -48,12 +48,14 @@ export type FunnelCounts = {
   inquiries: Record<FunnelCountry, { Messenger: number; LINE: number }>;
 };
 
-/** 直近 days 日の、国・媒体ごとのクリック数と、国ごとの相談を始めた人数 */
-export async function getFunnelCounts(days: number): Promise<FunnelCounts> {
-  const since = new Date(Date.now() - days * 86400_000);
+/** 直近 days 日 (offsetDays を渡すと、その日数だけ前にずらした days 日) の、国・媒体ごとのクリック数と、国ごとの相談を始めた人数 */
+export async function getFunnelCounts(days: number, offsetDays = 0): Promise<FunnelCounts> {
+  const until = new Date(Date.now() - offsetDays * 86400_000);
+  const since = new Date(until.getTime() - days * 86400_000);
+  const range = { gte: since, lt: until };
   const [clicks, inquiries] = await Promise.all([
-    prisma.snsLinkClick.groupBy({ by: ["country", "platform"], where: { createdAt: { gte: since } }, _count: { _all: true } }),
-    prisma.snsInquiry.groupBy({ by: ["country", "channel"], where: { createdAt: { gte: since } }, _count: { _all: true } }),
+    prisma.snsLinkClick.groupBy({ by: ["country", "platform"], where: { createdAt: range }, _count: { _all: true } }),
+    prisma.snsInquiry.groupBy({ by: ["country", "channel"], where: { createdAt: range }, _count: { _all: true } }),
   ]);
   const zero = () => ({ tiktok: 0, instagram: 0, youtube: 0 });
   const none = () => ({ Messenger: 0, LINE: 0 });
