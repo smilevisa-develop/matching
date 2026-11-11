@@ -13,7 +13,6 @@ const PLATFORMS = [
   { key: "tiktok", label: "TikTok" },
   { key: "instagram", label: "Instagram" },
   { key: "youtube", label: "YouTube" },
-  { key: "facebook", label: "Facebook" },
 ] as const;
 
 /**

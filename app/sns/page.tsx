@@ -272,7 +272,7 @@ function PostTable({ posts }: { posts: MetaPost[] }) {
   );
 }
 
-/** 相談につながった数。相談リンクが押された数 (媒体ごと) と、相談を始めた人数 (国ごと) */
+/** 相談につながった数。相談リンクが押された数 (媒体ごと) と、相談を始めた人数 (国ごと。Facebook と LINE は分ける) */
 function FunnelCard({ counts, isAdmin }: { counts: FunnelCounts[]; isAdmin: boolean }) {
   const cell = (f: (c: FunnelCounts) => number) => counts.map(f).join(" / ");
   return (
@@ -287,7 +287,8 @@ function FunnelCard({ counts, isAdmin }: { counts: FunnelCounts[]; isAdmin: bool
                   {p.label} から
                 </th>
               ))}
-              <th className="px-3 py-2 text-right">相談を始めた人</th>
+              <th className="px-3 py-2 text-right">Facebook で相談</th>
+              <th className="px-3 py-2 text-right">LINE 友だち（別枠）</th>
             </tr>
           </thead>
           <tbody>
@@ -299,14 +300,15 @@ function FunnelCard({ counts, isAdmin }: { counts: FunnelCounts[]; isAdmin: bool
                     {cell((x) => x.clicks[c.key][p.key])}
                   </td>
                 ))}
-                <td className="px-3 py-2 text-right tabular-nums font-semibold text-[var(--color-text-dark)]">{cell((x) => x.inquiries[c.key])}</td>
+                <td className="px-3 py-2 text-right tabular-nums font-semibold text-[var(--color-text-dark)]">{cell((x) => x.inquiries[c.key].Messenger)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-[var(--color-text-dark)]">{cell((x) => x.inquiries[c.key].LINE)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className="mt-3 text-xs text-[var(--color-text-dark)]">
-        「から」はプロフィールの相談リンクが押された数。「相談を始めた人」は相談用の LINE と Facebook ページに初めてメッセージ (LINE は友だち追加も) をした人数
+        「から」はプロフィールのリンクが押されて Facebook ページに来た回数。「Facebook で相談」は Facebook ページに初めてメッセージをした人数。LINE は別の窓口で、初めてメッセージか友だち追加をした人数
         {isAdmin ? (
           <>
             {"（リンクは "}
