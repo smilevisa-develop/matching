@@ -197,7 +197,7 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
                 <Kpi label="再生" value={sum(v.map((x) => x.views))} prev={sum(pv.map((x) => x.views))} />
                 <Kpi label="リンクのクリック" value={clicks(funnel)} prev={clicks(funnelPrev)} />
                 <Kpi label="Facebook で相談" value={funnel.inquiries[c.key].Messenger} prev={funnelPrev.inquiries[c.key].Messenger} unit="人" strong />
-                <Kpi label="LINE（別枠）" value={funnel.inquiries[c.key].LINE} prev={funnelPrev.inquiries[c.key].LINE} unit="人" />
+                <Kpi label="LINE" value={funnel.inquiries[c.key].LINE} prev={funnelPrev.inquiries[c.key].LINE} unit="人" />
               </div>
             </section>
           );
