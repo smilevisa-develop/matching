@@ -180,7 +180,7 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
           const pv = prev.filter((x) => x.country === c.key);
           const clicks = (f: FunnelCounts) => sum(FUNNEL_PLATFORMS.map((p) => f.clicks[c.key][p.key]));
           return (
-            <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}${periodLabel}のまとめ（前の${periodLabel}と比べて）`}>
+            <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}${periodLabel}のまとめ（その前の${periodLabel.replace("直近 ", "")}と比べて）`}>
               <div className={`grid grid-cols-2 gap-3 ${tab === "compare" ? "2xl:grid-cols-4" : "md:grid-cols-4"}`}>
                 <Kpi label="投稿" value={v.length} prev={pv.length} unit="本" />
                 <Kpi label="再生" value={sum(v.map((x) => x.views))} prev={sum(pv.map((x) => x.views))} />
