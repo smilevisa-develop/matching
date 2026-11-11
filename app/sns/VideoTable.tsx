@@ -6,7 +6,7 @@ import { PLATFORMS, type PlatformKey } from "@/lib/sns-platforms";
 
 /** 1 つの動画を、上げた媒体ごとにまとめた行 (同じ動画を全媒体に上げているので、題名でまとめる。page.tsx) */
 export type VideoCell = { views: number; likes: number | null; comments: number | null; shares: number | null; url: string | null };
-export type VideoRow = { key: string; title: string; date: string; country: string; cells: Partial<Record<PlatformKey, VideoCell>> };
+export type VideoRow = { key: string; title: string; titleJa: string; date: string; country: string; cells: Partial<Record<PlatformKey, VideoCell>> };
 
 const METRICS = [
   { key: "views", label: "再生" },
@@ -55,13 +55,13 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const sortVal = (r: VideoRow): number | string => {
       if (sort.key === "date") return r.date;
-      if (sort.key === "title") return r.title.toLowerCase();
+      if (sort.key === "title") return (r.titleJa || r.title).toLowerCase();
       if (sort.key === "total") return valueOf(picked(r), metric) ?? -1;
       const c = r.cells[sort.key];
       return c ? (valueOf([c], metric) ?? -1) : -1;
     };
     return rows
-      .filter((r) => words.every((w) => r.title.toLowerCase().includes(w)))
+      .filter((r) => words.every((w) => `${r.titleJa} ${r.title}`.toLowerCase().includes(w)))
       .filter((r) => picked(r).length > 0)
       .sort((a, b) => {
         const x = sortVal(a);
@@ -144,7 +144,14 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
                 <tr key={r.key} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{new Date(r.date).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}</td>
                   <td className="px-3 py-2.5">
-                    <span className="line-clamp-2">{r.title || "(本文なし)"}</span>
+                    {r.titleJa ? (
+                      <>
+                        <span className="line-clamp-2 font-medium">{r.titleJa}</span>
+                        <span className="mt-0.5 line-clamp-1 text-xs text-gray-600">{r.title}</span>
+                      </>
+                    ) : (
+                      <span className="line-clamp-2 font-medium">{r.title || "(本文なし)"}</span>
+                    )}
                   </td>
                   {showCountry ? <td className="whitespace-nowrap px-3 py-2.5">{r.country}</td> : null}
                   {cols.map((p) => {

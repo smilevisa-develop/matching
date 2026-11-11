@@ -5,6 +5,7 @@ import { getMetaStats, metaConfigured } from "@/lib/sns-meta";
 import { getTiktokConnection, getTiktokStats } from "@/lib/sns-tiktok";
 import SnsChart from "./SnsChart";
 import VideoTable, { type VideoRow } from "./VideoTable";
+import { japaneseTitles } from "@/lib/sns-title-ja";
 import { PLATFORMS, type PlatformKey } from "@/lib/sns-platforms";
 import { FUNNEL_PLATFORMS, getFunnelCounts, type FunnelCounts, type FunnelPlatform } from "@/lib/sns-funnel";
 
@@ -104,6 +105,8 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
   }
 
   const cur = videos.filter((v) => publishedWithin(v.date, days));
+  const ja = await japaneseTitles(cur.map((v) => cleanTitle(v.title)));
+  const jaOf = (t: string) => ja.get(cleanTitle(t)) ?? cleanTitle(t);
   const prev = videos.filter((v) => publishedWithin(v.date, days, days));
   const errors = [...(yt?.errors ?? []), ...(meta?.errors ?? []), ...(tiktok?.errors ?? [])];
   const nothing = !yt && !meta && !tiktok;
@@ -176,7 +179,7 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
         dates={periodDates(days)}
         groups={shown.map((c) => ({
           label: tab === "compare" ? c.label : "",
-          items: cur.filter((v) => v.country === c.key).map((v) => ({ platform: v.platform, date: v.date, views: v.views, title: v.title })),
+          items: cur.filter((v) => v.country === c.key).map((v) => ({ platform: v.platform, date: v.date, views: v.views, title: jaOf(v.title) })),
         }))}
       />
 
@@ -234,7 +237,7 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
       <div className={grid}>
         {shown.map((c) => (
           <Card key={c.key} title={`${tab === "compare" ? `${c.label}　` : ""}動画ごと`}>
-            <VideoTable rows={toRows(cur.filter((v) => v.country === c.key), c.label)} showCountry={false} />
+            <VideoTable rows={toRows(cur.filter((v) => v.country === c.key), c.label, ja)} showCountry={false} />
           </Card>
         ))}
       </div>
@@ -242,16 +245,19 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
   );
 }
 
+/** 題名の「👉 …」(相談への案内) より前の 1 行目 */
+const cleanTitle = (t: string) => t.split("👉")[0].split("\n")[0].trim();
+
 /** 同じ動画を全媒体に上げているので、国と題名 (「👉 …」の前、記号を除いた頭の部分) でまとめる */
-function toRows(videos: Video[], countryLabel: string): VideoRow[] {
+function toRows(videos: Video[], countryLabel: string, ja: Map<string, string>): VideoRow[] {
   const keyOf = (v: Video) => `${v.country}:${v.title.split("👉")[0].toLowerCase().replace(/[^\p{L}\p{N}]/gu, "").slice(0, 24)}`;
-  const clean = (t: string) => t.split("👉")[0].split("\n")[0].trim();
   const map = new Map<string, VideoRow>();
   for (const v of videos) {
     const k = keyOf(v);
-    const row = map.get(k) ?? { key: k, title: clean(v.title), date: v.date, country: countryLabel, cells: {} };
+    const row = map.get(k) ?? { key: k, title: cleanTitle(v.title), titleJa: "", date: v.date, country: countryLabel, cells: {} };
     if (v.date < row.date) row.date = v.date;
-    if (v.platform === "youtube" || !row.title) row.title = clean(v.title);
+    if (v.platform === "youtube" || !row.title) row.title = cleanTitle(v.title);
+    row.titleJa = ja.get(row.title) ?? row.titleJa;
     const c = row.cells[v.platform];
     // 同じ媒体に同じ動画が 2 本あれば足す
     row.cells[v.platform] = c

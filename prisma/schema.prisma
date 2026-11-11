@@ -1262,6 +1262,14 @@ model SnsLinkClick {
 
 /// SNS から相談を始めた人 (人ごとに 1 件)。相談用の LINE アカウントに来た最初のメッセージ・友だち追加で記録する。
 /// LINE→Slack 転送の Apps Script が /api/sns/inquiry に知らせる。userKey は LINE の userId のハッシュ (本人の ID は持たない)
+/// SNS の動画の題名の日本語訳 (lib/sns-title-ja.ts)。同じ題名は 1 度だけ訳して使い回す
+model SnsTitleJa {
+  key       String   @id
+  source    String
+  ja        String
+  createdAt DateTime @default(now())
+}
+
 model SnsInquiry {
   id        Int      @id @default(autoincrement())
   country   String
