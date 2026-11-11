@@ -769,6 +769,8 @@ model GroupMember {
 model Deal {
   id               Int           @id @default(autoincrement())
   title            String
+  /// 企業向けの推薦リスト (見るだけ) の URL /list/{shareToken}。作ったときだけ入る
+  shareToken       String?       @unique
   companyId        Int
   company          Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   partnerId        Int?
