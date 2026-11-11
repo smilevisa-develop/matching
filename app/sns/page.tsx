@@ -190,12 +190,12 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
           return (
             <div key={c.key} className={tab === "compare" ? "space-y-6" : "grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"}>
               <Card title={`${name}${periodLabel}（その前の ${periodLabel.replace("直近 ", "")}と比べて）`}>
-                <div className="-my-1 divide-y divide-gray-100">
+                <div className="grid grid-cols-2 gap-3">
                   <Kpi label="投稿" value={v.length} prev={pv.length} unit="本" />
                   <Kpi label="再生" value={sum(v.map((x) => x.views))} prev={sum(pv.map((x) => x.views))} />
                   <Kpi label="リンクのクリック" value={clicks(funnel)} prev={clicks(funnelPrev)} />
-                  <Kpi label="Facebook で相談" value={funnel.inquiries[c.key].Messenger} prev={funnelPrev.inquiries[c.key].Messenger} unit="人" strong />
                   <Kpi label="LINE" value={funnel.inquiries[c.key].LINE} prev={funnelPrev.inquiries[c.key].LINE} unit="人" />
+                  <Kpi label="Facebook で相談" value={funnel.inquiries[c.key].Messenger} prev={funnelPrev.inquiries[c.key].Messenger} unit="人" strong />
                 </div>
               </Card>
               <Card title={`${name}媒体ごと`}>
@@ -263,26 +263,24 @@ function toRows(videos: Video[], countryLabel: string): VideoRow[] {
 }
 const add = (a: number | null, b: number | null) => (a === null && b === null ? null : (a ?? 0) + (b ?? 0));
 
-/** 数字 1 行。左に名前、右に数字と前の期間からの増減 (Google アナリティクスの主な指標の形) */
+/** 数字のカード 1 枚。前の期間からの増減も出す。strong は一番大事な数字 (横いっぱい・数字を緑) */
 function Kpi({ label, value, prev, unit = "", strong = false }: { label: string; value: number; prev: number; unit?: string; strong?: boolean }) {
   const diff = value - prev;
   const pct = prev > 0 ? Math.round((diff / prev) * 100) : null;
   return (
-    <div className="flex items-center justify-between gap-4 py-2">
+    <div className={`rounded-xl bg-[var(--color-light)] px-4 py-3 ${strong ? "col-span-2" : ""}`}>
       <p className="text-sm font-semibold text-[var(--color-text-dark)]">{label}</p>
-      <div className="text-right">
-        <p className={`text-xl font-bold leading-tight tabular-nums ${strong ? "text-[var(--color-primary)]" : "text-[var(--color-text-dark)]"}`}>
-          {fmt(value)}
-          {unit ? <span className="ml-1 text-sm font-semibold">{unit}</span> : null}
-        </p>
-        <p className="text-xs font-semibold tabular-nums">
-          <span className={diff > 0 ? "text-green-700" : diff < 0 ? "text-red-700" : "text-[var(--color-text-dark)]"}>
-            {diff > 0 ? "↑" : diff < 0 ? "↓" : ""}
-            {pct !== null ? `${Math.abs(pct)}%` : diff === 0 ? "変化なし" : fmt(Math.abs(diff))}
-          </span>
-          <span className="ml-1.5 font-normal text-[var(--color-text-dark)]">前 {fmt(prev)}</span>
-        </p>
-      </div>
+      <p className={`mt-1 text-2xl font-bold tabular-nums ${strong ? "text-[var(--color-primary)]" : "text-[var(--color-text-dark)]"}`}>
+        {fmt(value)}
+        {unit ? <span className="ml-1 text-sm font-semibold">{unit}</span> : null}
+      </p>
+      <p className="mt-0.5 text-xs font-semibold tabular-nums">
+        <span className={diff > 0 ? "text-green-700" : diff < 0 ? "text-red-700" : "text-[var(--color-text-dark)]"}>
+          {diff > 0 ? "↑" : diff < 0 ? "↓" : ""}
+          {pct !== null ? `${Math.abs(pct)}%` : diff === 0 ? "変化なし" : fmt(Math.abs(diff))}
+        </span>
+        <span className="ml-1.5 font-normal text-[var(--color-text-dark)]">前 {fmt(prev)}</span>
+      </p>
     </div>
   );
 }
