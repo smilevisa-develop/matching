@@ -4,6 +4,7 @@ import { getMetaStats, metaConfigured, type MetaPage, type MetaPost } from "@/li
 import { getTiktokConnection, getTiktokStats, type TiktokAccount } from "@/lib/sns-tiktok";
 import SnsChart, { type ChartGroup, type ChartItem } from "./SnsChart";
 import { PLATFORMS } from "@/lib/sns-platforms";
+import { FUNNEL_COUNTRIES, FUNNEL_PLATFORMS, getFunnelCounts, type FunnelCounts } from "@/lib/sns-funnel";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +29,12 @@ function countryOf(name: string): Country {
 export default async function SnsPage() {
   const account = await requireCurrentAccount();
   const tiktokConn = await getTiktokConnection();
-  const [tiktok, yt, meta] = await Promise.all([
+  const [tiktok, yt, meta, funnel7, funnel30] = await Promise.all([
     tiktokConn.accounts.length > 0 ? getTiktokStats() : null,
     youtubeConfigured() ? getYoutubeStats() : null,
     (async () => ((await metaConfigured()) ? getMetaStats() : null))(),
+    getFunnelCounts(7),
+    getFunnelCounts(30),
   ]);
 
   const ytBy = (c: Country) => (yt?.channels ?? []).filter((x) => countryOf(`${x.title} ${x.handle ?? ""}`) === c);
@@ -72,6 +75,8 @@ export default async function SnsPage() {
         </p>
       ))}
       {nothing ? <p className="text-sm text-[var(--color-text-dark)]">まだどの SNS も接続していません。設定ページの「SNS 連携」から接続してください</p> : null}
+
+      <FunnelCard counts={[funnel7, funnel30]} isAdmin={account.role === "admin"} />
 
       <SnsChart groups={groups} />
 
@@ -264,6 +269,55 @@ function PostTable({ posts }: { posts: MetaPost[] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** 相談につながった数。相談リンクが押された数 (媒体ごと) と、相談を始めた人数 (国ごと) */
+function FunnelCard({ counts, isAdmin }: { counts: FunnelCounts[]; isAdmin: boolean }) {
+  const cell = (f: (c: FunnelCounts) => number) => counts.map(f).join(" / ");
+  return (
+    <Card title="相談につながった数（直近 7 日 / 30 日）">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-[var(--color-light)] text-left text-xs font-semibold text-[var(--color-text-dark)]">
+              <th className="px-3 py-2"></th>
+              {FUNNEL_PLATFORMS.map((p) => (
+                <th key={p.key} className="px-3 py-2 text-right">
+                  {p.label} から
+                </th>
+              ))}
+              <th className="px-3 py-2 text-right">相談を始めた人</th>
+            </tr>
+          </thead>
+          <tbody>
+            {FUNNEL_COUNTRIES.map((c) => (
+              <tr key={c.key} className="border-t border-gray-100">
+                <td className="px-3 py-2 font-medium text-[var(--color-text-dark)]">{c.label}</td>
+                {FUNNEL_PLATFORMS.map((p) => (
+                  <td key={p.key} className="px-3 py-2 text-right tabular-nums text-[var(--color-text-dark)]">
+                    {cell((x) => x.clicks[c.key][p.key])}
+                  </td>
+                ))}
+                <td className="px-3 py-2 text-right tabular-nums font-semibold text-[var(--color-text-dark)]">{cell((x) => x.inquiries[c.key])}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-[var(--color-text-dark)]">
+        「から」はプロフィールの相談リンクが押された数。「相談を始めた人」は相談用の LINE に初めてメッセージや友だち追加をした人数
+        {isAdmin ? (
+          <>
+            {"（リンクは "}
+            <a href="/settings#sns" className="font-medium text-[var(--color-primary)] hover:underline">
+              設定の「相談リンク」
+            </a>
+            {"）"}
+          </>
+        ) : null}
+      </p>
+    </Card>
   );
 }
 

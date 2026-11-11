@@ -6,6 +6,9 @@ import { getMetaConnection } from "@/lib/sns-meta-connect";
 import { getTiktokConnection } from "@/lib/sns-tiktok";
 import MetaConnect from "./MetaConnect";
 import TiktokConnect from "./TiktokConnect";
+import SnsLinks from "./SnsLinks";
+import { getLinkTargets } from "@/lib/sns-funnel";
+import { publicUrl } from "@/lib/public-url";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +16,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const account = await requireCurrentAccount();
   const { meta: metaResult, tiktok: tiktokResult } = await searchParams;
   const isAdmin = account.role === "admin";
-  const [metaConn, tiktokConn] = await Promise.all([isAdmin ? getMetaConnection() : null, isAdmin ? getTiktokConnection() : null]);
+  const [metaConn, tiktokConn, linkTargets] = await Promise.all([
+    isAdmin ? getMetaConnection() : null,
+    isAdmin ? getTiktokConnection() : null,
+    isAdmin ? getLinkTargets() : null,
+  ]);
   const [settings, coreSettings, accounts, resumeTemplates, jobPostingTemplates] = await Promise.all([
     getAccountSettings(account.id),
     getCoreSettings(),
@@ -86,6 +93,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <h3 className="mb-2 text-sm font-semibold text-[var(--color-text-dark)]">TikTok</h3>
               <TiktokConnect clientKey={tiktokConn.clientKey} hasSecret={tiktokConn.hasSecret} accounts={tiktokConn.accounts} result={tiktokResult ?? null} />
             </div>
+            {linkTargets ? (
+              <div className="border-t border-gray-100 pt-6">
+                <h3 className="mb-2 text-sm font-semibold text-[var(--color-text-dark)]">相談リンク</h3>
+                <SnsLinks base={publicUrl("").replace(/\/$/, "")} targets={linkTargets} />
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}

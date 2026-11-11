@@ -716,6 +716,8 @@ model CoreSettings {
   snsTiktokClientKey        String?
   snsTiktokClientSecret     String?
   snsTiktokAccounts         Json?
+  /// SNS のプロフィールに貼る相談リンク (/go/[国]-[媒体]) の行き先。{ id: URL, vn: URL } (lib/sns-funnel.ts)
+  snsLinkTargets            Json?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 }
@@ -1244,4 +1246,29 @@ model PartnerSurveyResponseLog {
   createdAt   DateTime @default(now())
 
   @@index([partnerId, createdAt])
+}
+
+/// SNS のプロフィールの相談リンク (/go/[国]-[媒体]) が押された記録。どの媒体から相談の入口に来たかを数える
+model SnsLinkClick {
+  id        Int      @id @default(autoincrement())
+  /// id (インドネシア) / vn (ベトナム)
+  country   String
+  /// tiktok / instagram / youtube / facebook
+  platform  String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// SNS から相談を始めた人 (人ごとに 1 件)。相談用の LINE アカウントに来た最初のメッセージ・友だち追加で記録する。
+/// LINE→Slack 転送の Apps Script が /api/sns/inquiry に知らせる。userKey は LINE の userId のハッシュ (本人の ID は持たない)
+model SnsInquiry {
+  id        Int      @id @default(autoincrement())
+  country   String
+  channel   String
+  userKey   String
+  createdAt DateTime @default(now())
+
+  @@unique([channel, userKey])
+  @@index([createdAt])
 }

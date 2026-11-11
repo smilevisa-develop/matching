@@ -81,7 +81,10 @@ export function proxy(request: NextRequest) {
     // アップロード画像の配信 (LINE / Messenger / メール添付の originalContentUrl)。
     // GET /api/files/{cuid} のみ未ログイン可、POST /api/files (アップロード) は
     // ハンドラ側で requireApiAccount により保護される (pathname に trailing slash 無し)。
-    pathname.startsWith("/api/files/")
+    pathname.startsWith("/api/files/") ||
+    // SNS のプロフィールの相談リンク (押した数を数えて相談先へ飛ばす) と、相談を始めた人の記録 (Apps Script から呼ばれる)
+    pathname.startsWith("/go/") ||
+    pathname === "/api/sns/inquiry"
   ) {
     return NextResponse.next();
   }
