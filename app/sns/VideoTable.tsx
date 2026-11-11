@@ -123,6 +123,7 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
               {head("date", "公開日", false)}
               {head("title", "動画", false)}
               {showCountry ? <th className="px-3 py-2.5 text-left font-semibold">国</th> : null}
+              {head("total", `合計（${METRICS.find((m) => m.key === metric)!.label}）`)}
               {cols.map((p) => (
                 <HeadCell key={p.key}>
                   {head(
@@ -134,7 +135,6 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
                   )}
                 </HeadCell>
               ))}
-              {head("total", `合計（${METRICS.find((m) => m.key === metric)!.label}）`)}
             </tr>
           </thead>
           <tbody>
@@ -154,6 +154,7 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
                     )}
                   </td>
                   {showCountry ? <td className="whitespace-nowrap px-3 py-2.5">{r.country}</td> : null}
+                  <td className="border-r border-gray-200 px-3 py-2.5 text-right text-base font-bold tabular-nums">{show(total, metric)}</td>
                   {cols.map((p) => {
                     const c = r.cells[p.key];
                     const v = c ? valueOf([c], metric) : null;
@@ -169,7 +170,6 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2.5 text-right text-base font-bold tabular-nums">{show(total, metric)}</td>
                 </tr>
               );
             })}
