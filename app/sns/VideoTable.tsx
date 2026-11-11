@@ -143,7 +143,7 @@ export default function VideoTable({ rows, showCountry }: { rows: VideoRow[]; sh
               return (
                 <tr key={r.key} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{new Date(r.date).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" })}</td>
-                  <td className="px-3 py-2.5">
+                  <td className="min-w-[15rem] px-3 py-2.5">
                     {r.titleJa ? (
                       <>
                         <span className="line-clamp-2 font-medium">{r.titleJa}</span>
