@@ -188,7 +188,7 @@ export default async function SnsPage({ searchParams }: { searchParams: Promise<
           const clicks = (f: FunnelCounts) => sum(FUNNEL_PLATFORMS.map((p) => f.clicks[c.key][p.key]));
           const name = tab === "compare" ? `${c.label}　` : "";
           return (
-            <div key={c.key} className={tab === "compare" ? "space-y-6" : "grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"}>
+            <div key={c.key} className={tab === "compare" ? "space-y-6" : "grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"}>
               <Card title={`${name}${periodLabel}（その前の ${periodLabel.replace("直近 ", "")}と比べて）`}>
                 <div className="-my-1 divide-y divide-gray-100">
                   <Kpi label="投稿" value={v.length} prev={pv.length} unit="本" />
@@ -268,10 +268,10 @@ function Kpi({ label, value, prev, unit = "", strong = false }: { label: string;
   const diff = value - prev;
   const pct = prev > 0 ? Math.round((diff / prev) * 100) : null;
   return (
-    <div className="flex items-center justify-between gap-4 py-3">
+    <div className="flex items-center justify-between gap-4 py-2">
       <p className="text-sm font-semibold text-[var(--color-text-dark)]">{label}</p>
       <div className="text-right">
-        <p className={`text-2xl font-bold leading-tight tabular-nums ${strong ? "text-[var(--color-primary)]" : "text-[var(--color-text-dark)]"}`}>
+        <p className={`text-xl font-bold leading-tight tabular-nums ${strong ? "text-[var(--color-primary)]" : "text-[var(--color-text-dark)]"}`}>
           {fmt(value)}
           {unit ? <span className="ml-1 text-sm font-semibold">{unit}</span> : null}
         </p>
@@ -343,7 +343,7 @@ function Table({ head, align, rows, empty }: { head: string[]; align: ("left" | 
 
 function Card({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+    <section className="h-full rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="text-base font-semibold text-[var(--color-text-dark)]">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
