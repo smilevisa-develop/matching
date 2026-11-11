@@ -306,7 +306,7 @@ function FunnelCard({ counts, isAdmin }: { counts: FunnelCounts[]; isAdmin: bool
         </table>
       </div>
       <p className="mt-3 text-xs text-[var(--color-text-dark)]">
-        「から」はプロフィールの相談リンクが押された数。「相談を始めた人」は相談用の LINE に初めてメッセージや友だち追加をした人数
+        「から」はプロフィールの相談リンクが押された数。「相談を始めた人」は相談用の LINE と Facebook ページに初めてメッセージ (LINE は友だち追加も) をした人数
         {isAdmin ? (
           <>
             {"（リンクは "}

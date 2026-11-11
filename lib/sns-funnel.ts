@@ -3,7 +3,7 @@
  *
  * 1. SNS のプロフィールには、媒体ごとの相談リンク /go/[国]-[媒体] (例: /go/id-tiktok) を貼る。
  *    押されたら SnsLinkClick に記録して、国ごとの行き先 (相談用の LINE など。CoreSettings.snsLinkTargets) へ飛ばす。
- * 2. 相談用の LINE アカウントに新しい人が来たら、LINE→Slack 転送の Apps Script が /api/sns/inquiry に知らせ、SnsInquiry に人ごとに 1 件残す。
+ * 2. 相談用の LINE アカウントと SNS 用の Facebook ページに新しい人が来たら、LINE→Slack 転送の Apps Script が /api/sns/inquiry に知らせ、SnsInquiry に人ごとに 1 件残す。
  * SNS ページで「リンクが押された数」と「相談を始めた人数」を国・媒体ごとに出す
  */
 import { createHash } from "node:crypto";
