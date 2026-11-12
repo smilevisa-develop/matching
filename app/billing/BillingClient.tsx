@@ -95,6 +95,26 @@ const draftOf = (r: LedgerRow): Draft => ({
 const stepsOf = (r: LedgerRow) => Object.values(r.steps).filter((s): s is LedgerStep => !!s);
 const overdueOf = (r: LedgerRow) => stepsOf(r).some((s) => s.overdue);
 
+/** 線のアイコン (24x24) */
+function Icon({ d, className = "h-4 w-4" }: { d: string; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d={d} />
+    </svg>
+  );
+}
+const ICON = {
+  copy: "M9 9h10v10H9zM5 15V5h10",
+  check: "M5 12l5 5L20 7",
+  upload: "M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3",
+  file: "M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8zM14 3v5h5",
+  open: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
+  building: "M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M8 8h3M8 12h3M8 16h3M3 21h18",
+  handshake: "M8 12l3 3 6-6M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0",
+  bank: "M3 10l9-6 9 6M5 10v8M9 10v8M15 10v8M19 10v8M3 21h18",
+  list: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
+};
+
 /** "YYYY-MM" の n か月後の月末 (YYYY-MM-DD) */
 function monthEnd(month: string, n: number) {
   const [y, m] = month.split("-").map(Number);
@@ -122,6 +142,7 @@ export default function BillingClient({
 }) {
   const [uploading, setUploading] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [tab, setTab] = useState<"company" | "partner" | "pay" | "ledger">("company");
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -326,33 +347,40 @@ export default function BillingClient({
   const uploadBox = (r: LedgerRow, kind: "invoice" | "partnerInvoice", label: string, url: string) => {
     const busyNow = uploading === `${r.personId}-${kind}`;
     const isLink = /^https?:\/\//.test(url);
+    const done = !!url;
     return (
-      <div className="md:col-span-2">
-        <p className="text-xs font-medium text-gray-700">{label}</p>
-        <div className="mt-1 flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-gray-400 bg-white px-3 py-2">
-          <label className={`cursor-pointer rounded-lg border border-[var(--color-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white ${busyNow ? "pointer-events-none opacity-50" : ""}`}>
-            {busyNow ? "保存中…" : url ? "PDF を差し替える" : "PDF をアップロード"}
-            <input
-              type="file"
-              accept="application/pdf"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                e.target.value = "";
-                if (f) void upload(r, kind, f);
-              }}
-            />
-          </label>
+      <div className={`md:col-span-2 flex items-center gap-3 rounded-xl border-2 px-4 py-3 ${done ? "border-emerald-300 bg-emerald-50" : "border-dashed border-[var(--color-primary)] bg-white"}`}>
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${done ? "bg-emerald-600 text-white" : "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"}`}>
+          <Icon d={done ? ICON.check : ICON.file} className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-[var(--color-text-dark)]">{label}</p>
           {isLink ? (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="truncate text-sm text-[var(--color-primary)] underline">
-              Drive で開く
+            <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-primary)] underline">
+              <Icon d={ICON.open} className="h-3.5 w-3.5" /> Drive で開く
             </a>
-          ) : url ? (
-            <span className="truncate text-sm text-gray-800">シートに「{url}」</span>
           ) : (
-            <span className="text-sm text-gray-700">アップロードすると Drive に保存して「済」になります</span>
+            <p className="text-xs text-gray-700">{url ? "スプシにあり" : "上げると「済」になります"}</p>
           )}
         </div>
+        <label
+          className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold ${
+            done ? "border border-gray-300 bg-white text-gray-800 hover:bg-gray-50" : "bg-[var(--color-primary)] text-white hover:opacity-90"
+          } ${busyNow ? "pointer-events-none opacity-50" : ""}`}
+        >
+          <Icon d={ICON.upload} />
+          {busyNow ? "保存中…" : done ? "差し替え" : "PDF を上げる"}
+          <input
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void upload(r, kind, f);
+            }}
+          />
+        </label>
       </div>
     );
   };
@@ -416,18 +444,22 @@ export default function BillingClient({
     <button
       type="button"
       onClick={() => void copy(key, text)}
-      className="rounded-lg border border-[var(--color-primary)] px-3 py-1 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
+      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-bold ${
+        copied === key ? "bg-emerald-600 text-white" : "bg-[var(--color-primary)] text-white hover:opacity-90"
+      }`}
     >
-      {copied === key ? "コピーしました" : "Slack 用にコピー"}
+      <Icon d={copied === key ? ICON.check : ICON.copy} />
+      {copied === key ? "コピー済み" : "コピー"}
     </button>
   );
 
   const monthLists = (
     <div className="space-y-4">
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+    <div className="space-y-4">
+      {tab === "company" && (
       <div className="rounded-2xl border border-gray-300 bg-white">
         <div className="flex items-center gap-3 px-4 py-3">
-          <h2 className="font-bold text-[var(--color-text-dark)]">① 川村さんへ ・ 企業への請求書の発行依頼</h2>
+          <h2 className="font-bold text-[var(--color-text-dark)]">川村さんへ ・ 企業への請求書の発行依頼</h2>
           <span className="text-sm text-gray-700">
             {Number(joinedMonth.slice(5))}月入社 {billed.length}件 ・ 入金期日 {mdFull(companyDue)}
           </span>
@@ -468,9 +500,11 @@ export default function BillingClient({
           </table>
         </div>
       </div>
+      )}
+      {tab === "partner" && (
       <div className="rounded-2xl border border-gray-300 bg-white">
         <div className="flex items-center gap-3 px-4 py-3">
-          <h2 className="font-bold text-[var(--color-text-dark)]">② パートナーへ ・ 請求書の発行依頼</h2>
+          <h2 className="font-bold text-[var(--color-text-dark)]">パートナーへ ・ 請求書の発行依頼</h2>
           <span className="text-sm text-gray-700">入金期日 {mdFull(partnerDue)}</span>
         </div>
         {byPartner.size === 0 ? (
@@ -509,11 +543,13 @@ export default function BillingClient({
           ))
         )}
       </div>
+      )}
     </div>
+      {tab === "pay" && (
       <div className="rounded-2xl border border-gray-300 bg-white">
         <div className="flex items-center gap-3 px-4 py-3">
-          <h2 className="font-bold text-[var(--color-text-dark)]">③ 川村さんへ ・ パートナーへの振込依頼</h2>
-          <span className="text-sm text-gray-700">パートナーの請求書が届いて、まだ振り込んでいない {toPay.length}件</span>
+          <h2 className="font-bold text-[var(--color-text-dark)]">川村さんへ ・ パートナーへの振込依頼</h2>
+          <span className="text-sm text-gray-700">{toPay.length}件</span>
           <span className="ml-auto">{copyButton("pay", payText)}</span>
         </div>
         <div className="overflow-x-auto">
@@ -565,6 +601,7 @@ export default function BillingClient({
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 
@@ -603,8 +640,8 @@ export default function BillingClient({
             {field("パートナーへの支払日", "partnerPaidDate", "date")}
           </>
         )}
-        {uploadBox(r, "invoice", "企業への請求書 (PDF)", r.invoiceUrl)}
-        {draft?.route === "自社" ? null : uploadBox(r, "partnerInvoice", "パートナーの請求書 (PDF)", r.partnerInvoiceUrl)}
+        {uploadBox(r, "invoice", "企業への請求書", r.invoiceUrl)}
+        {draft?.route === "自社" ? null : uploadBox(r, "partnerInvoice", "パートナーの請求書", r.partnerInvoiceUrl)}
         {r.hasPlacement ? null : field("入社日", "joinDate", "date")}
         {field("備考", "note", "text", true)}
       </div>
@@ -629,9 +666,42 @@ export default function BillingClient({
     </div>
   );
 
+  const tabs = [
+    { key: "company", label: "① 請求書の依頼", icon: ICON.building, count: billed.length },
+    { key: "partner", label: "② パートナーへ依頼", icon: ICON.handshake, count: byPartner.size },
+    { key: "pay", label: "③ 振込の依頼", icon: ICON.bank, count: toPay.length },
+    { key: "ledger", label: "進み具合", icon: ICON.list, count: summary.overdue, alert: summary.overdue > 0 },
+  ] as const;
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <nav className="flex flex-wrap gap-1 border-b border-gray-300">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`-mb-px inline-flex items-center gap-2 border-b-[3px] px-4 py-2.5 text-sm font-bold ${
+              tab === t.key ? "border-[var(--color-primary)] text-[var(--color-primary)]" : "border-transparent text-gray-700 hover:text-[var(--color-text-dark)]"
+            }`}
+          >
+            <Icon d={t.icon} />
+            {t.label}
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs ${
+                "alert" in t && t.alert ? "bg-red-600 text-white" : tab === t.key ? "bg-[var(--color-primary)] text-white" : "bg-gray-200 text-gray-800"
+              }`}
+            >
+              {t.count}
+            </span>
+          </button>
+        ))}
+      </nav>
+
       {monthLists}
+
+      {tab === "ledger" && (
+      <>
 
       <div className="flex flex-wrap divide-x divide-gray-200 rounded-xl border border-gray-200 bg-white text-sm">
         {[
@@ -711,7 +781,8 @@ export default function BillingClient({
           ))
         )}
       </div>
-      <p className="text-xs text-gray-700">各段階のボタンを押すと「済」(もう一度押すと取り消し)、「詳細・編集」で金額やリンクを直せます。金額・状況は請求管理シートの内容で、ここで直すとシートにも入ります。</p>
+      </>
+      )}
     </div>
   );
 }
