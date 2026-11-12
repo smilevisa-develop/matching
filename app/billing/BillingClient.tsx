@@ -417,7 +417,9 @@ export default function BillingClient({
   const monthEndStr = monthEnd(month, 0);
   const dueBy = (st: LedgerStep | null) => !!st && !st.done && !!st.due && st.due <= monthEndStr;
   const byJoin = (a: LedgerRow, b: LedgerRow) => ((a.joinAt || "9") < (b.joinAt || "9") ? -1 : 1);
-  const keep = (r: LedgerRow) => r.personId === editing;
+  // テスト用 (2026/11 土田さん): KODAI TSUCHIDA (0001) はどのタブにも出す。テストが終わったら消す
+  const TEST_ID = "0001";
+  const keep = (r: LedgerRow) => r.personId === editing || r.displayId === TEST_ID;
   const toInvoice = rows.filter((r) => dueBy(r.steps.invoice) || (keep(r) && tab === "company" && sub === "invoice")).sort(byJoin);
   const toConfirmPayment = rows
     .filter((r) => (r.steps.invoice?.done && !!r.steps.payment && !r.steps.payment.done) || (keep(r) && tab === "company" && sub === "payment"))
@@ -650,12 +652,8 @@ export default function BillingClient({
       case "payment":
         return check(`${r.personId}-payment`, "入金を確認した", !!r.steps.payment?.done, () => void toggle(r, "payment"));
       case "paInvoice":
-        return (
-          <div className="flex flex-wrap items-center gap-2">
-            {uploadButton(r, "partnerInvoice")}
-            {check(`${r.personId}-partnerInvoice`, "受け取った", !!r.steps.partnerInvoice?.done, () => void toggle(r, "partnerInvoice"))}
-          </div>
-        );
+        // PDF を上げる = 受け取った
+        return uploadButton(r, "partnerInvoice");
       case "transfer":
         // 振込の確認はしない (2026/11 土田さん)。川村さんに依頼したら ④ PA支払を済にする
         return check(`${r.personId}-partnerPayment`, "川村さんに依頼した", !!r.steps.partnerPayment?.done, () => void toggle(r, "partnerPayment"));
