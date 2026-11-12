@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { Fragment, useMemo, useState } from "react";
-import { useKeptState } from "@/app/components/KeepOnBack";
 
 export type LedgerStep = {
   due: string;
@@ -95,18 +94,11 @@ const overdueOf = (r: LedgerRow) => stepsOf(r).some((s) => s.overdue);
 
 export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]; me: string }) {
   const [rows, setRows] = useState(initial);
-  const [view, setView] = useKeptState<"month" | "open">("view", "month");
-  const [filter, setFilter] = useKeptState<"all" | "mine" | "overdue">("filter", "all");
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
 
-  const visible = rows.filter((r) => {
-    if (view === "month" ? !(r.inMonth || overdueOf(r)) : !r.open) return false;
-    if (filter === "overdue") return overdueOf(r);
-    if (filter === "mine") return r.owner === me;
-    return true;
-  });
+  const visible = rows.filter((r) => r.inMonth || overdueOf(r));
 
   const summary = useMemo(() => {
     const sum = (list: LedgerRow[], pick: (r: LedgerRow) => number | null) => list.reduce((t, r) => t + (pick(r) ?? 0), 0);
@@ -123,7 +115,6 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
       partnerTotal: sum(partnerPays, (r) => r.costAmount),
       partnerCount: partnerPays.length,
       overdue: rows.filter(overdueOf).length,
-      openCount: rows.filter((r) => r.open).length,
     };
   }, [rows]);
 
@@ -233,16 +224,6 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
     );
   };
 
-  const chip = <T extends string>(value: T, current: T, set: (v: T) => void, label: string, tone = "") => (
-    <button
-      type="button"
-      onClick={() => set(value)}
-      className={`rounded-lg border px-3 py-1 text-sm ${current === value ? "border-gray-500 bg-gray-100 font-semibold" : "border-gray-300 bg-white"} ${tone}`}
-    >
-      {label}
-    </button>
-  );
-
   const field = (label: string, key: keyof Draft, type: "text" | "date" | "yen" = "text", wide = false) => (
     <label className={`block text-xs font-medium text-gray-700 ${wide ? "md:col-span-2" : ""}`}>
       {label}
@@ -320,41 +301,20 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-        <div className="rounded-xl bg-white p-3 shadow-sm">
-          <p className="text-xs font-medium text-gray-700">この月の請求</p>
-          <p className="text-xl font-bold text-[var(--color-text-dark)]">
-            {summary.invoiceCount}件 <span className="text-base">{yen(summary.invoiceTotal)}</span>
-          </p>
-        </div>
-        <div className="rounded-xl bg-white p-3 shadow-sm">
-          <p className="text-xs font-medium text-gray-700">粗利 (請求 − パートナーへの支払い)</p>
-          <p className="text-xl font-bold text-[var(--color-text-dark)]">{yen(summary.profit) || "¥0"}</p>
-        </div>
-        <div className="rounded-xl bg-white p-3 shadow-sm">
-          <p className="text-xs font-medium text-gray-700">入金予定 (月末)</p>
-          <p className="text-xl font-bold text-[var(--color-text-dark)]">{yen(summary.paymentTotal) || "¥0"}</p>
-          <p className="text-xs font-medium text-emerald-700">入金済 {yen(summary.paidTotal) || "¥0"}</p>
-        </div>
-        <div className="rounded-xl bg-white p-3 shadow-sm">
-          <p className="text-xs font-medium text-gray-700">パートナーへの支払い予定</p>
-          <p className="text-xl font-bold text-[var(--color-text-dark)]">
-            {summary.partnerCount}件 <span className="text-base">{yen(summary.partnerTotal)}</span>
-          </p>
-        </div>
-        <div className={`rounded-xl p-3 shadow-sm ${summary.overdue > 0 ? "bg-red-50" : "bg-white"}`}>
-          <p className={`text-xs font-medium ${summary.overdue > 0 ? "text-red-700" : "text-gray-700"}`}>期限切れ</p>
-          <p className={`text-xl font-bold ${summary.overdue > 0 ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>{summary.overdue}件</p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {chip("month", view, setView, "この月")}
-        {chip("open", view, setView, `終わっていないものすべて (${summary.openCount})`)}
-        <span className="mx-1 h-5 w-px bg-gray-300" />
-        {chip("all", filter, setFilter, "全員")}
-        {chip("mine", filter, setFilter, "自分の担当")}
-        {chip("overdue", filter, setFilter, "期限切れだけ", "text-red-700")}
+      <div className="flex flex-wrap divide-x divide-gray-200 rounded-xl border border-gray-200 bg-white text-sm">
+        {[
+          { label: "この月の請求", value: `${summary.invoiceCount}件 ${yen(summary.invoiceTotal) || "¥0"}` },
+          { label: "粗利", value: yen(summary.profit) || "¥0" },
+          { label: "入金予定", value: yen(summary.paymentTotal) || "¥0", sub: `済 ${yen(summary.paidTotal) || "¥0"}` },
+          { label: "PAへの支払い", value: `${summary.partnerCount}件 ${yen(summary.partnerTotal) || "¥0"}` },
+          { label: "期限切れ", value: `${summary.overdue}件`, alert: summary.overdue > 0 },
+        ].map((x) => (
+          <div key={x.label} className="flex items-baseline gap-2 px-4 py-2">
+            <span className={`text-xs font-medium ${x.alert ? "text-red-700" : "text-gray-700"}`}>{x.label}</span>
+            <span className={`font-bold tabular-nums ${x.alert ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>{x.value}</span>
+            {x.sub ? <span className="text-xs font-medium text-emerald-700">{x.sub}</span> : null}
+          </div>
+        ))}
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-gray-300 bg-white shadow-sm">
