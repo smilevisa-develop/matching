@@ -1298,6 +1298,8 @@ model PersonBilling {
   id                   Int      @id @default(autoincrement())
   personId             Int      @unique
   person               Person   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// 請求書ID (請求管理シートの B 列。関数の通し番号を読むだけ)
+  invoiceNo            String?
   /// 単価 (税抜)
   unitPrice            Int?
   /// 請求金額 (税込)

@@ -79,6 +79,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       owner: deal?.owner?.name ?? all.find((s) => s.owner)?.owner ?? "",
       joinAt: joinYmd,
       displayId: String(person.id).padStart(4, "0"),
+      invoiceNo: b?.invoiceNo ?? "",
       offerAt: readStageDates(person.dealCandidates[0]?.stageDates)["内定済み"] ?? ymd(person.placement?.offerAt ?? null),
       hasPlacement: placementId != null,
       placementId,

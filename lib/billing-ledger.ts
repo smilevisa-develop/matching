@@ -37,6 +37,8 @@ type Field = { key: BillingKey; header: string; nth?: number; kind: Kind; write:
 
 /** アプリの項目 ↔ 請求管理の見出し (同じ見出しが 2 つある「請求書リンク」は何番目か) */
 export const BILLING_FIELDS: Field[] = [
+  // 請求書ID は関数 (通し番号) なので読むだけ
+  { key: "invoiceNo", header: "請求書ID", kind: "text", write: false },
   { key: "note", header: "備考", kind: "text", write: true },
   { key: "unitPrice", header: "単価", kind: "yen", write: true },
   { key: "invoiceDate", header: "請求日", kind: "date", write: true },

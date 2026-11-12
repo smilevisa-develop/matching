@@ -24,6 +24,8 @@ export type LedgerRow = {
   joinAt: string;
   /** 候補者ID (4 桁。請求管理の ID) */
   displayId: string;
+  /** 請求書ID (請求管理シートの通し番号) */
+  invoiceNo: string;
   offerAt: string;
   /** 内定者管理にカードがある人 (無い人は入社日をここで入れる) */
   hasPlacement: boolean;
@@ -113,6 +115,8 @@ const ICON = {
   handshake: "M8 12l3 3 6-6M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0",
   bank: "M3 10l9-6 9 6M5 10v8M9 10v8M15 10v8M19 10v8M3 21h18",
   list: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
+  edit: "M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4",
+  close: "M6 15l6-6 6 6",
 };
 
 /** "YYYY-MM" の n か月後の月末 (YYYY-MM-DD) */
@@ -407,7 +411,7 @@ export default function BillingClient({
   const companyText = [
     `【請求書の発行のお願い】${Number(month.slice(5))}月請求 (${Number(joinedMonth.slice(5))}月入社) ${billed.length}件`,
     ...billed.map((r) =>
-      [r.displayId, r.personName, r.companyName || "-", `内定 ${mdFull(r.offerAt)}`, `入社 ${mdFull(r.joinAt)}`, yen(r.invoiceAmount) || "金額未入力", `入金期日 ${mdFull(r.dueDate || companyDue)}`].join(" / "),
+      [`請求書ID ${r.invoiceNo || "-"}`, r.personName, r.companyName || "-", `内定 ${mdFull(r.offerAt)}`, `入社 ${mdFull(r.joinAt)}`, yen(r.invoiceAmount) || "金額未入力", `入金期日 ${mdFull(r.dueDate || companyDue)}`].join(" / "),
     ),
   ].join("\n");
   const partnerText = (name: string, list: LedgerRow[]) =>
@@ -425,7 +429,7 @@ export default function BillingClient({
     `【パートナーへの振込のお願い】${toPay.length}件`,
     ...toPay.map((r) =>
       [
-        r.displayId,
+        `請求書ID ${r.invoiceNo || "-"}`,
         r.companyName || "-",
         r.partnerName || "-",
         r.personName,
@@ -469,7 +473,7 @@ export default function BillingClient({
           <table className="w-full min-w-[640px] border-t border-gray-300">
             <thead>
               <tr>
-                {["ID", "名前", "企業名", "内定日", "入社日", "手数料", "入金期日"].map((h) => (
+                {["請求書ID", "名前", "企業名", "内定日", "入社日", "手数料", "入金期日"].map((h) => (
                   <th key={h} className={`${TH} ${h === "手数料" ? "text-right" : ""}`}>
                     {h}
                   </th>
@@ -486,7 +490,7 @@ export default function BillingClient({
               ) : (
                 billed.map((r) => (
                   <tr key={r.personId}>
-                    <td className={TD}>{r.displayId}</td>
+                    <td className={TD}>{r.invoiceNo || "-"}</td>
                     <td className={`${TD} font-semibold`}>{r.personName}</td>
                     <td className={TD}>{r.companyName || "-"}</td>
                     <td className={TD}>{mdFull(r.offerAt)}</td>
@@ -556,7 +560,7 @@ export default function BillingClient({
           <table className="w-full min-w-[820px] border-t border-gray-300">
             <thead>
               <tr>
-                {["ID", "企業名", "パートナー", "候補者名", "内定日", "入社日", "手数料", "振込期日", "請求書"].map((h) => (
+                {["請求書ID", "企業名", "パートナー", "候補者名", "内定日", "入社日", "手数料", "振込期日", "請求書"].map((h) => (
                   <th key={h} className={`${TH} ${h === "手数料" ? "text-right" : ""}`}>
                     {h}
                   </th>
@@ -576,7 +580,7 @@ export default function BillingClient({
                   const late = !!due && due < today();
                   return (
                     <tr key={r.personId}>
-                      <td className={TD}>{r.displayId}</td>
+                      <td className={TD}>{r.invoiceNo || "-"}</td>
                       <td className={TD}>{r.companyName || "-"}</td>
                       <td className={TD}>{r.partnerName || "-"}</td>
                       <td className={`${TD} font-semibold`}>{r.personName}</td>
@@ -754,7 +758,10 @@ export default function BillingClient({
                         : "border-[var(--color-primary)] bg-white text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
                     }`}
                   >
-                    {editing === r.personId ? "閉じる ▲" : "詳細・編集 ▼"}
+                    <span className="inline-flex items-center gap-1.5">
+                      <Icon d={editing === r.personId ? ICON.close : ICON.edit} className="h-3.5 w-3.5" />
+                      {editing === r.personId ? "閉じる" : "詳細・編集"}
+                    </span>
                   </button>
                 </div>
                 <div className="flex items-center px-4 py-4 text-sm tabular-nums text-gray-800">{md(r.joinAt) || "-"}</div>
