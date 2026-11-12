@@ -151,10 +151,16 @@ export default function BillingClient({
   useEffect(() => {
     const el = stickyRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setStickyH(el.offsetHeight));
+    const measure = () => setStickyH(el.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [tab]);
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
