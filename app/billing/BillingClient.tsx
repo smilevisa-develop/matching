@@ -131,6 +131,7 @@ export default function BillingClient({
   me,
   month,
   partners,
+  header,
 }: {
   rows: LedgerRow[];
   me: string;
@@ -138,6 +139,8 @@ export default function BillingClient({
   month: string;
   /** 登録済みのパートナー (選ぶ欄の候補) */
   partners: string[];
+  /** タイトルと月の切り替え (タブと一緒に上に固定する) */
+  header?: React.ReactNode;
 }) {
   const [uploading, setUploading] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -656,6 +659,9 @@ export default function BillingClient({
 
   return (
     <div className="space-y-4">
+      {/* スクロールしてもタイトル・月・タブ (まとめでは数字の帯も) を上に固定する */}
+      <div className="sticky top-0 z-20 -mx-8 space-y-3 bg-[var(--background)] px-8 pb-3 pt-8 shadow-[0_6px_8px_-8px_rgba(0,0,0,0.25)]">
+      {header}
       <nav className="flex flex-wrap gap-1 border-b border-gray-300">
         {tabs.map((t) => (
           <button
@@ -678,6 +684,24 @@ export default function BillingClient({
           </button>
         ))}
       </nav>
+      {tab === "ledger" && (
+      <div className="flex flex-wrap divide-x divide-gray-200 rounded-xl border border-gray-200 bg-white text-sm">
+        {[
+          { label: "この月の請求", value: `${summary.invoiceCount}件 ${yen(summary.invoiceTotal) || "¥0"}` },
+          { label: "粗利", value: yen(summary.profit) || "¥0" },
+          { label: "入金予定", value: yen(summary.paymentTotal) || "¥0", sub: `済 ${yen(summary.paidTotal) || "¥0"}` },
+          { label: "PAへの支払い", value: `${summary.partnerCount}件 ${yen(summary.partnerTotal) || "¥0"}` },
+          { label: "期限切れ", value: `${summary.overdue}件`, alert: summary.overdue > 0 },
+        ].map((x) => (
+          <div key={x.label} className="flex items-baseline gap-2 px-4 py-2">
+            <span className={`text-xs font-medium ${x.alert ? "text-red-700" : "text-gray-700"}`}>{x.label}</span>
+            <span className={`font-bold tabular-nums ${x.alert ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>{x.value}</span>
+            {x.sub ? <span className="text-xs font-medium text-emerald-700">{x.sub}</span> : null}
+          </div>
+        ))}
+      </div>
+      )}
+      </div>
 
       {tab === "company" && (
         <div className="space-y-3">
@@ -707,21 +731,6 @@ export default function BillingClient({
 
       {tab === "ledger" && (
         <div className="space-y-3">
-      <div className="flex flex-wrap divide-x divide-gray-200 rounded-xl border border-gray-200 bg-white text-sm">
-        {[
-          { label: "この月の請求", value: `${summary.invoiceCount}件 ${yen(summary.invoiceTotal) || "¥0"}` },
-          { label: "粗利", value: yen(summary.profit) || "¥0" },
-          { label: "入金予定", value: yen(summary.paymentTotal) || "¥0", sub: `済 ${yen(summary.paidTotal) || "¥0"}` },
-          { label: "PAへの支払い", value: `${summary.partnerCount}件 ${yen(summary.partnerTotal) || "¥0"}` },
-          { label: "期限切れ", value: `${summary.overdue}件`, alert: summary.overdue > 0 },
-        ].map((x) => (
-          <div key={x.label} className="flex items-baseline gap-2 px-4 py-2">
-            <span className={`text-xs font-medium ${x.alert ? "text-red-700" : "text-gray-700"}`}>{x.label}</span>
-            <span className={`font-bold tabular-nums ${x.alert ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>{x.value}</span>
-            {x.sub ? <span className="text-xs font-medium text-emerald-700">{x.sub}</span> : null}
-          </div>
-        ))}
-      </div>
           {ledger(openRows, "終わっていない請求はありません")}
         </div>
       )}

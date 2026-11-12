@@ -204,28 +204,36 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const next = shiftMonth(month, 1);
 
   return (
-    <div className="space-y-4 p-8">
-      <div className="flex flex-wrap items-baseline gap-3">
-        <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">請求管理</h1>
-        <span className="text-2xl font-bold text-[var(--color-primary)]">
-          {month.slice(0, 4)}年{Number(month.slice(5))}月
-        </span>
-        <nav className="flex items-center gap-1 text-sm">
-          <Link href={`/billing?month=${prev}`} className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-[var(--color-text-dark)] hover:text-[var(--color-primary)]">
-            ← {Number(prev.slice(5))}月
-          </Link>
-          {month !== thisMonth ? (
-            <Link href="/billing" className="px-2 py-1 text-[var(--color-text-dark)] underline decoration-dotted">
-              今月
-            </Link>
-          ) : null}
-          <Link href={`/billing?month=${next}`} className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-[var(--color-text-dark)] hover:text-[var(--color-primary)]">
-            {Number(next.slice(5))}月 →
-          </Link>
-        </nav>
-      </div>
+    <div className="space-y-4 px-8 pb-8">
       {refreshError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">請求管理シートを読み込めませんでした (前回の内容を出しています): {refreshError}</p> : null}
-      <BillingClient key={month} rows={rows} me={account.name ?? ""} month={month} partners={partners} />
+      <BillingClient
+        key={month}
+        rows={rows}
+        me={account.name ?? ""}
+        month={month}
+        partners={partners}
+        header={
+      <div className="flex flex-wrap items-baseline gap-3">
+          <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">請求管理</h1>
+          <span className="text-2xl font-bold text-[var(--color-primary)]">
+            {month.slice(0, 4)}年{Number(month.slice(5))}月
+          </span>
+          <nav className="flex items-center gap-1 text-sm">
+            <Link href={`/billing?month=${prev}`} className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-[var(--color-text-dark)] hover:text-[var(--color-primary)]">
+              ← {Number(prev.slice(5))}月
+            </Link>
+            {month !== thisMonth ? (
+              <Link href="/billing" className="px-2 py-1 text-[var(--color-text-dark)] underline decoration-dotted">
+                今月
+              </Link>
+            ) : null}
+            <Link href={`/billing?month=${next}`} className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-[var(--color-text-dark)] hover:text-[var(--color-primary)]">
+              {Number(next.slice(5))}月 →
+            </Link>
+          </nav>
+        </div>
+        }
+      />
     </div>
   );
 }
