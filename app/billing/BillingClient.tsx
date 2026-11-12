@@ -146,7 +146,7 @@ export default function BillingClient({
 }) {
   const [uploading, setUploading] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  type Sub = "invoice" | "payment" | "paInvoice" | "transfer" | "confirm";
+  type Sub = "invoice" | "payment" | "paInvoice" | "transfer";
   const [tab, setTab] = useState<"company" | "pa" | "summary">("company");
   const [sub, setSub] = useState<Sub>("invoice");
   // 上に固定した部分 (タイトル・タブ・数字の帯) の高さ。表の見出しをそのすぐ下に固定する
@@ -263,20 +263,6 @@ export default function BillingClient({
         ),
       );
       setEditing(null);
-    } catch (e) {
-      alert(`保存に失敗しました: ${e instanceof Error ? e.message : ""}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  /** 川村さんに振込を依頼した / 取り消す */
-  const setTransfer = async (r: LedgerRow, on: boolean) => {
-    setBusy(`${r.personId}-transfer`);
-    try {
-      await patch(r.personId, { transferRequested: on });
-      const t = today();
-      setRows((prev) => prev.map((x) => (x.personId === r.personId ? { ...x, transferRequested: on ? t : "" } : x)));
     } catch (e) {
       alert(`保存に失敗しました: ${e instanceof Error ? e.message : ""}`);
     } finally {
@@ -426,7 +412,7 @@ export default function BillingClient({
 
   // タブごとの一覧 (実際の流れの順。それぞれ、その作業が済んだら一覧から消える)
   //   企業: 請求書の依頼 (① 期限がこの月の末までで未発行) → 入金確認 (① 済で ② 未)
-  //   PA:   請求書の依頼 (③ 期限がこの月の末までで未受領) → 振込の依頼 (③ 済で川村さんにまだ依頼していない) → 振込確認 (依頼済みで ④ 未)
+  //   PA:   請求書の依頼 (③ 期限がこの月の末までで未受領) → 振込の依頼 (③ 済で ④ 未。川村さんに依頼したら ④ 済)
   //   まとめ: どこかの段階が残っている人 (全部済むまで出す)
   const monthEndStr = monthEnd(month, 0);
   const dueBy = (st: LedgerStep | null) => !!st && !st.done && !!st.due && st.due <= monthEndStr;
@@ -445,8 +431,7 @@ export default function BillingClient({
   const payDueOf = (r: LedgerRow) => r.steps.partnerPayment?.due || (r.joinAt ? monthEnd(r.joinAt.slice(0, 7), 2) : "");
   const waitingPay = (r: LedgerRow) => r.route !== "自社" && !!r.steps.partnerInvoice?.done && !!r.steps.partnerPayment && !r.steps.partnerPayment.done;
   const byPayDue = (a: LedgerRow, b: LedgerRow) => (payDueOf(a) < payDueOf(b) ? -1 : 1);
-  const toPay = rows.filter((r) => (waitingPay(r) && !r.transferRequested) || (keep(r) && tab === "pa" && sub === "transfer")).sort(byPayDue);
-  const toConfirmTransfer = rows.filter((r) => (waitingPay(r) && !!r.transferRequested) || (keep(r) && tab === "pa" && sub === "confirm")).sort(byPayDue);
+  const toPay = rows.filter((r) => waitingPay(r) || (keep(r) && tab === "pa" && sub === "transfer")).sort(byPayDue);
   // まだ入社していない (入社日が無く、どの段階も手を付けていない) 人はまとめに出さない
   const started = (r: LedgerRow) => !!r.joinAt || stepsOf(r).some((st) => st.done);
   const openRows = rows.filter((r) => (r.open && started(r)) || keep(r)).sort(byJoin);
@@ -622,7 +607,6 @@ export default function BillingClient({
     payment: { step: "payment", label: "入金", sub: "企業からの入金" },
     paInvoice: { step: "partnerInvoice", label: "PA請求書", sub: "パートナーから受け取る" },
     transfer: { step: "partnerPayment", label: "振込", sub: "川村さんへ依頼" },
-    confirm: { step: "partnerPayment", label: "振込", sub: "振り込まれたか確認" },
   };
 
   /** チェックボックス (押すとすぐ保存) */
@@ -673,14 +657,8 @@ export default function BillingClient({
           </div>
         );
       case "transfer":
-        return check(`${r.personId}-transfer`, "川村さんに依頼した", !!r.transferRequested, () => void setTransfer(r, !r.transferRequested));
-      case "confirm":
-        return (
-          <div className="flex flex-wrap items-center gap-2">
-            {check(`${r.personId}-partnerPayment`, "振込を確認した", !!r.steps.partnerPayment?.done, () => void toggle(r, "partnerPayment"))}
-            <span className="text-xs text-gray-700">依頼 {md(r.transferRequested)}</span>
-          </div>
-        );
+        // 振込の確認はしない (2026/11 土田さん)。川村さんに依頼したら ④ PA支払を済にする
+        return check(`${r.personId}-partnerPayment`, "川村さんに依頼した", !!r.steps.partnerPayment?.done, () => void toggle(r, "partnerPayment"));
     }
   };
 
@@ -743,7 +721,7 @@ export default function BillingClient({
                 </div>
                 <div className="flex items-center px-4 py-4 text-sm tabular-nums text-gray-800">{md(r.joinAt) || "-"}</div>
                 <div className="flex flex-col items-end justify-center px-4 py-4 tabular-nums">
-                  {mode === "paInvoice" || mode === "transfer" || mode === "confirm" ? (
+                  {mode === "paInvoice" || mode === "transfer" ? (
                     r.costAmount == null ? (
                       <button type="button" onClick={() => openEditor(r)} className="whitespace-nowrap rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">
                         PA 金額を入れる
@@ -794,7 +772,7 @@ export default function BillingClient({
 
   const tabs = [
     { key: "company", label: "企業", icon: ICON.building, count: toInvoice.length + toConfirmPayment.length },
-    { key: "pa", label: "PA", icon: ICON.handshake, count: toRequest.length + toPay.length + toConfirmTransfer.length },
+    { key: "pa", label: "PA", icon: ICON.handshake, count: toRequest.length + toPay.length },
     { key: "summary", label: "まとめ", icon: ICON.list, count: openRows.length, alert: summary.overdue > 0 },
   ] as const;
   const subs: { key: Sub; label: string; count: number }[] =
@@ -807,7 +785,6 @@ export default function BillingClient({
         ? [
             { key: "paInvoice", label: "請求書の依頼", count: toRequest.length },
             { key: "transfer", label: "振込の依頼", count: toPay.length },
-            { key: "confirm", label: "振込確認", count: toConfirmTransfer.length },
           ]
         : [];
   const chooseTab = (t: (typeof tabs)[number]["key"]) => {
@@ -914,13 +891,6 @@ export default function BillingClient({
           {ledger(toPay, "振込を依頼する請求書はありません", "transfer")}
         </div>
       )}
-      {tab === "pa" && sub === "confirm" && (
-        <div className="space-y-3">
-          {head("PAの振込確認", toConfirmTransfer.length)}
-          {ledger(toConfirmTransfer, "振込を待っているものはありません", "confirm")}
-        </div>
-      )}
-
       {tab === "summary" && <div className="space-y-3">{ledger(openRows, "終わっていない請求はありません", "all")}</div>}
     </div>
   );
