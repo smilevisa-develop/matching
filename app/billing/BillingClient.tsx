@@ -207,7 +207,7 @@ export default function BillingClient({
     }
   };
 
-  /** 一覧の「未入力」から、進み具合のその人の詳細・編集へ */
+  /** 一覧の「未入力」から、まとめのその人の詳細・編集へ */
   const jumpToEditor = (r: LedgerRow) => {
     setTab("ledger");
     setEditing(r.personId);
@@ -731,10 +731,10 @@ export default function BillingClient({
   );
 
   const tabs = [
-    { key: "company", label: "① 請求書の依頼", icon: ICON.building, count: billed.length },
-    { key: "partner", label: "② パートナーへ依頼", icon: ICON.handshake, count: byPartner.size },
-    { key: "pay", label: "③ 振込の依頼", icon: ICON.bank, count: toPay.length },
-    { key: "ledger", label: "進み具合", icon: ICON.list, count: summary.overdue, alert: summary.overdue > 0 },
+    { key: "company", label: "請求書の依頼", icon: ICON.building, count: billed.length },
+    { key: "partner", label: "パートナーへ依頼", icon: ICON.handshake, count: byPartner.size },
+    { key: "pay", label: "振込の依頼", icon: ICON.bank, count: toPay.length },
+    { key: "ledger", label: "まとめ", icon: ICON.list, count: summary.overdue, alert: summary.overdue > 0 },
   ] as const;
 
   return (
