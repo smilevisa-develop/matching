@@ -483,24 +483,24 @@ model WhatsappProfile {
 }
 
 model Message {
-  id         Int       @id @default(autoincrement())
-  personId   Int?
-  person     Person?   @relation(fields: [personId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  id                  Int       @id @default(autoincrement())
+  personId            Int?
+  person              Person?   @relation(fields: [personId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   /// パートナー宛/送信元メッセージ用 (person と排他、両方 null の場合は未紐づけ)
-  partnerId  Int?
-  partner    Partner?  @relation(fields: [partnerId], references: [id], onDelete: SetNull)
-  channel    String
-  direction  String
-  content    String
-  externalId String?
+  partnerId           Int?
+  partner             Partner?  @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  channel             String
+  direction           String
+  content             String
+  externalId          String?
   /// LINE グループ内の送信者の表示名 (グループメッセージの場合のみ。1:1 では null)
-  senderName String?
+  senderName          String?
   /// LINE グループ内の送信者の userId (内部識別用)
-  senderId   String?
-  sentAt     DateTime  @default(now())
-  readAt     DateTime?
+  senderId            String?
+  sentAt              DateTime  @default(now())
+  readAt              DateTime?
   /// 本文の言語 (ja / vi / id / en など)。翻訳したときに AI が判定して入れる。未判定は null
-  sourceLang String?
+  sourceLang          String?
   /// LINE のメッセージID (受信は webhook、送信は push の応答から)
   lineMessageId       String?
   /// LINE の引用トークン。これを付けて送ると、このメッセージを引用した返信になる
@@ -1295,39 +1295,41 @@ model SnsInquiry {
 /// 請求 (1 人 1 件)。アプリが正で、企業データベースの「請求管理」タブへ上書きする (2026/11)。
 /// 日付は "YYYY-MM-DD" の文字列 (スプシと同じく日付だけを扱う)。
 model PersonBilling {
-  id                   Int      @id @default(autoincrement())
-  personId             Int      @unique
-  person               Person   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id                         Int      @id @default(autoincrement())
+  personId                   Int      @unique
+  person                     Person   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   /// 請求書ID (請求管理シートの B 列。関数の通し番号を読むだけ)
-  invoiceNo            String?
+  invoiceNo                  String?
   /// 単価 (税抜)
-  unitPrice            Int?
+  unitPrice                  Int?
   /// 請求金額 (税込)
-  invoiceAmount        Int?
+  invoiceAmount              Int?
   /// 請求日 (企業へ請求書を送った日)
-  invoiceDate          String?
+  invoiceDate                String?
   /// 入金期日
-  dueDate              String?
+  dueDate                    String?
   /// 請求書: 未発行 / 発行済
-  invoiceStatus        String?
+  invoiceStatus              String?
   /// 請求ステータス: 未入金 / 入金済
-  paymentStatus        String?
-  invoiceUrl           String?
+  paymentStatus              String?
+  invoiceUrl                 String?
   /// 自社 / パートナー
-  route                String?
-  partnerName          String?
+  route                      String?
+  partnerName                String?
   /// 仕入高 (パートナーへの支払い)
-  partnerCost          Int?
+  partnerCost                Int?
   /// PAからの請求書: 未受領 / 受領済
-  partnerInvoiceStatus String?
+  partnerInvoiceStatus       String?
   /// 支払い有無: 未払い / 支払済
-  partnerPayStatus     String?
-  partnerPaidDate      String?
-  partnerInvoiceUrl    String?
-  note                 String?
+  partnerPayStatus           String?
+  partnerPaidDate            String?
+  partnerInvoiceUrl          String?
+  /// 川村さんにパートナーへの振込を依頼した日 (アプリだけで持つ。シートには無い)
+  partnerTransferRequestedAt String?
+  note                       String?
   /// 内定者管理に居ない人 (人材紹介会社経由など) の入社日。ある人は内定者管理の入社日を使う
-  joinDate             String?
-  updatedBy            String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  joinDate                   String?
+  updatedBy                  String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 }

@@ -51,6 +51,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ person
           data: done ? { doneAt: new Date(), doneBy: account.name ?? null } : { doneAt: null, doneBy: null },
         });
       }
+    } else if (typeof body?.transferRequested === "boolean") {
+      // 川村さんにパートナーへの振込を依頼した (振込の依頼 → 振込確認)
+      data = { partnerTransferRequestedAt: body.transferRequested ? today : null };
     } else if (body?.fields && typeof body.fields === "object") {
       const f = body.fields as Record<string, unknown>;
       for (const k of YEN_FIELDS) {

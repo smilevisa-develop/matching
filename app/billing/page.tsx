@@ -118,6 +118,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       partnerPaidDate: b?.partnerPaidDate ?? "",
       invoiceUrl: b?.invoiceUrl ?? "",
       partnerInvoiceUrl: b?.partnerInvoiceUrl ?? "",
+      transferRequested: b?.partnerTransferRequestedAt ?? "",
       note: b?.note ?? "",
       steps,
       inMonth: all.some((s) => s.inMonth),

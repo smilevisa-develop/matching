@@ -40,6 +40,8 @@ export type LedgerRow = {
   partnerPaidDate: string;
   invoiceUrl: string;
   partnerInvoiceUrl: string;
+  /** 川村さんにパートナーへの振込を依頼した日 (振込の依頼 → 振込確認 に移る) */
+  transferRequested: string;
   note: string;
   steps: Record<StepKey, LedgerStep | null>;
   inMonth: boolean;
@@ -144,7 +146,9 @@ export default function BillingClient({
 }) {
   const [uploading, setUploading] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [tab, setTab] = useState<"company" | "partner" | "pay" | "ledger">("company");
+  type Sub = "invoice" | "payment" | "paInvoice" | "transfer" | "confirm";
+  const [tab, setTab] = useState<"company" | "pa" | "summary">("company");
+  const [sub, setSub] = useState<Sub>("invoice");
   // 上に固定した部分 (タイトル・タブ・数字の帯) の高さ。表の見出しをそのすぐ下に固定する
   const stickyRef = useRef<HTMLDivElement>(null);
   const [stickyH, setStickyH] = useState(0);
@@ -160,7 +164,7 @@ export default function BillingClient({
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [tab]);
+  }, [tab, sub]);
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -259,6 +263,20 @@ export default function BillingClient({
         ),
       );
       setEditing(null);
+    } catch (e) {
+      alert(`保存に失敗しました: ${e instanceof Error ? e.message : ""}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** 川村さんに振込を依頼した / 取り消す */
+  const setTransfer = async (r: LedgerRow, on: boolean) => {
+    setBusy(`${r.personId}-transfer`);
+    try {
+      await patch(r.personId, { transferRequested: on });
+      const t = today();
+      setRows((prev) => prev.map((x) => (x.personId === r.personId ? { ...x, transferRequested: on ? t : "" } : x)));
     } catch (e) {
       alert(`保存に失敗しました: ${e instanceof Error ? e.message : ""}`);
     } finally {
@@ -406,26 +424,32 @@ export default function BillingClient({
     );
   };
 
-  // それぞれの段階でやることが残っている人 (その段階を済にしたら一覧から消える)。期限がこの月の末までの人
+  // タブごとの一覧 (実際の流れの順。それぞれ、その作業が済んだら一覧から消える)
+  //   企業: 請求書の依頼 (① 期限がこの月の末までで未発行) → 入金確認 (① 済で ② 未)
+  //   PA:   請求書の依頼 (③ 期限がこの月の末までで未受領) → 振込の依頼 (③ 済で川村さんにまだ依頼していない) → 振込確認 (依頼済みで ④ 未)
+  //   まとめ: どこかの段階が残っている人 (全部済むまで出す)
   const monthEndStr = monthEnd(month, 0);
   const dueBy = (st: LedgerStep | null) => !!st && !st.done && !!st.due && st.due <= monthEndStr;
   const byJoin = (a: LedgerRow, b: LedgerRow) => ((a.joinAt || "9") < (b.joinAt || "9") ? -1 : 1);
-  const toInvoice = rows.filter((r) => dueBy(r.steps.invoice)).sort(byJoin);
-  const toRequest = rows.filter((r) => r.route !== "自社" && dueBy(r.steps.partnerInvoice)).sort(byJoin);
+  const keep = (r: LedgerRow) => r.personId === editing;
+  const toInvoice = rows.filter((r) => dueBy(r.steps.invoice) || (keep(r) && tab === "company" && sub === "invoice")).sort(byJoin);
+  const toConfirmPayment = rows
+    .filter((r) => (r.steps.invoice?.done && !!r.steps.payment && !r.steps.payment.done) || (keep(r) && tab === "company" && sub === "payment"))
+    .sort((a, b) => ((a.steps.payment?.due || "9") < (b.steps.payment?.due || "9") ? -1 : 1));
+  const toRequest = rows.filter((r) => (r.route !== "自社" && dueBy(r.steps.partnerInvoice)) || (keep(r) && tab === "pa" && sub === "paInvoice")).sort(byJoin);
   const byPartner = new Map<string, LedgerRow[]>();
   for (const r of toRequest) {
     const k = r.partnerName || "パートナー未設定";
     byPartner.set(k, [...(byPartner.get(k) ?? []), r]);
   }
-  // 振込の依頼: パートナーの請求書が届いていて、まだ振り込んでいない人 (月に関係なく。請求書が遅れて月がずれることがあるため)
   const payDueOf = (r: LedgerRow) => r.steps.partnerPayment?.due || (r.joinAt ? monthEnd(r.joinAt.slice(0, 7), 2) : "");
-  const toPay = rows
-    .filter((r) => r.route !== "自社" && r.steps.partnerInvoice?.done && !!r.steps.partnerPayment && !r.steps.partnerPayment.done)
-    .sort((a, b) => (payDueOf(a) < payDueOf(b) ? -1 : 1));
-  // まとめ: どこかの段階が残っている人 (全部済むまで出す)。
-  // まだ入社していない (入社日が無く、どの段階も手を付けていない) 人は出さない
+  const waitingPay = (r: LedgerRow) => r.route !== "自社" && !!r.steps.partnerInvoice?.done && !!r.steps.partnerPayment && !r.steps.partnerPayment.done;
+  const byPayDue = (a: LedgerRow, b: LedgerRow) => (payDueOf(a) < payDueOf(b) ? -1 : 1);
+  const toPay = rows.filter((r) => (waitingPay(r) && !r.transferRequested) || (keep(r) && tab === "pa" && sub === "transfer")).sort(byPayDue);
+  const toConfirmTransfer = rows.filter((r) => (waitingPay(r) && !!r.transferRequested) || (keep(r) && tab === "pa" && sub === "confirm")).sort(byPayDue);
+  // まだ入社していない (入社日が無く、どの段階も手を付けていない) 人はまとめに出さない
   const started = (r: LedgerRow) => !!r.joinAt || stepsOf(r).some((st) => st.done);
-  const openRows = rows.filter((r) => (r.open && started(r)) || r.personId === editing).sort(byJoin);
+  const openRows = rows.filter((r) => (r.open && started(r)) || keep(r)).sort(byJoin);
 
   const copy = async (key: string, text: string) => {
     try {
@@ -591,26 +615,109 @@ export default function BillingClient({
     </div>
   );
 
-  /** 台帳 (まとめと同じ形。段階のボタン・詳細・編集つき) */
-  const ledger = (list: LedgerRow[], empty: string) => (
+  type Mode = "all" | Sub;
+  const GRID1 = "grid min-w-[960px] grid-cols-[minmax(0,2.2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_minmax(0,0.9fr)_minmax(0,1.5fr)] divide-x divide-gray-200";
+  const MODE: Record<Sub, { step: StepKey; label: string; sub: string }> = {
+    invoice: { step: "invoice", label: "請求", sub: "企業へ請求書を送る" },
+    payment: { step: "payment", label: "入金", sub: "企業からの入金" },
+    paInvoice: { step: "partnerInvoice", label: "PA請求書", sub: "パートナーから受け取る" },
+    transfer: { step: "partnerPayment", label: "振込", sub: "川村さんへ依頼" },
+    confirm: { step: "partnerPayment", label: "振込", sub: "振り込まれたか確認" },
+  };
+
+  /** チェックボックス (押すとすぐ保存) */
+  const check = (key: string, label: string, checked: boolean, onChange: () => void) => (
+    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-[var(--color-text-dark)] hover:border-emerald-500">
+      <input type="checkbox" className="h-4 w-4 accent-emerald-600" checked={checked} disabled={busy === key} onChange={onChange} />
+      {label}
+    </label>
+  );
+  /** PDF を上げるボタン (上げると済) */
+  const uploadButton = (r: LedgerRow, kind: "invoice" | "partnerInvoice") => (
+    <label
+      className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-bold text-white hover:opacity-90 ${
+        uploading === `${r.personId}-${kind}` ? "pointer-events-none opacity-50" : ""
+      }`}
+    >
+      <Icon d={ICON.upload} />
+      {uploading === `${r.personId}-${kind}` ? "保存中…" : "PDF を上げる"}
+      <input
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) void upload(r, kind, f);
+        }}
+      />
+    </label>
+  );
+  /** タブごとの「やること」 */
+  const action = (r: LedgerRow, mode: Sub) => {
+    switch (mode) {
+      case "invoice":
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            {uploadButton(r, "invoice")}
+            {check(`${r.personId}-invoice`, "発行済にする", !!r.steps.invoice?.done, () => void toggle(r, "invoice"))}
+          </div>
+        );
+      case "payment":
+        return check(`${r.personId}-payment`, "入金を確認した", !!r.steps.payment?.done, () => void toggle(r, "payment"));
+      case "paInvoice":
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            {uploadButton(r, "partnerInvoice")}
+            {check(`${r.personId}-partnerInvoice`, "受け取った", !!r.steps.partnerInvoice?.done, () => void toggle(r, "partnerInvoice"))}
+          </div>
+        );
+      case "transfer":
+        return check(`${r.personId}-transfer`, "川村さんに依頼した", !!r.transferRequested, () => void setTransfer(r, !r.transferRequested));
+      case "confirm":
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            {check(`${r.personId}-partnerPayment`, "振込を確認した", !!r.steps.partnerPayment?.done, () => void toggle(r, "partnerPayment"))}
+            <span className="text-xs text-gray-700">依頼 {md(r.transferRequested)}</span>
+          </div>
+        );
+    }
+  };
+
+  /** 台帳。まとめは 4 つの段階すべて、ほかのタブはその作業の状況とやることだけ */
+  const ledger = (list: LedgerRow[], empty: string, mode: Mode) => {
+    const grid = mode === "all" ? GRID : GRID1;
+    return (
       <div className="rounded-2xl border border-gray-300 bg-white shadow-sm">
-        <div className={`${GRID} sticky z-10 rounded-t-2xl border-b border-gray-300 bg-gray-100 text-xs font-semibold text-gray-800`} style={{ top: stickyH }}>
+        <div className={`${grid} sticky z-10 rounded-t-2xl border-b border-gray-300 bg-gray-100 text-xs font-semibold text-gray-800`} style={{ top: stickyH }}>
           <span className="px-4 py-3">内定者 ・ 企業</span>
           <span className="px-4 py-3">入社日</span>
-          <span className="px-4 py-3 text-right">請求金額</span>
-          {COLUMNS.map((c) => (
-            <span key={c.key} className="px-4 py-3">
-              <span className="block text-sm">{c.label}</span>
-              <span className="block font-medium text-gray-700">{c.sub}</span>
-            </span>
-          ))}
+          <span className="px-4 py-3 text-right">金額</span>
+          {mode === "all" ? (
+            COLUMNS.map((c) => (
+              <span key={c.key} className="px-4 py-3">
+                <span className="block text-sm">{c.label}</span>
+                <span className="block font-medium text-gray-700">{c.sub}</span>
+              </span>
+            ))
+          ) : (
+            <>
+              <span className="px-4 py-3">
+                <span className="block text-sm">{MODE[mode].label}</span>
+                <span className="block font-medium text-gray-700">{MODE[mode].sub}</span>
+              </span>
+              <span className="px-4 py-3">
+                <span className="block text-sm">やること</span>
+              </span>
+            </>
+          )}
         </div>
         {list.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-gray-700">{empty}</p>
         ) : (
           list.map((r) => (
             <Fragment key={r.personId}>
-              <div id={`bill-${r.personId}`} className={`${GRID} scroll-mt-4 border-b border-gray-200 ${editing === r.personId ? "bg-gray-50" : ""}`}>
+              <div id={`bill-${r.personId}`} className={`${grid} scroll-mt-4 border-b border-gray-200 ${editing === r.personId ? "bg-gray-50" : ""}`}>
                 <div className={`flex min-w-0 items-start gap-3 px-4 py-4 ${overdueOf(r) ? "border-l-4 border-l-red-500" : "border-l-4 border-l-transparent"}`}>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-base font-bold text-[var(--color-text-dark)]">{r.personName}</p>
@@ -636,16 +743,27 @@ export default function BillingClient({
                 </div>
                 <div className="flex items-center px-4 py-4 text-sm tabular-nums text-gray-800">{md(r.joinAt) || "-"}</div>
                 <div className="flex flex-col items-end justify-center px-4 py-4 tabular-nums">
-                  {r.invoiceAmount == null ? (
-                    <button type="button" onClick={() => openEditor(r)} className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">
+                  {mode === "paInvoice" || mode === "transfer" || mode === "confirm" ? (
+                    r.costAmount == null ? (
+                      <button type="button" onClick={() => openEditor(r)} className="whitespace-nowrap rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">
+                        PA 金額を入れる
+                      </button>
+                    ) : (
+                      <>
+                        <span className="text-base font-bold text-[var(--color-text-dark)]">{yen(r.costAmount)}</span>
+                        <span className="mt-0.5 text-xs text-gray-700">PA へ</span>
+                      </>
+                    )
+                  ) : r.invoiceAmount == null ? (
+                    <button type="button" onClick={() => openEditor(r)} className="whitespace-nowrap rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">
                       金額を入れる
                     </button>
                   ) : (
                     <>
                       <span className="text-base font-bold text-[var(--color-text-dark)]">{yen(r.invoiceAmount)}</span>
-                      {r.costAmount ? (
+                      {mode === "all" && r.costAmount ? (
                         <span className="mt-0.5 text-xs text-gray-700">PA {yen(r.costAmount)}</span>
-                      ) : r.route !== "自社" && r.partnerName ? (
+                      ) : mode === "all" && r.route !== "自社" && r.partnerName ? (
                         <button type="button" onClick={() => openEditor(r)} className="mt-1 whitespace-nowrap rounded-md border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-100">
                           PA 金額を入れる
                         </button>
@@ -653,103 +771,157 @@ export default function BillingClient({
                     </>
                   )}
                 </div>
-                {COLUMNS.map((c) => (
-                  <div key={c.key} className="flex items-center px-3 py-4">
-                    {cell(r, c.key)}
-                  </div>
-                ))}
+                {mode === "all" ? (
+                  COLUMNS.map((c) => (
+                    <div key={c.key} className="flex items-center px-3 py-4">
+                      {cell(r, c.key)}
+                    </div>
+                  ))
+                ) : (
+                  <>
+                    <div className="flex items-center px-3 py-4">{cell(r, MODE[mode].step)}</div>
+                    <div className="flex items-center px-3 py-4">{action(r, mode)}</div>
+                  </>
+                )}
               </div>
               {editing === r.personId ? editor(r) : null}
             </Fragment>
           ))
         )}
       </div>
-  );
+    );
+  };
 
   const tabs = [
-    { key: "company", label: "請求書の依頼", icon: ICON.building, count: toInvoice.length },
-    { key: "partner", label: "パートナーへ依頼", icon: ICON.handshake, count: toRequest.length },
-    { key: "pay", label: "振込の依頼", icon: ICON.bank, count: toPay.length },
-    { key: "ledger", label: "まとめ", icon: ICON.list, count: openRows.length, alert: summary.overdue > 0 },
+    { key: "company", label: "企業", icon: ICON.building, count: toInvoice.length + toConfirmPayment.length },
+    { key: "pa", label: "PA", icon: ICON.handshake, count: toRequest.length + toPay.length + toConfirmTransfer.length },
+    { key: "summary", label: "まとめ", icon: ICON.list, count: openRows.length, alert: summary.overdue > 0 },
   ] as const;
+  const subs: { key: Sub; label: string; count: number }[] =
+    tab === "company"
+      ? [
+          { key: "invoice", label: "請求書の依頼", count: toInvoice.length },
+          { key: "payment", label: "入金確認", count: toConfirmPayment.length },
+        ]
+      : tab === "pa"
+        ? [
+            { key: "paInvoice", label: "請求書の依頼", count: toRequest.length },
+            { key: "transfer", label: "振込の依頼", count: toPay.length },
+            { key: "confirm", label: "振込確認", count: toConfirmTransfer.length },
+          ]
+        : [];
+  const chooseTab = (t: (typeof tabs)[number]["key"]) => {
+    setTab(t);
+    setSub(t === "company" ? "invoice" : "paInvoice");
+    setEditing(null);
+  };
 
   return (
     <div className="space-y-4">
       {/* スクロールしてもタイトル・月・タブ (まとめでは数字の帯も) を上に固定する */}
       <div ref={stickyRef} className="sticky top-0 z-20 -mx-8 space-y-3 bg-[var(--background)] px-8 pb-3 pt-8 shadow-[0_6px_8px_-8px_rgba(0,0,0,0.25)]">
-      {header}
-      <nav className="flex flex-wrap gap-1 border-b border-gray-300">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`-mb-px inline-flex items-center gap-2 border-b-[3px] px-4 py-2.5 text-sm font-bold ${
-              tab === t.key ? "border-[var(--color-primary)] text-[var(--color-primary)]" : "border-transparent text-gray-700 hover:text-[var(--color-text-dark)]"
-            }`}
-          >
-            <Icon d={t.icon} />
-            {t.label}
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs ${
-                "alert" in t && t.alert ? "bg-red-600 text-white" : tab === t.key ? "bg-[var(--color-primary)] text-white" : "bg-gray-200 text-gray-800"
+        {header}
+        <nav className="flex flex-wrap gap-1 border-b border-gray-300">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => chooseTab(t.key)}
+              className={`-mb-px inline-flex items-center gap-2 border-b-[3px] px-5 py-2.5 text-base font-bold ${
+                tab === t.key ? "border-[var(--color-primary)] text-[var(--color-primary)]" : "border-transparent text-gray-700 hover:text-[var(--color-text-dark)]"
               }`}
             >
-              {t.count}
-            </span>
-          </button>
-        ))}
-      </nav>
-      {tab === "ledger" && (
-      <div className="flex flex-wrap divide-x divide-gray-200 rounded-xl border border-gray-200 bg-white text-sm">
-        {[
-          { label: "この月の請求", value: `${summary.invoiceCount}件 ${yen(summary.invoiceTotal) || "¥0"}` },
-          { label: "粗利", value: yen(summary.profit) || "¥0" },
-          { label: "入金予定", value: yen(summary.paymentTotal) || "¥0", sub: `済 ${yen(summary.paidTotal) || "¥0"}` },
-          { label: "PAへの支払い", value: `${summary.partnerCount}件 ${yen(summary.partnerTotal) || "¥0"}` },
-          { label: "期限切れ", value: `${summary.overdue}件`, alert: summary.overdue > 0 },
-        ].map((x) => (
-          <div key={x.label} className="flex items-baseline gap-2 px-4 py-2">
-            <span className={`text-xs font-medium ${x.alert ? "text-red-700" : "text-gray-700"}`}>{x.label}</span>
-            <span className={`font-bold tabular-nums ${x.alert ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>{x.value}</span>
-            {x.sub ? <span className="text-xs font-medium text-emerald-700">{x.sub}</span> : null}
+              <Icon d={t.icon} />
+              {t.label}
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs ${
+                  "alert" in t && t.alert ? "bg-red-600 text-white" : tab === t.key ? "bg-[var(--color-primary)] text-white" : "bg-gray-200 text-gray-800"
+                }`}
+              >
+                {t.count}
+              </span>
+            </button>
+          ))}
+        </nav>
+        {subs.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1">
+            {subs.map((x, i) => (
+              <Fragment key={x.key}>
+                {i > 0 ? <span className="px-1 text-gray-500">→</span> : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSub(x.key);
+                    setEditing(null);
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold ${
+                    sub === x.key ? "bg-[var(--color-primary)] text-white" : "border border-gray-300 bg-white text-gray-800 hover:border-[var(--color-primary)]"
+                  }`}
+                >
+                  {x.label}
+                  <span className={`rounded-full px-1.5 text-xs ${sub === x.key ? "bg-white/25" : "bg-gray-200"}`}>{x.count}</span>
+                </button>
+              </Fragment>
+            ))}
           </div>
-        ))}
-      </div>
-      )}
+        ) : null}
+        {tab === "summary" && (
+          <div className="flex flex-wrap divide-x divide-gray-200 rounded-xl border border-gray-200 bg-white text-sm">
+            {[
+              { label: "この月の請求", value: `${summary.invoiceCount}件 ${yen(summary.invoiceTotal) || "¥0"}` },
+              { label: "粗利", value: yen(summary.profit) || "¥0" },
+              { label: "入金予定", value: yen(summary.paymentTotal) || "¥0", sub: `済 ${yen(summary.paidTotal) || "¥0"}` },
+              { label: "PAへの支払い", value: `${summary.partnerCount}件 ${yen(summary.partnerTotal) || "¥0"}` },
+              { label: "期限切れ", value: `${summary.overdue}件`, alert: summary.overdue > 0 },
+            ].map((x) => (
+              <div key={x.label} className="flex items-baseline gap-2 px-4 py-2">
+                <span className={`text-xs font-medium ${x.alert ? "text-red-700" : "text-gray-700"}`}>{x.label}</span>
+                <span className={`font-bold tabular-nums ${x.alert ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>{x.value}</span>
+                {x.sub ? <span className="text-xs font-medium text-emerald-700">{x.sub}</span> : null}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {tab === "company" && (
+      {tab === "company" && sub === "invoice" && (
         <div className="space-y-3">
           {head("川村さんへ ・ 企業への請求書の発行依頼", toInvoice.length, "company", companyText)}
-          {ledger(toInvoice, "請求書を出す人はいません")}
+          {ledger(toInvoice, "請求書を出す人はいません", "invoice")}
+        </div>
+      )}
+      {tab === "company" && sub === "payment" && (
+        <div className="space-y-3">
+          {head("企業からの入金の確認", toConfirmPayment.length)}
+          {ledger(toConfirmPayment, "入金を待っている請求はありません", "payment")}
         </div>
       )}
 
-      {tab === "partner" && (
+      {tab === "pa" && sub === "paInvoice" && (
         <div className="space-y-5">
-          {byPartner.size === 0 ? ledger([], "パートナーに依頼する人はいません") : null}
+          {byPartner.size === 0 ? ledger([], "パートナーに依頼する人はいません", "paInvoice") : null}
           {[...byPartner.entries()].map(([name, list]) => (
             <div key={name} className="space-y-3">
               {head(`${name} 様へ ・ 請求書の発行依頼`, list.length, `pa-${name}`, partnerText(name, list))}
-              {ledger(list, "")}
+              {ledger(list, "", "paInvoice")}
             </div>
           ))}
         </div>
       )}
-
-      {tab === "pay" && (
+      {tab === "pa" && sub === "transfer" && (
         <div className="space-y-3">
           {head("川村さんへ ・ パートナーへの振込依頼", toPay.length, "pay", payText)}
-          {ledger(toPay, "振込を待っている請求書はありません")}
+          {ledger(toPay, "振込を依頼する請求書はありません", "transfer")}
+        </div>
+      )}
+      {tab === "pa" && sub === "confirm" && (
+        <div className="space-y-3">
+          {head("パートナーへの振込の確認", toConfirmTransfer.length)}
+          {ledger(toConfirmTransfer, "振込を待っているものはありません", "confirm")}
         </div>
       )}
 
-      {tab === "ledger" && (
-        <div className="space-y-3">
-          {ledger(openRows, "終わっていない請求はありません")}
-        </div>
-      )}
+      {tab === "summary" && <div className="space-y-3">{ledger(openRows, "終わっていない請求はありません", "all")}</div>}
     </div>
   );
 }
