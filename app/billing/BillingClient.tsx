@@ -125,11 +125,6 @@ function monthEnd(month: string, n: number) {
   const d = new Date(Date.UTC(y, m - 1 + n + 1, 0));
   return d.toISOString().slice(0, 10);
 }
-function prevMonth(month: string) {
-  const [y, m] = month.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
-}
-const mdFull = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "-");
 
 export default function BillingClient({
   rows: initial,
@@ -152,7 +147,6 @@ export default function BillingClient({
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
 
-  const visible = rows.filter((r) => r.inMonth || overdueOf(r) || r.personId === editing);
 
   const summary = useMemo(() => {
     const sum = (list: LedgerRow[], pick: (r: LedgerRow) => number | null) => list.reduce((t, r) => t + (pick(r) ?? 0), 0);
@@ -206,31 +200,6 @@ export default function BillingClient({
       setBusy(null);
     }
   };
-
-  /** 一覧の「未入力」から、まとめのその人の詳細・編集へ */
-  const jumpToEditor = (r: LedgerRow) => {
-    setTab("ledger");
-    setEditing(r.personId);
-    setDraft(draftOf(r));
-    // タブを切り替えて行が描かれてからスクロールする
-    let tries = 0;
-    const go = () => {
-      const el = document.getElementById(`bill-${r.personId}`);
-      if (el) el.scrollIntoView({ block: "start" });
-      else if (tries++ < 20) setTimeout(go, 50);
-    };
-    setTimeout(go, 50);
-  };
-  const missing = (r: LedgerRow) => (
-    <button
-      type="button"
-      onClick={() => jumpToEditor(r)}
-      className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-bold text-red-700 hover:bg-red-100"
-    >
-      <Icon d={ICON.edit} className="h-3 w-3" />
-      未入力
-    </button>
-  );
 
   const openEditor = (r: LedgerRow) => {
     if (editing === r.personId) {
@@ -424,16 +393,25 @@ export default function BillingClient({
     );
   };
 
-  // この月に請求するのは、前の月に入社した人 (入社の翌月 1 日に請求 → その月末に入金 → 次の月末にパートナーへ支払い)
-  const joinedMonth = prevMonth(month);
-  const billed = rows.filter((r) => r.joinAt.startsWith(joinedMonth)).sort((a, b) => (a.joinAt < b.joinAt ? -1 : 1));
-  const companyDue = monthEnd(month, 0);
-  const partnerDue = monthEnd(month, 1);
+  // それぞれの段階でやることが残っている人 (その段階を済にしたら一覧から消える)。期限がこの月の末までの人
+  const monthEndStr = monthEnd(month, 0);
+  const dueBy = (st: LedgerStep | null) => !!st && !st.done && !!st.due && st.due <= monthEndStr;
+  const byJoin = (a: LedgerRow, b: LedgerRow) => ((a.joinAt || "9") < (b.joinAt || "9") ? -1 : 1);
+  const toInvoice = rows.filter((r) => dueBy(r.steps.invoice)).sort(byJoin);
+  const toRequest = rows.filter((r) => r.route !== "自社" && dueBy(r.steps.partnerInvoice)).sort(byJoin);
   const byPartner = new Map<string, LedgerRow[]>();
-  for (const r of billed) {
-    if (r.route === "自社" || !r.partnerName) continue;
-    byPartner.set(r.partnerName, [...(byPartner.get(r.partnerName) ?? []), r]);
+  for (const r of toRequest) {
+    const k = r.partnerName || "パートナー未設定";
+    byPartner.set(k, [...(byPartner.get(k) ?? []), r]);
   }
+  // 振込の依頼: パートナーの請求書が届いていて、まだ振り込んでいない人 (月に関係なく。請求書が遅れて月がずれることがあるため)
+  const payDueOf = (r: LedgerRow) => r.steps.partnerPayment?.due || (r.joinAt ? monthEnd(r.joinAt.slice(0, 7), 2) : "");
+  const toPay = rows
+    .filter((r) => r.route !== "自社" && r.steps.partnerInvoice?.done && !!r.steps.partnerPayment && !r.steps.partnerPayment.done)
+    .sort((a, b) => (payDueOf(a) < payDueOf(b) ? -1 : 1));
+  // まとめ: どこかの段階が残っている人 (全部済むまで出す)
+  const openRows = rows.filter((r) => r.open || r.personId === editing).sort(byJoin);
+
   const copy = async (key: string, text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -453,37 +431,31 @@ export default function BillingClient({
     MENTION,
     `${Number(month.slice(5))}月頭に請求する内容です。よろしくお願いいたします。`,
     "",
-    ...billed.flatMap((r, i) => [
+    ...toInvoice.flatMap((r, i) => [
       `${num(i)} 請求ID: ${r.invoiceNo || "-"}`,
       r.personName,
       `案件名：${r.companyName || "-"}`,
       `内定日：${slash(r.offerAt)}`,
       `入社日：${slash(r.joinAt)}`,
       `手数料：${man(r.unitPrice)}`,
-      `入金期日：${slash(r.dueDate || companyDue)}`,
+      `入金期日：${slash(r.dueDate || r.steps.payment?.due || "")}`,
       LINE,
     ]),
   ].join("\n");
   const partnerText = (name: string, list: LedgerRow[]) =>
     [
       `${name} 様`,
-      `${Number(joinedMonth.slice(5))}月入社の件です。請求書の発行をお願いいたします。`,
+      "請求書の発行をお願いいたします。",
       "",
       ...list.flatMap((r, i) => [
         `${num(i)} ID: ${r.displayId}`,
         r.personName,
         `入社日：${slash(r.joinAt)}`,
         `手数料：${man(r.costAmount)}`,
-        `入金期日：${slash(partnerDue)}`,
+        `入金期日：${slash(r.steps.partnerPayment?.due || "")}`,
         LINE,
       ]),
     ].join("\n");
-
-  // ③ 川村さんへ振込の依頼: パートナーの請求書が届いていて、まだ振り込んでいない人 (月に関係なく。請求書が遅れて月がずれることがあるため)
-  const payDueOf = (r: LedgerRow) => r.steps.partnerPayment?.due || (r.joinAt ? monthEnd(r.joinAt.slice(0, 7), 2) : "");
-  const toPay = rows
-    .filter((r) => r.route !== "自社" && r.steps.partnerInvoice?.done && !r.steps.partnerPayment?.done)
-    .sort((a, b) => (payDueOf(a) < payDueOf(b) ? -1 : 1));
   const payMonths = [...new Set(toPay.map((r) => payDueOf(r).slice(5, 7)).filter(Boolean))];
   const payText = [
     MENTION,
@@ -502,8 +474,6 @@ export default function BillingClient({
     ]),
   ].join("\n");
 
-  const TH = "whitespace-nowrap border-b border-gray-300 bg-gray-100 px-3 py-2 text-left text-xs font-semibold text-gray-800";
-  const TD = "border-b border-gray-200 px-3 py-2 text-sm text-[var(--color-text-dark)] tabular-nums";
   const copyButton = (key: string, text: string) => (
     <button
       type="button"
@@ -517,155 +487,12 @@ export default function BillingClient({
     </button>
   );
 
-  const monthLists = (
-    <div className="space-y-4">
-    <div className="space-y-4">
-      {tab === "company" && (
-      <div className="rounded-2xl border border-gray-300 bg-white">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <h2 className="font-bold text-[var(--color-text-dark)]">川村さんへ ・ 企業への請求書の発行依頼</h2>
-          <span className="text-sm text-gray-700">
-            {Number(joinedMonth.slice(5))}月入社 {billed.length}件 ・ 入金期日 {mdFull(companyDue)}
-          </span>
-          <span className="ml-auto">{copyButton("company", companyText)}</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-t border-gray-300">
-            <thead>
-              <tr>
-                {["請求書ID", "名前", "企業名", "内定日", "入社日", "手数料", "入金期日"].map((h) => (
-                  <th key={h} className={`${TH} ${h === "手数料" ? "text-right" : ""}`}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {billed.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className={`${TD} text-center`}>
-                    この月に請求する人はいません
-                  </td>
-                </tr>
-              ) : (
-                billed.map((r) => (
-                  <tr key={r.personId}>
-                    <td className={TD}>{r.invoiceNo || "-"}</td>
-                    <td className={`${TD} font-semibold`}>{r.personName}</td>
-                    <td className={TD}>{r.companyName || "-"}</td>
-                    <td className={TD}>{mdFull(r.offerAt)}</td>
-                    <td className={TD}>{mdFull(r.joinAt)}</td>
-                    <td className={`${TD} text-right`}>{r.unitPrice == null ? missing(r) : yen(r.unitPrice)}</td>
-                    <td className={TD}>{mdFull(r.dueDate || companyDue)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      )}
-      {tab === "partner" && (
-      <div className="rounded-2xl border border-gray-300 bg-white">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <h2 className="font-bold text-[var(--color-text-dark)]">パートナーへ ・ 請求書の発行依頼</h2>
-          <span className="text-sm text-gray-700">入金期日 {mdFull(partnerDue)}</span>
-        </div>
-        {byPartner.size === 0 ? (
-          <p className="border-t border-gray-300 px-4 py-3 text-sm text-gray-700">この月に送るパートナーはいません</p>
-        ) : (
-          [...byPartner.entries()].map(([name, list]) => (
-            <div key={name} className="border-t border-gray-300">
-              <div className="flex items-center gap-2 px-4 py-2">
-                <p className="font-semibold text-[var(--color-text-dark)]">{name}</p>
-                <span className="text-xs text-gray-700">{list.length}件</span>
-                <span className="ml-auto">{copyButton(`pa-${name}`, partnerText(name, list))}</span>
-              </div>
-              <table className="w-full">
-                <thead>
-                  <tr>
-                    {["ID", "名前", "入社日", "手数料", "入金期日"].map((h) => (
-                      <th key={h} className={`${TH} ${h === "手数料" ? "text-right" : ""}`}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.map((r) => (
-                    <tr key={r.personId}>
-                      <td className={TD}>{r.displayId}</td>
-                      <td className={`${TD} font-semibold`}>{r.personName}</td>
-                      <td className={TD}>{mdFull(r.joinAt)}</td>
-                      <td className={`${TD} text-right`}>{r.costAmount == null ? missing(r) : yen(r.costAmount)}</td>
-                      <td className={TD}>{mdFull(partnerDue)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))
-        )}
-      </div>
-      )}
-    </div>
-      {tab === "pay" && (
-      <div className="rounded-2xl border border-gray-300 bg-white">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <h2 className="font-bold text-[var(--color-text-dark)]">川村さんへ ・ パートナーへの振込依頼</h2>
-          <span className="text-sm text-gray-700">{toPay.length}件</span>
-          <span className="ml-auto">{copyButton("pay", payText)}</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] border-t border-gray-300">
-            <thead>
-              <tr>
-                {["請求書ID", "企業名", "パートナー", "候補者名", "内定日", "入社日", "手数料", "振込期日", "請求書"].map((h) => (
-                  <th key={h} className={`${TH} ${h === "手数料" ? "text-right" : ""}`}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {toPay.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className={`${TD} text-center`}>
-                    振込を待っている請求書はありません (パートナーの請求書をアップロードするとここに出ます)
-                  </td>
-                </tr>
-              ) : (
-                toPay.map((r) => {
-                  const due = payDueOf(r);
-                  const late = !!due && due < today();
-                  return (
-                    <tr key={r.personId}>
-                      <td className={TD}>{r.invoiceNo || "-"}</td>
-                      <td className={TD}>{r.companyName || "-"}</td>
-                      <td className={TD}>{r.partnerName || "-"}</td>
-                      <td className={`${TD} font-semibold`}>{r.personName}</td>
-                      <td className={TD}>{mdFull(r.offerAt)}</td>
-                      <td className={TD}>{mdFull(r.joinAt)}</td>
-                      <td className={`${TD} text-right`}>{r.costAmount == null ? missing(r) : yen(r.costAmount)}</td>
-                      <td className={`${TD} ${late ? "font-semibold text-red-700" : ""}`}>{mdFull(due)}</td>
-                      <td className={TD}>
-                        {/^https?:\/\//.test(r.partnerInvoiceUrl) ? (
-                          <a href={r.partnerInvoiceUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] underline">
-                            開く
-                          </a>
-                        ) : (
-                          <span className="text-gray-700">シート</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      )}
+  /** 見出し (左にタイトルと件数、右にコピー) */
+  const head = (title: string, count: number, copyKey?: string, text?: string) => (
+    <div className="flex items-center gap-3">
+      <h2 className="font-bold text-[var(--color-text-dark)]">{title}</h2>
+      <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-800">{count}件</span>
+      {copyKey && text && count > 0 ? <span className="ml-auto">{copyButton(copyKey, text)}</span> : null}
     </div>
   );
 
@@ -730,59 +557,8 @@ export default function BillingClient({
     </div>
   );
 
-  const tabs = [
-    { key: "company", label: "請求書の依頼", icon: ICON.building, count: billed.length },
-    { key: "partner", label: "パートナーへ依頼", icon: ICON.handshake, count: byPartner.size },
-    { key: "pay", label: "振込の依頼", icon: ICON.bank, count: toPay.length },
-    { key: "ledger", label: "まとめ", icon: ICON.list, count: summary.overdue, alert: summary.overdue > 0 },
-  ] as const;
-
-  return (
-    <div className="space-y-4">
-      <nav className="flex flex-wrap gap-1 border-b border-gray-300">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`-mb-px inline-flex items-center gap-2 border-b-[3px] px-4 py-2.5 text-sm font-bold ${
-              tab === t.key ? "border-[var(--color-primary)] text-[var(--color-primary)]" : "border-transparent text-gray-700 hover:text-[var(--color-text-dark)]"
-            }`}
-          >
-            <Icon d={t.icon} />
-            {t.label}
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs ${
-                "alert" in t && t.alert ? "bg-red-600 text-white" : tab === t.key ? "bg-[var(--color-primary)] text-white" : "bg-gray-200 text-gray-800"
-              }`}
-            >
-              {t.count}
-            </span>
-          </button>
-        ))}
-      </nav>
-
-      {monthLists}
-
-      {tab === "ledger" && (
-      <>
-
-      <div className="flex flex-wrap divide-x divide-gray-200 rounded-xl border border-gray-200 bg-white text-sm">
-        {[
-          { label: "この月の請求", value: `${summary.invoiceCount}件 ${yen(summary.invoiceTotal) || "¥0"}` },
-          { label: "粗利", value: yen(summary.profit) || "¥0" },
-          { label: "入金予定", value: yen(summary.paymentTotal) || "¥0", sub: `済 ${yen(summary.paidTotal) || "¥0"}` },
-          { label: "PAへの支払い", value: `${summary.partnerCount}件 ${yen(summary.partnerTotal) || "¥0"}` },
-          { label: "期限切れ", value: `${summary.overdue}件`, alert: summary.overdue > 0 },
-        ].map((x) => (
-          <div key={x.label} className="flex items-baseline gap-2 px-4 py-2">
-            <span className={`text-xs font-medium ${x.alert ? "text-red-700" : "text-gray-700"}`}>{x.label}</span>
-            <span className={`font-bold tabular-nums ${x.alert ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>{x.value}</span>
-            {x.sub ? <span className="text-xs font-medium text-emerald-700">{x.sub}</span> : null}
-          </div>
-        ))}
-      </div>
-
+  /** 台帳 (まとめと同じ形。段階のボタン・詳細・編集つき) */
+  const ledger = (list: LedgerRow[], empty: string) => (
       <div className="overflow-x-auto rounded-2xl border border-gray-300 bg-white shadow-sm">
         <div className={`${GRID} border-b border-gray-300 bg-gray-100 text-xs font-semibold text-gray-800`}>
           <span className="px-4 py-3">内定者 ・ 企業</span>
@@ -795,10 +571,10 @@ export default function BillingClient({
             </span>
           ))}
         </div>
-        {visible.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-gray-700">当てはまる請求はありません。</p>
+        {list.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-gray-700">{empty}</p>
         ) : (
-          visible.map((r) => (
+          list.map((r) => (
             <Fragment key={r.personId}>
               <div id={`bill-${r.personId}`} className={`${GRID} scroll-mt-4 border-b border-gray-200 ${editing === r.personId ? "bg-gray-50" : ""}`}>
                 <div className={`flex min-w-0 items-start gap-3 px-4 py-4 ${overdueOf(r) ? "border-l-4 border-l-red-500" : "border-l-4 border-l-transparent"}`}>
@@ -833,7 +609,13 @@ export default function BillingClient({
                   ) : (
                     <>
                       <span className="text-base font-bold text-[var(--color-text-dark)]">{yen(r.invoiceAmount)}</span>
-                      {r.costAmount ? <span className="mt-0.5 text-xs text-gray-700">PA {yen(r.costAmount)}</span> : null}
+                      {r.costAmount ? (
+                        <span className="mt-0.5 text-xs text-gray-700">PA {yen(r.costAmount)}</span>
+                      ) : r.route !== "自社" && r.partnerName ? (
+                        <button type="button" onClick={() => openEditor(r)} className="mt-1 rounded-md border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-100">
+                          PA の金額を入れる
+                        </button>
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -848,7 +630,85 @@ export default function BillingClient({
           ))
         )}
       </div>
-      </>
+  );
+
+  const tabs = [
+    { key: "company", label: "請求書の依頼", icon: ICON.building, count: toInvoice.length },
+    { key: "partner", label: "パートナーへ依頼", icon: ICON.handshake, count: toRequest.length },
+    { key: "pay", label: "振込の依頼", icon: ICON.bank, count: toPay.length },
+    { key: "ledger", label: "まとめ", icon: ICON.list, count: openRows.length, alert: summary.overdue > 0 },
+  ] as const;
+
+  return (
+    <div className="space-y-4">
+      <nav className="flex flex-wrap gap-1 border-b border-gray-300">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`-mb-px inline-flex items-center gap-2 border-b-[3px] px-4 py-2.5 text-sm font-bold ${
+              tab === t.key ? "border-[var(--color-primary)] text-[var(--color-primary)]" : "border-transparent text-gray-700 hover:text-[var(--color-text-dark)]"
+            }`}
+          >
+            <Icon d={t.icon} />
+            {t.label}
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs ${
+                "alert" in t && t.alert ? "bg-red-600 text-white" : tab === t.key ? "bg-[var(--color-primary)] text-white" : "bg-gray-200 text-gray-800"
+              }`}
+            >
+              {t.count}
+            </span>
+          </button>
+        ))}
+      </nav>
+
+      {tab === "company" && (
+        <div className="space-y-3">
+          {head("川村さんへ ・ 企業への請求書の発行依頼", toInvoice.length, "company", companyText)}
+          {ledger(toInvoice, "請求書を出す人はいません")}
+        </div>
+      )}
+
+      {tab === "partner" && (
+        <div className="space-y-5">
+          {byPartner.size === 0 ? ledger([], "パートナーに依頼する人はいません") : null}
+          {[...byPartner.entries()].map(([name, list]) => (
+            <div key={name} className="space-y-3">
+              {head(`${name} 様へ ・ 請求書の発行依頼`, list.length, `pa-${name}`, partnerText(name, list))}
+              {ledger(list, "")}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "pay" && (
+        <div className="space-y-3">
+          {head("川村さんへ ・ パートナーへの振込依頼", toPay.length, "pay", payText)}
+          {ledger(toPay, "振込を待っている請求書はありません")}
+        </div>
+      )}
+
+      {tab === "ledger" && (
+        <div className="space-y-3">
+      <div className="flex flex-wrap divide-x divide-gray-200 rounded-xl border border-gray-200 bg-white text-sm">
+        {[
+          { label: "この月の請求", value: `${summary.invoiceCount}件 ${yen(summary.invoiceTotal) || "¥0"}` },
+          { label: "粗利", value: yen(summary.profit) || "¥0" },
+          { label: "入金予定", value: yen(summary.paymentTotal) || "¥0", sub: `済 ${yen(summary.paidTotal) || "¥0"}` },
+          { label: "PAへの支払い", value: `${summary.partnerCount}件 ${yen(summary.partnerTotal) || "¥0"}` },
+          { label: "期限切れ", value: `${summary.overdue}件`, alert: summary.overdue > 0 },
+        ].map((x) => (
+          <div key={x.label} className="flex items-baseline gap-2 px-4 py-2">
+            <span className={`text-xs font-medium ${x.alert ? "text-red-700" : "text-gray-700"}`}>{x.label}</span>
+            <span className={`font-bold tabular-nums ${x.alert ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>{x.value}</span>
+            {x.sub ? <span className="text-xs font-medium text-emerald-700">{x.sub}</span> : null}
+          </div>
+        ))}
+      </div>
+          {ledger(openRows, "終わっていない請求はありません")}
+        </div>
       )}
     </div>
   );
