@@ -8,8 +8,7 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
-import { writeBillingStepToSheet } from "@/lib/billing-sheet";
-import type { BillingStepKey } from "@/lib/billing-flow";
+import { billingPatchForStep, writeBillingToSheet, type LedgerStepKey } from "@/lib/billing-ledger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,22 +39,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
       data,
       include: { placement: { select: { personId: true } } },
     });
-    // 請求のタスクを終えたら、企業データベースの請求管理に請求日・入金済・支払済などを書く
-    if (body.done === true && task.billingStep && task.placement.personId) {
+    // 請求のタスクを終えた / 取り消したら、請求 (アプリ) の状況を合わせ、企業データベースの請求管理に書く
+    const ledgerStep: Record<string, LedgerStepKey> = { invoice: "invoice", payment: "payment", "pa-invoice": "partnerInvoice", "pa-payment": "partnerPayment" };
+    const step = task.billingStep ? ledgerStep[task.billingStep] : undefined;
+    if (typeof body.done === "boolean" && step && task.placement.personId) {
       const personId = task.placement.personId;
-      const ymd = (d: Date) => new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+      const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      const current = await prisma.personBilling.findUnique({ where: { personId } });
+      const data = billingPatchForStep(step, body.done, today, current);
+      await prisma.personBilling.upsert({
+        where: { personId },
+        create: { personId, ...data, updatedBy: account.name ?? null },
+        update: { ...data, updatedBy: account.name ?? null },
+      });
       after(async () => {
-        try {
-          const r = await writeBillingStepToSheet({
-            personId,
-            step: task.billingStep as BillingStepKey,
-            doneYmd: ymd(task.doneAt ?? new Date()),
-            dueYmd: task.dueAt ? ymd(task.dueAt) : null,
-          });
-          if (!r.ok) console.info("請求管理への反映をスキップ:", r.reason);
-        } catch (e) {
-          console.warn("請求管理への反映に失敗:", e instanceof Error ? e.message : e);
-        }
+        const r = await writeBillingToSheet([personId]);
+        if (r.error) console.warn("請求管理への反映に失敗:", r.error);
       });
     }
     return Response.json({ ok: true, task });

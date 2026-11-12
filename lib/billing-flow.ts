@@ -136,20 +136,24 @@ export async function ensureBillingTasks(placementId: number): Promise<{ created
   await prisma.placementTask.deleteMany({
     where: { placementId, doneAt: null, OR: [{ category: BILLING_PHASE }, { billingStep: { not: null } }] },
   });
+  const billing = personId ? await prisma.personBilling.findUnique({ where: { personId } }) : null;
   const tasks = buildBillingTasks({
     joinYmd: ymdJst(p.joinAt),
-    partnerName: p.person?.partner?.name ?? null,
+    // 請求で「自社」にした人はパートナーへの支払いが無い
+    partnerName: billing?.route === "自社" ? null : (billing?.partnerName ?? p.person?.partner?.name ?? null),
     owner: p.person?.dealCandidates[0]?.deal.owner?.name ?? null,
   }).filter((t) => !done.has(t.billingStep));
-  // 企業データベースの請求管理で終わっている段階 (発行済・入金済・支払済など) は、最初から完了にする
-  let sheetDone = new Set<BillingStepKey>();
+  // 請求 (アプリ) で終わっている段階 (発行済・入金済・支払済など) は、最初から完了にする
+  const sheetDone = new Set<BillingStepKey>();
   if (personId) {
-    try {
-      const { readBillingDoneSteps } = await import("@/lib/billing-sheet");
-      sheetDone = await readBillingDoneSteps(personId);
-    } catch (e) {
-      console.warn("請求管理の読み取りに失敗:", e instanceof Error ? e.message : e);
+    const b = billing;
+    if (b?.invoiceStatus === "発行済" || b?.invoiceDate) sheetDone.add("invoice");
+    if (b?.paymentStatus === "入金済") sheetDone.add("payment");
+    if (b?.partnerInvoiceStatus === "受領済") {
+      sheetDone.add("pa-request");
+      sheetDone.add("pa-invoice");
     }
+    if (b?.partnerPayStatus === "支払済") sheetDone.add("pa-payment");
   }
   const max = await prisma.placementTask.aggregate({ where: { placementId }, _max: { sortOrder: true } });
   let order = (max._max.sortOrder ?? 0) + 1;
@@ -161,7 +165,7 @@ export async function ensureBillingTasks(placementId: number): Promise<{ created
         category: BILLING_PHASE,
         sortOrder: order++,
         ...t,
-        ...(sheetDone.has(t.billingStep) ? { doneAt: now, doneBy: "請求管理シート" } : {}),
+        ...(sheetDone.has(t.billingStep) ? { doneAt: now, doneBy: "請求管理" } : {}),
       })),
     });
   }

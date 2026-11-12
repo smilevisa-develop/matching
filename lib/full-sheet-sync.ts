@@ -21,6 +21,7 @@ import {
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 import { requestOnboardingSheetSync } from "@/lib/onboarding-sheet-sync";
 import { ensureMissingBillingRows } from "@/lib/candidate-date-sheet";
+import { importMissingBillingFromSheet, writeBillingToSheet } from "@/lib/billing-ledger";
 import {
   DEFAULT_COMPANY_ROOT_FOLDER_URL,
   DEFAULT_PERSON_ROOT_FOLDER_URL,
@@ -177,6 +178,9 @@ export async function runFullSheetSync(): Promise<Response> {
     const onboarding = await requestOnboardingSheetSync();
     // 請求管理に行が無い内定者の行を足す (内定にしたときにも足すが、取りこぼしの保険)
     const billingRows = await ensureMissingBillingRows();
+    // 請求 (アプリ) が無い人は請求管理から取り込み、あとはアプリの値を請求管理へ書く (アプリが正)
+    const billingImport = await importMissingBillingFromSheet().catch((e) => ({ created: [] as number[], error: String(e) }));
+    const billingWrite = await writeBillingToSheet();
 
     return Response.json({
       ok: true,
@@ -188,6 +192,7 @@ export async function runFullSheetSync(): Promise<Response> {
       dealSyncError,
       onboarding: { changed: onboarding.changes.length, error: onboarding.error },
       billingRows,
+      billing: { imported: billingImport.created.length, written: billingWrite.changes, error: billingWrite.error },
       at: new Date().toISOString(),
     });
   } catch (error) {

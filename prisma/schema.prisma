@@ -8,35 +8,35 @@ datasource db {
 }
 
 model Person {
-  id              Int      @id @default(autoincrement())
-  name            String
-  photoUrl        String?
-  driveFolderUrl  String?
-  nationality     String
-  department      String?
+  id                       Int       @id @default(autoincrement())
+  name                     String
+  photoUrl                 String?
+  driveFolderUrl           String?
+  nationality              String
+  department               String?
   /// 推薦先企業の手動上書き。設定時はスプシ「推薦先企業」に優先反映する。
   /// 空(null)なら案件(DealCandidate→Deal→Company)から自動導出する。
-  recommendedCompany String?
-  residenceStatus String
-  partnerId       Int?
-  channel         String
+  recommendedCompany       String?
+  residenceStatus          String
+  partnerId                Int?
+  channel                  String
   /// SNS の連絡先 URL (グループ LINE の招待リンク / Messenger / WhatsApp など)。
   /// channel で選んだ手段の「飛び先」。候補者詳細の上部アイコンから開く
-  contactUrl      String?
-  lineUserId      String?
-  messengerPsid   String?
-  email           String?
-  whatsappId      String?
+  contactUrl               String?
+  lineUserId               String?
+  messengerPsid            String?
+  email                    String?
+  whatsappId               String?
   /// 候補者を追加した担当者の表示名 (固定リストから 1 つ: トゥイ / チンディ / ミン / 土田)
-  registeredBy    String?
+  registeredBy             String?
   /// 候補者向け公開フォーム (intake) の共有トークン。SNS / LINE 等で URL を渡す
-  intakeToken     String?  @unique
+  intakeToken              String?   @unique
   /// 公開フォームの設定 (除外する質問キー / 個別追加質問)
   ///   形式: { excludedKeys: string[], customQuestions: [{ key, label, required, type }] }
-  intakeConfig    Json?
+  intakeConfig             Json?
   /// 日本語チェック (録音) 専用の共有トークン。
   /// 入力フォーム (intakeToken) とは完全に別のリンクとして発行・再発行できる
-  japaneseCheckToken String? @unique
+  japaneseCheckToken       String?   @unique
   /// 日本語チェックを「テスト開始」した日時。受験は 1 回のみのため、
   /// 開始済みのリンクを開き直してもやり直せない (再発行で null に戻る)
   japaneseCheckStartedAt   DateTime?
@@ -47,24 +47,25 @@ model Person {
   /// これより新しいときだけスプシに書き込む。
   /// null = 一度も反映していない。既存候補者は移行時に現在時刻を入れて
   /// 「今後の変更だけ反映」する運用にしている。
-  sheetSyncedAt   DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  sheetSyncedAt            DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
-  messages        Message[]
-  onboarding      PersonOnboarding?
-  documents       PortalDocument[]
-  portalTasks     PortalTask[]
-  resumeProfile   ResumeProfile?
-  japaneseCheck   PersonJapaneseCheck?
+  messages            Message[]
+  onboarding          PersonOnboarding?
+  documents           PortalDocument[]
+  portalTasks         PortalTask[]
+  resumeProfile       ResumeProfile?
+  japaneseCheck       PersonJapaneseCheck?
   checklistDeliveries JobChecklistDelivery[]
-  documentDeliveries CompanyDocumentDelivery[]
-  resumeDocuments ResumeDocument[]
-  dealCandidates  DealCandidate[]
-  customQuestions PersonCustomQuestion[]
-  placement       PersonPlacement?
-  invoices        Invoice[]
-  partner         Partner?               @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  documentDeliveries  CompanyDocumentDelivery[]
+  resumeDocuments     ResumeDocument[]
+  dealCandidates      DealCandidate[]
+  customQuestions     PersonCustomQuestion[]
+  placement           PersonPlacement?
+  billing             PersonBilling?
+  invoices            Invoice[]
+  partner             Partner?                  @relation(fields: [partnerId], references: [id], onDelete: SetNull)
 }
 
 model PersonCustomQuestion {
@@ -107,33 +108,33 @@ model Company {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  deals Deal[]
+  deals               Deal[]
   checklistDeliveries JobChecklistDelivery[]
-  documents CompanyDocument[]
+  documents           CompanyDocument[]
 }
 
 /// 母国語の求人票チェックリストを候補者へ送った記録。
 /// 求人票の要点を母国語+日本語で候補者に見せ、開封/チェックを追跡する。
 model JobChecklistDelivery {
-  id          Int      @id @default(autoincrement())
-  personId    Int
-  person      Person   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  companyId   Int
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id           Int       @id @default(autoincrement())
+  personId     Int
+  person       Person    @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  companyId    Int
+  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   /// 母国語コード: vi(ベトナム) / id(インドネシア) / my(ミャンマー) / ne(ネパール)
-  language    String
+  language     String
   /// 公開URL用トークン
-  token       String   @unique
+  token        String    @unique
   /// 要点チェックリストのスナップショット (日本語原文 + 翻訳)。
   /// [{ key, jaLabel, jaValue, trLabel, trValue }]
-  items       Json
-  sentAt      DateTime?
-  openedAt    DateTime?
+  items        Json
+  sentAt       DateTime?
+  openedAt     DateTime?
   /// 候補者がチェックした項目 { key: true }
   checkedItems Json?
-  completedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([personId])
   @@index([companyId])
@@ -143,23 +144,23 @@ model JobChecklistDelivery {
 /// 企業ごとに登録し、候補者への配信 (CompanyDocumentDelivery) で使い回す。
 /// 求人票チェックリスト (JobChecklistDelivery) とは目的も送るタイミングも違うため別管理。
 model CompanyDocument {
-  id         Int     @id @default(autoincrement())
-  companyId  Int
-  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id           Int      @id @default(autoincrement())
+  companyId    Int
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   /// 資料名 (例: 特定技能生 事前確認資料)
-  title      String
+  title        String
   /// 貼り付けられた原文。分割し直したいときのために保持する
-  sourceText String
+  sourceText   String
   /// AI が分割した日本語セクション
   /// [{ key, title, body, kind: "read" | "check" }]
   ///   read  = 会社の考え方など。読むだけ (チェック不要)
   ///   check = ルールなど。候補者にチェックしてもらう
-  sections   Json
+  sections     Json
   /// 言語ごとの翻訳キャッシュ { vi: [{ key, title, body }], id: [...] }。
   /// 候補者ごとに訳し直さず、資料に紐づけて使い回す
   translations Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   deliveries CompanyDocumentDelivery[]
 
@@ -195,27 +196,27 @@ model CompanyDocumentDelivery {
 }
 
 model Partner {
-  id            Int     @id @default(autoincrement())
-  name          String
-  country       String?
+  id                Int     @id @default(autoincrement())
+  name              String
+  country           String?
   /// アクティブかどうか (非アクティブ = 一覧で折りたたみ非表示)
-  isActive      Boolean @default(true)
+  isActive          Boolean @default(true)
   /// レガシー: 単一チャネル (後方互換用、preferredChannels に集約)
-  channel       String?
+  channel           String?
   /// 一括送信で使う連絡手段の複数選択 (CSV: "LINE,mail,Messenger")。
   /// この Partner に一斉配信する際、ここに列挙された全チャネルに 同時 送信する。
   preferredChannels String?
-  linkStatus    String  @default("未")
-  contactName   String?
-  contactPhone  String?
-  notes         String?
-  lineUserId    String? @unique
-  messengerPsid String? @unique
-  whatsappId    String?
+  linkStatus        String  @default("未")
+  contactName       String?
+  contactPhone      String?
+  notes             String?
+  lineUserId        String? @unique
+  messengerPsid     String? @unique
+  whatsappId        String?
   /// 1〜5 の評価 (☆ 5 段階)。null = 未評価
-  rating        Int?
+  rating            Int?
   /// 評価理由 (フリーテキスト)
-  ratingReason  String?
+  ratingReason      String?
 
   // --- スプシ「アライアンス先」由来のフィールド ---
   /// 役割: 求人 / 求職 / 求人・求職 / 学校 など
@@ -282,16 +283,16 @@ model Partner {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  deals         Deal[]
-  persons       Person[]
-  groupMembers  GroupMember[]
-  invoices      Invoice[]
-  ratingHistory PartnerRatingHistory[]
-  messages      Message[]
-  lineGroups    LineGroup[]
+  deals           Deal[]
+  persons         Person[]
+  groupMembers    GroupMember[]
+  invoices        Invoice[]
+  ratingHistory   PartnerRatingHistory[]
+  messages        Message[]
+  lineGroups      LineGroup[]
   surveyResponses PartnerSurveyResponseLog[]
-  chatPins      ChatPin[]
-  contacts      PartnerContact[]
+  chatPins        ChatPin[]
+  contacts        PartnerContact[]
 }
 
 /// パートナー会社の担当者 (1 社につき複数人を登録できる)
@@ -350,7 +351,7 @@ model StaffAccount {
   onboardingFormTemplates OnboardingFormTemplate[]
   messageTemplates        MessageTemplate[]
   resumeTemplates         ResumeTemplate[]
-  followUpPlacements      PersonPlacement[] @relation("PlacementFollowUpOwner")
+  followUpPlacements      PersonPlacement[]        @relation("PlacementFollowUpOwner")
   createdResumes          ResumeDocument[]
   ownedDeals              Deal[]
   chatPins                ChatPin[]
@@ -431,32 +432,32 @@ model LineProfile {
 
 /// Bot が招待された LINE グループ / 複数人チャット
 model LineGroup {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   /// LINE 側の group ID (グループ) or room ID (複数人チャット)
-  groupId         String   @unique
+  groupId         String    @unique
   /// "group" or "room"
-  sourceType      String   @default("group")
+  sourceType      String    @default("group")
   /// グループ名 (LINE API で取得)
   groupName       String?
   /// グループメンバー数 (取得時のスナップショット)
   memberCount     Int?
   /// 紐づけ済みパートナー (nullable - 未紐づけ状態あり)
   partnerId       Int?
-  partner         Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  partner         Partner?  @relation(fields: [partnerId], references: [id], onDelete: SetNull)
   /// 最終受信メッセージ本文
   lastMessageText String?
   /// 最終 webhook イベントタイプ
   lastWebhookType String?
   /// 最終アクセス日時
-  lastSeenAt      DateTime @default(now())
+  lastSeenAt      DateTime  @default(now())
   /// パートナーではないグループ (内定後のグループなど) を、パートナーに紐づけずにチャット画面にだけ出す。
   /// 連絡先紐づけ画面の「パートナーではない」で ON にする。パートナーの一斉連絡の送信先には入らない
-  chatOnly        Boolean  @default(false)
+  chatOnly        Boolean   @default(false)
   /// Bot がまだグループに在籍しているか (leave イベントで false に)
-  isActive        Boolean  @default(true)
+  isActive        Boolean   @default(true)
   chatPins        ChatPin[]
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model MessengerProfile {
@@ -668,7 +669,7 @@ model PersonJapaneseCheck {
   /// { perQuestion: [...観察された事実と派生値], metrics: {...}, appliedRules: [...] }
   /// AI は事実の観察のみを行い、レベルはコードのルールで決めているため、
   /// ここを見れば「なぜその判定か」を後から検証できる。
-  evidence   Json?
+  evidence Json?
 
   /// 録音した各問の情報 (Json 配列)。
   /// [{ key, question, transcript, driveFileId, driveFileUrl, mimeType }]
@@ -692,7 +693,7 @@ model AppSettings {
 }
 
 model CoreSettings {
-  id                        Int      @id
+  id                        Int       @id
   fixedQuestions            Json?
   // 推薦リスト出力で使うカラムキー (lib/recommendation-columns.ts の RECOMMENDATION_COLUMN_OPTIONS の key)
   recommendationColumns     Json?
@@ -718,8 +719,8 @@ model CoreSettings {
   snsTiktokAccounts         Json?
   /// SNS のプロフィールに貼る相談リンク (/go/[国]-[媒体]) の行き先。{ id: URL, vn: URL } (lib/sns-funnel.ts)
   snsLinkTargets            Json?
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 }
 
 model OnboardingFormTemplate {
@@ -820,157 +821,157 @@ model JobPostingTemplate {
 }
 
 model JobPosting {
-  id                  Int                 @id @default(autoincrement())
-  dealId              Int
-  deal                Deal                @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  templateId          Int?
-  template            JobPostingTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  title               String
-  documentId          String?
-  documentUrl         String?
-  driveFolderUrl      String?
-  status              String              @default("draft")
+  id                      Int                 @id @default(autoincrement())
+  dealId                  Int
+  deal                    Deal                @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  templateId              Int?
+  template                JobPostingTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  title                   String
+  documentId              String?
+  documentUrl             String?
+  driveFolderUrl          String?
+  status                  String              @default("draft")
   // 仕事内容
-  jobDescription      String?
-  workLocation        String?
-  nearestStation      String?
-  headcount           String?
-  gender              String?
-  nationality         String?
+  jobDescription          String?
+  workLocation            String?
+  nearestStation          String?
+  headcount               String?
+  gender                  String?
+  nationality             String?
   // 勤務
-  workTime1Start      String?
-  workTime1End        String?
-  workTime2Start      String?
-  workTime2End        String?
-  overtime            String?
-  avgMonthlyOvertime  String?
-  fixedOvertimeHours  String?
-  fixedOvertimePay    String?
+  workTime1Start          String?
+  workTime1End            String?
+  workTime2Start          String?
+  workTime2End            String?
+  overtime                String?
+  avgMonthlyOvertime      String?
+  fixedOvertimeHours      String?
+  fixedOvertimePay        String?
   // 給与
-  monthlyGross        String?
-  basicSalary         String?
-  salaryCalcMethod    String?
-  perfectAttendance   String?
-  housingAllowance    String?
-  nightShiftAllowance String?
-  commuteAllowance    String?
+  monthlyGross            String?
+  basicSalary             String?
+  salaryCalcMethod        String?
+  perfectAttendance       String?
+  housingAllowance        String?
+  nightShiftAllowance     String?
+  commuteAllowance        String?
   // 控除
-  socialInsurance     String?
-  employmentInsurance String?
-  healthInsurance     String?
-  pensionInsurance    String?
-  incomeTax           String?
-  residentTax         String?
+  socialInsurance         String?
+  employmentInsurance     String?
+  healthInsurance         String?
+  pensionInsurance        String?
+  incomeTax               String?
+  residentTax             String?
   // 生活
-  mealProvision       String?
-  mealAmount          String?
-  dormProvision       String?
-  dormAmount          String?
-  utilitiesProvision  String?
-  utilitiesAmount     String?
+  mealProvision           String?
+  mealAmount              String?
+  dormProvision           String?
+  dormAmount              String?
+  utilitiesProvision      String?
+  utilitiesAmount         String?
   // その他
-  holidays            String?
-  otherBenefits       String?
-  notes               String?
+  holidays                String?
+  otherBenefits           String?
+  notes                   String?
   // ── 新設 (2026-06 求人票テンプレ拡張) ──
   // 給与関連
-  salaryIncrease         String? // 昇給有無
-  bonus                  String? // 賞与有無
-  salaryPayday           String? // 給与支払日
-  salaryCutoff           String? // 給与締日
-  monthlyDeduction       String? // 月控除額
-  otherDeductions        String? // その他控除金額
+  salaryIncrease          String? // 昇給有無
+  bonus                   String? // 賞与有無
+  salaryPayday            String? // 給与支払日
+  salaryCutoff            String? // 給与締日
+  monthlyDeduction        String? // 月控除額
+  otherDeductions         String? // その他控除金額
   // 手当・生活費追加
-  wifiFee                String? // Wifi代金額
-  waterFee               String? // 水道代金額
-  movingSupport          String? // 引越補助有無
-  movingSupportDetails   String? // 引越補助詳細
+  wifiFee                 String? // Wifi代金額
+  waterFee                String? // 水道代金額
+  movingSupport           String? // 引越補助有無
+  movingSupportDetails    String? // 引越補助詳細
   // 寮関連追加
-  dormOccupants          String? // 寮人数
-  bedroomShared          String? // 寝室共有
-  dormCommuteTime        String? // 寮から通勤時間
-  foodProvision          String? // 食事提供有無 (食費支給有無と別)
+  dormOccupants           String? // 寮人数
+  bedroomShared           String? // 寝室共有
+  dormCommuteTime         String? // 寮から通勤時間
+  foodProvision           String? // 食事提供有無 (食費支給有無と別)
   // 募集条件
-  foreignWorkers         String? // 外国人就業者
-  overseasApplication    String? // 海外応募可否
-  japaneseLevel          String? // 日本語レベル
-  experienceYears        String? // 経験年数
-  requiredQualifications String? // 必要資格
-  commuteMethod          String? // 通勤手段
+  foreignWorkers          String? // 外国人就業者
+  overseasApplication     String? // 海外応募可否
+  japaneseLevel           String? // 日本語レベル
+  experienceYears         String? // 経験年数
+  requiredQualifications  String? // 必要資格
+  commuteMethod           String? // 通勤手段
   // 選考関連
-  preferredInterviewDate String? // 面接希望日
-  selectionFlow          String? // 選考フロー
-  preferredEntryDate     String? // 入国希望日
+  preferredInterviewDate  String? // 面接希望日
+  selectionFlow           String? // 選考フロー
+  preferredEntryDate      String? // 入国希望日
   // 勤務条件追加
-  trialPeriod              String? // 試用期間有無
-  trialPeriodDetails       String? // 試用期間詳細
-  facilities               String? // 設備
-  holidayCategory          String? // 休日休暇区分
-  socialInsuranceCoverage  String? // 社会保険 (加入有無、料金は socialInsurance 列と別)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  trialPeriod             String? // 試用期間有無
+  trialPeriodDetails      String? // 試用期間詳細
+  facilities              String? // 設備
+  holidayCategory         String? // 休日休暇区分
+  socialInsuranceCoverage String? // 社会保険 (加入有無、料金は socialInsurance 列と別)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
 
   @@index([dealId])
 }
 
 model PersonPlacement {
-  id                   Int       @id @default(autoincrement())
+  id                      Int           @id @default(autoincrement())
   /// 候補者 (null = 書類作成だけを請け負った内定者。候補者とは別物で、名前などは external* に持つ)
-  personId             Int?      @unique
-  person               Person?   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  personId                Int?          @unique
+  person                  Person?       @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   /// 候補者に紐づかない内定者の氏名 / 企業名 / 在留資格
-  externalName         String?
-  externalCompanyName  String?
+  externalName            String?
+  externalCompanyName     String?
   externalResidenceStatus String?
   /// 申請方法 (短文。例: 本人がオンライン申請 / 行政書士へ委託)
-  applicationMethod    String?
+  applicationMethod       String?
   /// 書類作成だけを請け負った内定者 (ボードで薄く色を付けて出す)
-  documentsOnly        Boolean   @default(false)
+  documentsOnly           Boolean       @default(false)
   /// 別の在留資格でもう一度申請する内定者 (ボードの列の一番上に色を付けて出す。請求は 1 回目の入社のときだけ)
-  twoApplications      Boolean   @default(false)
+  twoApplications         Boolean       @default(false)
   /// 内定者ごとの Drive フォルダ (企業フォルダ / 内定者 / 英語名)
-  driveFolderUrl       String?
+  driveFolderUrl          String?
   /// サポート工程で選んだ支援の種類 (lib/onboarding-flow.ts の SUPPORT_OPTIONS の id 配列)
-  supports             Json?
-  stage                String?
-  acceptedAt           DateTime?
-  preInterviewAt       DateTime?
-  companyInterviewAt   DateTime?
-  offerAt              DateTime?
-  offerAcceptedAt      DateTime?
-  applicationPlannedAt DateTime?
-  applicationAt        DateTime?
-  applicationResultAt  DateTime?
-  applicationType      String?
-  applicantName        String?
-  returnHomeFlag       String?
-  returnHomeAt         DateTime?
-  entryPlannedAt       DateTime?
-  entryAt              DateTime?
-  joinPlannedAt        DateTime?
-  joinAt               DateTime?
+  supports                Json?
+  stage                   String?
+  acceptedAt              DateTime?
+  preInterviewAt          DateTime?
+  companyInterviewAt      DateTime?
+  offerAt                 DateTime?
+  offerAcceptedAt         DateTime?
+  applicationPlannedAt    DateTime?
+  applicationAt           DateTime?
+  applicationResultAt     DateTime?
+  applicationType         String?
+  applicantName           String?
+  returnHomeFlag          String?
+  returnHomeAt            DateTime?
+  entryPlannedAt          DateTime?
+  entryAt                 DateTime?
+  joinPlannedAt           DateTime?
+  joinAt                  DateTime?
   /// 前の会社の退職日 (入管への退社報告の期限を決める。変更・特定活動の人だけ)
-  leaveAt              DateTime?
-  sixMonthStatus       String?
-  consultation         String?
-  currentAction        String?
+  leaveAt                 DateTime?
+  sixMonthStatus          String?
+  consultation            String?
+  currentAction           String?
   /// 次アクションの期限 (内定者管理ボードで遅延を赤く出すために使う)
-  nextActionDueAt      DateTime?
+  nextActionDueAt         DateTime?
   /// 今の工程に入った日時 (滞留日数の算出に使う)
-  stageChangedAt       DateTime?
+  stageChangedAt          DateTime?
   /// 保留にした理由 (保留列に置いた問題の中身)
-  holdReason           String?
+  holdReason              String?
   /// 保留にする前の工程 (解除時に戻す先)
-  heldFromStage        String?
+  heldFromStage           String?
   /// キャンセル (不許可・取り下げ・辞退など) にした理由
-  cancelReason         String?
+  cancelReason            String?
   /// 内定辞退にした理由 (内定辞退の人はボードから消える)
-  declineReason        String?
+  declineReason           String?
   /// 内定フォロー担当 (採用担当とは別。ワークフロー STEP3 以降の担当)
-  followUpOwnerId      Int?
-  followUpOwner        StaffAccount? @relation("PlacementFollowUpOwner", fields: [followUpOwnerId], references: [id], onDelete: SetNull)
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  followUpOwnerId         Int?
+  followUpOwner           StaffAccount? @relation("PlacementFollowUpOwner", fields: [followUpOwnerId], references: [id], onDelete: SetNull)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
 
   tasks  PlacementTask[]
   issues PlacementIssue[]
@@ -981,7 +982,7 @@ model PersonPlacement {
 /// 「誰が・いつまでに」が無いまま進んで申請やり直し / 期限切れが起きていたため、
 /// 期限と担当をタスク単位で持たせている。
 model PlacementTask {
-  id          Int            @id @default(autoincrement())
+  id          Int             @id @default(autoincrement())
   placementId Int
   placement   PersonPlacement @relation(fields: [placementId], references: [id], onDelete: Cascade)
   /// 区分 (条件確認 / 書類 / 申請 / 渡航・住居 / 入社後)
@@ -996,26 +997,26 @@ model PlacementTask {
   owner       String?
   /// 請求の流れのどの段階か (lib/billing-flow.ts の BILLING_STEPS の key)。それ以外のタスクは null
   billingStep String?
-  sortOrder   Int            @default(0)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@index([placementId, sortOrder])
 }
 
 /// 内定後に起きた問題の記録 (再発防止のため案件・候補者に紐づけて残す)
 model PlacementIssue {
-  id          Int            @id @default(autoincrement())
+  id          Int             @id @default(autoincrement())
   placementId Int
   placement   PersonPlacement @relation(fields: [placementId], references: [id], onDelete: Cascade)
   title       String
   detail      String?
   /// open = 未解決 / closed = 解決済み
-  status      String         @default("open")
+  status      String          @default("open")
   recordedBy  String?
   resolvedAt  DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@index([placementId, status])
 }
@@ -1048,19 +1049,19 @@ model Invoice {
 }
 
 model DealCandidate {
-  id        Int      @id @default(autoincrement())
-  dealId    Int
-  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  personId  Int
-  person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  stage     String   @default("new")
-  note      String?
+  id         Int      @id @default(autoincrement())
+  dealId     Int
+  deal       Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  personId   Int
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  stage      String   @default("new")
+  note       String?
   /// ステージごとの日付 (ステージ名 → "YYYY-MM-DD")。
   /// カンバンで動かしたときに入力した日付。進捗管理の月別集計とスプシ反映に使う。
   /// 例: { "接続済み": "2026-10-01", "推薦済み": "2026-10-05" }
   stageDates Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@unique([dealId, personId])
 }
@@ -1092,12 +1093,12 @@ model MessageLog {
 ///
 /// LINE は "1 push の text + image 4枚 = 5 通" としてカウント (LINE 課金単位に合わせる)
 model MonthlyChannelUsage {
-  id            Int      @id @default(autoincrement())
-  channel       String
-  yearMonth     String
-  messageCount  Int      @default(0)
-  updatedAt     DateTime @updatedAt
-  createdAt     DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  channel      String
+  yearMonth    String
+  messageCount Int      @default(0)
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
 
   @@unique([channel, yearMonth])
   @@index([yearMonth])
@@ -1181,15 +1182,15 @@ model InterviewPracticeSession {
 /// AI 面接練習で面接官が話す音声 (AI の音声合成で作ったもの) の置き場。
 /// 同じ文は 1 度だけ作り、以後はここから配る (無料枠の節約と、待ち時間の短縮)。
 model InterviewPracticeSpeech {
-  id       Int     @id @default(autoincrement())
+  id    Int     @id @default(autoincrement())
   /// 声の種類と文から作った鍵 (音声を配る URL に使う)
-  key      String  @unique
-  text     String
-  voice    String
+  key   String  @unique
+  text  String
+  voice String
   /// 質問集にある決まった文なら true。AI がその場で作った深掘りの質問は false (1 日で消す)
-  fixed    Boolean @default(false)
+  fixed Boolean @default(false)
   /// 音声 (WAV)。まだ作っていなければ null
-  audio    Bytes?
+  audio Bytes?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1281,4 +1282,42 @@ model SnsInquiry {
 
   @@unique([channel, userKey])
   @@index([createdAt])
+}
+
+/// 請求 (1 人 1 件)。アプリが正で、企業データベースの「請求管理」タブへ上書きする (2026/11)。
+/// 日付は "YYYY-MM-DD" の文字列 (スプシと同じく日付だけを扱う)。
+model PersonBilling {
+  id                   Int      @id @default(autoincrement())
+  personId             Int      @unique
+  person               Person   @relation(fields: [personId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  /// 単価 (税抜)
+  unitPrice            Int?
+  /// 請求金額 (税込)
+  invoiceAmount        Int?
+  /// 請求日 (企業へ請求書を送った日)
+  invoiceDate          String?
+  /// 入金期日
+  dueDate              String?
+  /// 請求書: 未発行 / 発行済
+  invoiceStatus        String?
+  /// 請求ステータス: 未入金 / 入金済
+  paymentStatus        String?
+  invoiceUrl           String?
+  /// 自社 / パートナー
+  route                String?
+  partnerName          String?
+  /// 仕入高 (パートナーへの支払い)
+  partnerCost          Int?
+  /// PAからの請求書: 未受領 / 受領済
+  partnerInvoiceStatus String?
+  /// 支払い有無: 未払い / 支払済
+  partnerPayStatus     String?
+  partnerPaidDate      String?
+  partnerInvoiceUrl    String?
+  note                 String?
+  /// 内定者管理に居ない人 (人材紹介会社経由など) の入社日。ある人は内定者管理の入社日を使う
+  joinDate             String?
+  updatedBy            String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
