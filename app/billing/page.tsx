@@ -34,7 +34,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     onboarding: { select: { englishName: true } },
     partner: { select: { name: true } },
     billing: true,
-    placement: { select: { id: true, joinAt: true, offerAt: true } },
+    placement: { select: { id: true, joinAt: true, offerAt: true, stage: true } },
     dealCandidates: {
       orderBy: { updatedAt: "desc" as const },
       take: 1,
@@ -43,7 +43,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   };
   const [placements, billings] = await Promise.all([
     prisma.personPlacement.findMany({
-      where: { personId: { not: null }, tasks: { some: { billingStep: { not: null } } } },
+      // 内定者管理でキャンセル・内定辞退にした人は請求しないので出さない
+      where: { personId: { not: null }, stage: { notIn: ["card_cancelled", "declined"] }, tasks: { some: { billingStep: { not: null } } } },
       select: {
         id: true,
         joinAt: true,
@@ -174,6 +175,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   // 2) 内定者管理に居ない人 (人材紹介会社経由など)。入社日から期限を出す
   for (const { person } of billings) {
     if (seen.has(person.id)) continue;
+    if (person.placement && ["card_cancelled", "declined"].includes(person.placement.stage ?? "")) continue;
     const b = person.billing!;
     // 内定者カードがあればその入社日 (まだ入社していなければ空)
     const join = person.placement ? ymd(person.placement.joinAt) : (b.joinDate ?? "");
