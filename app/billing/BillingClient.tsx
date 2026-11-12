@@ -43,10 +43,10 @@ export type LedgerRow = {
 };
 
 const COLUMNS: { key: StepKey; label: string; sub: string }[] = [
-  { key: "invoice", label: "① 請求", sub: "企業へ請求書を送る" },
-  { key: "payment", label: "② 入金", sub: "企業からの入金を確認" },
-  { key: "partnerInvoice", label: "③ PA請求書", sub: "パートナーから受け取る" },
-  { key: "partnerPayment", label: "④ PA支払", sub: "パートナーへ支払う" },
+  { key: "invoice", label: "① 請求", sub: "企業へ送る" },
+  { key: "payment", label: "② 入金", sub: "入金を確認" },
+  { key: "partnerInvoice", label: "③ PA請求書", sub: "PAから受取" },
+  { key: "partnerPayment", label: "④ PA支払", sub: "PAへ支払う" },
 ];
 
 const md = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "");
@@ -217,17 +217,18 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
         ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
         : "border-gray-300 bg-white text-[var(--color-text-dark)] hover:border-[var(--color-primary)] hover:bg-gray-50";
     const main = s.done ? "✓ 済" : s.due ? `${md(s.due)} まで` : "日付なし";
-    const sub = s.done ? (s.doneAt ? `${md(s.doneAt)}${s.doneBy ? ` ${s.doneBy}` : ""}` : "押すと取り消し") : s.overdue ? "期限切れ ・ 押して済に" : "押して済にする";
+    const by = s.doneBy && !s.doneBy.startsWith("請求管理") ? ` ${s.doneBy}` : "";
+    const sub = s.done ? (s.doneAt ? `${md(s.doneAt)}${by}` : "完了") : s.overdue ? "期限切れ" : "予定";
     return (
       <button
         type="button"
         onClick={() => void toggle(row, key)}
         disabled={busy === `${row.personId}-${key}`}
         title={s.done ? "押すと取り消し" : "押すと済にする"}
-        className={`flex w-full flex-col items-start rounded-lg border px-3 py-2 text-left shadow-sm transition disabled:opacity-50 ${tone}`}
+        className={`flex w-full min-w-0 flex-col items-start rounded-lg border px-3 py-2 text-left shadow-sm transition disabled:opacity-50 ${tone}`}
       >
-        <span className="text-sm font-bold tabular-nums">{main}</span>
-        <span className="mt-0.5 text-xs font-medium opacity-90">{sub}</span>
+        <span className="whitespace-nowrap text-sm font-bold tabular-nums">{main}</span>
+        <span className="mt-0.5 truncate text-xs font-medium opacity-90">{sub}</span>
       </button>
     );
   };
@@ -418,7 +419,7 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
           ))
         )}
       </div>
-      <p className="text-xs text-gray-700">各段階のボタンを押すと「済」、「詳細・編集」で金額やリンクを直せます。金額・状況は請求管理シートの内容で、ここで直すとシートにも入ります。</p>
+      <p className="text-xs text-gray-700">各段階のボタンを押すと「済」(もう一度押すと取り消し)、「詳細・編集」で金額やリンクを直せます。金額・状況は請求管理シートの内容で、ここで直すとシートにも入ります。</p>
     </div>
   );
 }
