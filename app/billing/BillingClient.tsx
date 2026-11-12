@@ -916,7 +916,7 @@ export default function BillingClient({
       )}
       {tab === "pa" && sub === "confirm" && (
         <div className="space-y-3">
-          {head("パートナーへの振込の確認", toConfirmTransfer.length)}
+          {head("PAの振込確認", toConfirmTransfer.length)}
           {ledger(toConfirmTransfer, "振込を待っているものはありません", "confirm")}
         </div>
       )}
