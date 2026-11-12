@@ -377,16 +377,38 @@ export default function BillingClient({
     }
   };
   const companyText = [
-    `【${Number(month.slice(5))}月の請求】${Number(joinedMonth.slice(5))}月入社 ${billed.length}件`,
+    `【請求書の発行のお願い】${Number(month.slice(5))}月請求 (${Number(joinedMonth.slice(5))}月入社) ${billed.length}件`,
     ...billed.map((r) =>
       [r.displayId, r.personName, r.companyName || "-", `内定 ${mdFull(r.offerAt)}`, `入社 ${mdFull(r.joinAt)}`, yen(r.invoiceAmount) || "金額未入力", `入金期日 ${mdFull(r.dueDate || companyDue)}`].join(" / "),
     ),
   ].join("\n");
   const partnerText = (name: string, list: LedgerRow[]) =>
     [
-      `【${name}】${Number(joinedMonth.slice(5))}月入社 ${list.length}件`,
+      `【${name} 様 請求書の発行のお願い】${Number(joinedMonth.slice(5))}月入社 ${list.length}件`,
       ...list.map((r) => [r.displayId, r.personName, `入社 ${mdFull(r.joinAt)}`, yen(r.costAmount) || "金額未入力", `入金期日 ${mdFull(partnerDue)}`].join(" / ")),
     ].join("\n");
+
+  // ③ 川村さんへ振込の依頼: パートナーの請求書が届いていて、まだ振り込んでいない人 (月に関係なく。請求書が遅れて月がずれることがあるため)
+  const payDueOf = (r: LedgerRow) => r.steps.partnerPayment?.due || (r.joinAt ? monthEnd(r.joinAt.slice(0, 7), 2) : "");
+  const toPay = rows
+    .filter((r) => r.route !== "自社" && r.steps.partnerInvoice?.done && !r.steps.partnerPayment?.done)
+    .sort((a, b) => (payDueOf(a) < payDueOf(b) ? -1 : 1));
+  const payText = [
+    `【パートナーへの振込のお願い】${toPay.length}件`,
+    ...toPay.map((r) =>
+      [
+        r.displayId,
+        r.companyName || "-",
+        r.partnerName || "-",
+        r.personName,
+        `内定 ${mdFull(r.offerAt)}`,
+        `入社 ${mdFull(r.joinAt)}`,
+        yen(r.costAmount) || "金額未入力",
+        `振込期日 ${mdFull(payDueOf(r))}`,
+        /^https?:\/\//.test(r.partnerInvoiceUrl) ? r.partnerInvoiceUrl : "請求書: シート参照",
+      ].join(" / "),
+    ),
+  ].join("\n");
 
   const TH = "whitespace-nowrap border-b border-gray-300 bg-gray-100 px-3 py-2 text-left text-xs font-semibold text-gray-800";
   const TD = "border-b border-gray-200 px-3 py-2 text-sm text-[var(--color-text-dark)] tabular-nums";
@@ -401,10 +423,11 @@ export default function BillingClient({
   );
 
   const monthLists = (
+    <div className="space-y-4">
     <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div className="rounded-2xl border border-gray-300 bg-white">
         <div className="flex items-center gap-3 px-4 py-3">
-          <h2 className="font-bold text-[var(--color-text-dark)]">代表へ ・ 企業への請求</h2>
+          <h2 className="font-bold text-[var(--color-text-dark)]">① 川村さんへ ・ 企業への請求書の発行依頼</h2>
           <span className="text-sm text-gray-700">
             {Number(joinedMonth.slice(5))}月入社 {billed.length}件 ・ 入金期日 {mdFull(companyDue)}
           </span>
@@ -447,7 +470,7 @@ export default function BillingClient({
       </div>
       <div className="rounded-2xl border border-gray-300 bg-white">
         <div className="flex items-center gap-3 px-4 py-3">
-          <h2 className="font-bold text-[var(--color-text-dark)]">パートナーへ</h2>
+          <h2 className="font-bold text-[var(--color-text-dark)]">② パートナーへ ・ 請求書の発行依頼</h2>
           <span className="text-sm text-gray-700">入金期日 {mdFull(partnerDue)}</span>
         </div>
         {byPartner.size === 0 ? (
@@ -485,6 +508,62 @@ export default function BillingClient({
             </div>
           ))
         )}
+      </div>
+    </div>
+      <div className="rounded-2xl border border-gray-300 bg-white">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <h2 className="font-bold text-[var(--color-text-dark)]">③ 川村さんへ ・ パートナーへの振込依頼</h2>
+          <span className="text-sm text-gray-700">パートナーの請求書が届いて、まだ振り込んでいない {toPay.length}件</span>
+          <span className="ml-auto">{copyButton("pay", payText)}</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] border-t border-gray-300">
+            <thead>
+              <tr>
+                {["ID", "企業名", "パートナー", "候補者名", "内定日", "入社日", "手数料", "振込期日", "請求書"].map((h) => (
+                  <th key={h} className={`${TH} ${h === "手数料" ? "text-right" : ""}`}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {toPay.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className={`${TD} text-center`}>
+                    振込を待っている請求書はありません (パートナーの請求書をアップロードするとここに出ます)
+                  </td>
+                </tr>
+              ) : (
+                toPay.map((r) => {
+                  const due = payDueOf(r);
+                  const late = !!due && due < today();
+                  return (
+                    <tr key={r.personId}>
+                      <td className={TD}>{r.displayId}</td>
+                      <td className={TD}>{r.companyName || "-"}</td>
+                      <td className={TD}>{r.partnerName || "-"}</td>
+                      <td className={`${TD} font-semibold`}>{r.personName}</td>
+                      <td className={TD}>{mdFull(r.offerAt)}</td>
+                      <td className={TD}>{mdFull(r.joinAt)}</td>
+                      <td className={`${TD} text-right ${r.costAmount == null ? "text-red-700" : ""}`}>{yen(r.costAmount) || "未入力"}</td>
+                      <td className={`${TD} ${late ? "font-semibold text-red-700" : ""}`}>{mdFull(due)}</td>
+                      <td className={TD}>
+                        {/^https?:\/\//.test(r.partnerInvoiceUrl) ? (
+                          <a href={r.partnerInvoiceUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] underline">
+                            開く
+                          </a>
+                        ) : (
+                          <span className="text-gray-700">シート</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
