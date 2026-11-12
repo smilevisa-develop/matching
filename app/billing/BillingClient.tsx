@@ -56,7 +56,7 @@ const COLUMNS: { key: StepKey; label: string; sub: string }[] = [
 const md = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "");
 const yen = (n: number | null) => (n == null ? "" : `¥${Math.round(n).toLocaleString("ja-JP")}`);
 const today = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-const GRID = "grid min-w-[1080px] grid-cols-[minmax(0,2.2fr)_0.55fr_0.85fr_repeat(4,minmax(0,1fr))] divide-x divide-gray-200";
+const GRID = "grid min-w-[1080px] grid-cols-[minmax(0,2.2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_repeat(4,minmax(0,1fr))] divide-x divide-gray-200";
 const INPUT = "w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-[var(--color-text-dark)]";
 
 type Draft = {
