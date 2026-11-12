@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 export type LedgerStep = {
   due: string;
@@ -145,6 +145,16 @@ export default function BillingClient({
   const [uploading, setUploading] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [tab, setTab] = useState<"company" | "partner" | "pay" | "ledger">("company");
+  // 上に固定した部分 (タイトル・タブ・数字の帯) の高さ。表の見出しをそのすぐ下に固定する
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const [stickyH, setStickyH] = useState(0);
+  useEffect(() => {
+    const el = stickyRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setStickyH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -577,8 +587,8 @@ export default function BillingClient({
 
   /** 台帳 (まとめと同じ形。段階のボタン・詳細・編集つき) */
   const ledger = (list: LedgerRow[], empty: string) => (
-      <div className="overflow-x-auto rounded-2xl border border-gray-300 bg-white shadow-sm">
-        <div className={`${GRID} border-b border-gray-300 bg-gray-100 text-xs font-semibold text-gray-800`}>
+      <div className="rounded-2xl border border-gray-300 bg-white shadow-sm">
+        <div className={`${GRID} sticky z-10 rounded-t-2xl border-b border-gray-300 bg-gray-100 text-xs font-semibold text-gray-800`} style={{ top: stickyH }}>
           <span className="px-4 py-3">内定者 ・ 企業</span>
           <span className="px-4 py-3">入社日</span>
           <span className="px-4 py-3 text-right">請求金額</span>
@@ -660,7 +670,7 @@ export default function BillingClient({
   return (
     <div className="space-y-4">
       {/* スクロールしてもタイトル・月・タブ (まとめでは数字の帯も) を上に固定する */}
-      <div className="sticky top-0 z-20 -mx-8 space-y-3 bg-[var(--background)] px-8 pb-3 pt-8 shadow-[0_6px_8px_-8px_rgba(0,0,0,0.25)]">
+      <div ref={stickyRef} className="sticky top-0 z-20 -mx-8 space-y-3 bg-[var(--background)] px-8 pb-3 pt-8 shadow-[0_6px_8px_-8px_rgba(0,0,0,0.25)]">
       {header}
       <nav className="flex flex-wrap gap-1 border-b border-gray-300">
         {tabs.map((t) => (
