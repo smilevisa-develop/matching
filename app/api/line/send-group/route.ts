@@ -2,18 +2,18 @@
  * パートナーではない LINE グループ (内定後のグループなど。LineGroup.chatOnly) へ 1 件送る (チャット画面から)。
  * パートナー宛ては send-partner。こちらは {{変数}} の展開をしない
  * (内定者のグループで毎回全員に通知が飛ばないように)。
- * 本文: { groupId: string, message: string }
+ * 本文: { groupId: string, message: string, replyToMessageId?: number (引用して返信するメッセージ) }
  */
 import { after } from "next/server";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { translateForAllStaff } from "@/lib/chat-translate";
-import { buildLineTextMessage } from "@/lib/line-message";
+import { buildLineTextMessage, findLineQuote, readPushSent } from "@/lib/line-message";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
     await requireApiAccount();
-    const { groupId, message } = await req.json();
+    const { groupId, message, replyToMessageId } = await req.json();
     if (typeof groupId !== "string" || !groupId || typeof message !== "string" || !message.trim()) {
       return Response.json({ ok: false, error: "groupId と message は必須です" }, { status: 400 });
     }
@@ -32,21 +32,39 @@ export async function POST(req: Request) {
     if (!token) {
       return Response.json({ ok: false, error: "LINE_CHANNEL_ACCESS_TOKEN が未設定です" }, { status: 500 });
     }
-    const res = await fetch("https://api.line.me/v2/bot/message/push", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ to: groupId, messages: [buildLineTextMessage(groupId, message)] }),
-    });
+    let quote = await findLineQuote(replyToMessageId, groupId);
+    const push = () =>
+      fetch("https://api.line.me/v2/bot/message/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          to: groupId,
+          messages: [{ ...buildLineTextMessage(groupId, message), ...(quote ? { quoteToken: quote.quoteToken } : {}) }],
+        }),
+      });
+    let res = await push();
+    // 引用で断られた (古い引用トークンなど) ときは、引用なしで送り直す
+    if (!res.ok && quote) {
+      quote = null;
+      res = await push();
+    }
     if (!res.ok) {
       return Response.json({ ok: false, error: "LINE 送信に失敗しました", body: await res.text() }, { status: 500 });
     }
 
     const saved = await prisma.message.create({
-      data: { channel: "LINE-Group", direction: "outbound", content: message, externalId: groupId },
+      data: {
+        channel: "LINE-Group",
+        direction: "outbound",
+        content: message,
+        externalId: groupId,
+        ...(await readPushSent(res)),
+        quotedLineMessageId: quote?.quotedLineMessageId ?? null,
+      },
     });
     // 他の担当者が自分の言語で読めるように訳しておく
     after(() => translateForAllStaff(saved.id));
-    return Response.json({ ok: true, channel: "LINE-Group", content: message, id: saved.id });
+    return Response.json({ ok: true, channel: "LINE-Group", content: message, id: saved.id, lineMessageId: saved.lineMessageId, quoteToken: saved.quoteToken });
   } catch (e) {
     const status = e instanceof AuthError ? e.status : 500;
     return Response.json({ ok: false, error: e instanceof Error ? e.message : "error" }, { status });

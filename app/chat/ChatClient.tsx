@@ -46,6 +46,11 @@ type Message = {
   sourceLang: string | null;
   /** 担当者の表示言語への訳 (同じ言語・未作成なら null) */
   translation: string | null;
+  /** LINE のメッセージID / 引用元の LINE メッセージID (引用して返信したとき) */
+  lineMessageId?: string | null;
+  quotedLineMessageId?: string | null;
+  /** LINE の引用トークンがあり、このメッセージを引用して返信できる */
+  canReply?: boolean;
 };
 type Template = { id: number; name: string; content: string };
 
@@ -173,6 +178,8 @@ export default function ChatClient({ conversations, initialMessages, initialLang
   const [lang, setLang] = useState<ChatLang>(initialLang);
   const [pinned, setPinned] = useState<Set<string>>(() => new Set(initialPinnedKeys));
   const [input, setInput] = useState("");
+  /** 引用して返信するメッセージ (LINE の「返信」と同じ) */
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [sending, setSending] = useState(false);
   const [panel, setPanel] = useState<"templates" | "shortcuts" | null>(null);
   const [search, setSearch] = useKeptState("search", "");
@@ -407,6 +414,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
     if (id !== selectedId) {
       setUnreadMarker(null);
       setDraft(null);
+      setReplyTo(null);
     }
     setSelectedId(id);
     setPanel(null);
@@ -507,12 +515,12 @@ export default function ChatClient({ conversations, initialMessages, initialLang
           ? await fetch("/api/line/send-partner", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ partnerId: selected.partnerId, message: input }),
+              body: JSON.stringify({ partnerId: selected.partnerId, message: input, replyToMessageId: replyTo?.id }),
             })
           : await fetch("/api/line/send-group", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ groupId: selected.lineGroupId, message: input }),
+              body: JSON.stringify({ groupId: selected.lineGroupId, message: input, replyToMessageId: replyTo?.id }),
             });
       const data = await res.json();
       if (data.ok) {
@@ -531,9 +539,13 @@ export default function ChatClient({ conversations, initialMessages, initialLang
             readAt: null,
             sourceLang: null,
             translation: null,
+            lineMessageId: data.lineMessageId ?? null,
+            quotedLineMessageId: replyTo?.lineMessageId ?? null,
+            canReply: !!data.quoteToken,
           },
         ]);
         setInput("");
+        setReplyTo(null);
         setDraft(null);
         setPanel(null);
       } else {
@@ -806,6 +818,7 @@ export default function ChatClient({ conversations, initialMessages, initialLang
             >
               {chat.length === 0 && <p className="mt-16 text-center text-sm text-white md:text-[#8A8F98]">メッセージはありません</p>}
               {chat.map((m, i) => {
+                const quoted = m.quotedLineMessageId ? chat.find((x) => x.lineMessageId === m.quotedLineMessageId) ?? null : null;
                 const prev = chat[i - 1];
                 const newDay = !prev || startOfDay(new Date(prev.sentAt)) !== startOfDay(new Date(m.sentAt));
                 const isUnreadStart = unreadMarker?.key === selectedId && unreadMarker.messageId === m.id;
@@ -820,8 +833,25 @@ export default function ChatClient({ conversations, initialMessages, initialLang
                     pending={translating.has(m.id)}
                     outbound={outbound}
                     tail={!continued}
+                    quote={
+                      m.quotedLineMessageId
+                        ? quoted
+                          ? { name: quoted.direction === "outbound" ? "自分" : quoted.senderName || displayName(selected), text: quoted.translation ?? quoted.content }
+                          : { name: "", text: "前のメッセージへの返信" }
+                        : null
+                    }
                   />
                 );
+                const replyButton = m.canReply ? (
+                  <button
+                    type="button"
+                    onClick={() => setReplyTo(m)}
+                    title="このメッセージを引用して返信"
+                    className="mb-0.5 shrink-0 rounded-full border border-[#D5D7DC] bg-white px-2 py-0.5 text-[11px] font-medium text-[#333] hover:bg-[#F2F3F5] md:opacity-0 md:group-hover:opacity-100"
+                  >
+                    返信
+                  </button>
+                ) : null;
                 return (
                   <Fragment key={m.id}>
                     {newDay && (
@@ -833,18 +863,20 @@ export default function ChatClient({ conversations, initialMessages, initialLang
                       <div className="my-3 rounded-full bg-black/20 py-0.5 text-center text-[12px] text-white md:bg-[#C9CDD3]">ここから未読メッセージ</div>
                     )}
                     {outbound ? (
-                      <div className={`${continued ? "mt-1" : "mt-3"} flex items-end justify-end gap-1.5`}>
+                      <div className={`group ${continued ? "mt-1" : "mt-3"} flex items-end justify-end gap-1.5`}>
+                        {replyButton}
                         <span className="mb-0.5 shrink-0 text-[10px] text-[#3B4A63] md:text-[11px] md:text-[#8A8F98]">{formatTime(m.sentAt)}</span>
                         {bubble}
                       </div>
                     ) : (
-                      <div className={`${continued ? "mt-1" : "mt-3"} flex items-start gap-2`}>
+                      <div className={`group ${continued ? "mt-1" : "mt-3"} flex items-start gap-2`}>
                         {continued ? <div className="w-9 shrink-0" /> : <Avatar name={sender} size={36} />}
                         <div className="min-w-0">
                           {!continued && <p className="mb-1 text-[12px] text-[#3B4A63] md:text-[13px] md:text-[#5D636C]">{sender}</p>}
                           <div className="flex items-end gap-1.5">
                             {bubble}
                             <span className="mb-0.5 shrink-0 text-[10px] text-[#3B4A63] md:text-[11px] md:text-[#8A8F98]">{formatTime(m.sentAt)}</span>
+                            {replyButton}
                           </div>
                         </div>
                       </div>
@@ -884,6 +916,21 @@ export default function ChatClient({ conversations, initialMessages, initialLang
                       <span className="truncate text-xs text-[#8A8F98]">{item.text}</span>
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/* 引用して返信するとき: どのメッセージへの返信か */}
+              {replyTo && (
+                <div className="flex items-start gap-2 border-b border-[#E5E6EA] bg-[#F7F8FA] px-3 py-2 text-[12px] leading-[1.5]">
+                  <div className="min-w-0 flex-1 border-l-[3px] border-[#06C755] pl-2">
+                    <p className="font-semibold text-[#111]">
+                      {replyTo.direction === "outbound" ? "自分" : replyTo.senderName || displayName(selected)} への返信
+                    </p>
+                    <p className="line-clamp-2 whitespace-pre-wrap break-words text-[#444]">{replyTo.translation ?? replyTo.content}</p>
+                  </div>
+                  <button onClick={() => setReplyTo(null)} title="返信をやめる" className="shrink-0 rounded-full px-1.5 text-[16px] leading-none text-[#555] hover:bg-[#E5E6EA]">
+                    ×
+                  </button>
                 </div>
               )}
 
@@ -1010,12 +1057,15 @@ function Bubble({
   pending,
   outbound,
   tail,
+  quote,
 }: {
   main: string;
   original: string | null;
   pending: boolean;
   outbound: boolean;
   tail: boolean;
+  /** 引用して返信したメッセージ (LINE と同じく、吹き出しの上に引用元を出す) */
+  quote?: { name: string; text: string } | null;
 }) {
   const color = outbound ? LINE_SENT : undefined;
   return (
@@ -1034,6 +1084,12 @@ function Bubble({
         >
           <path d="M0 0h10C7 2 4 6 0 12z" />
         </svg>
+      )}
+      {quote && (
+        <div className={`mb-1.5 border-l-[3px] pl-2 text-[12px] leading-[1.45] ${outbound ? "border-black/25 text-[#2F3B22]" : "border-black/20 text-[#4A4F57]"}`}>
+          {quote.name && <p className="font-semibold">{quote.name}</p>}
+          <p className="line-clamp-2 whitespace-pre-wrap break-words">{quote.text}</p>
+        </div>
       )}
       <p className="whitespace-pre-wrap break-words">{main}</p>
       {original && (

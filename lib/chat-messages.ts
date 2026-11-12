@@ -59,6 +59,10 @@ export async function loadChatMessages(lang: ChatLang, take: number, chatOnlyGro
     readAt: m.readAt?.toISOString() ?? null,
     sourceLang: m.sourceLang,
     translation: m.translations[0]?.text ?? null,
+    lineMessageId: m.lineMessageId,
+    quotedLineMessageId: m.quotedLineMessageId,
+    /** LINE の引用トークンがあれば、このメッセージを引用して返信できる */
+    canReply: !!m.quoteToken,
   }));
 }
 

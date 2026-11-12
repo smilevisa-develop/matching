@@ -88,6 +88,12 @@ export async function POST(req: Request) {
         event?.message?.type === "text" && typeof event.message.text === "string"
           ? event.message.text
           : null;
+      // 引用返信のための情報 (LINE のメッセージID・引用トークン・相手が引用したメッセージ)
+      const lineQuote = {
+        lineMessageId: typeof event?.message?.id === "string" ? event.message.id : null,
+        quoteToken: typeof event?.message?.quoteToken === "string" ? event.message.quoteToken : null,
+        quotedLineMessageId: typeof event?.message?.quotedMessageId === "string" ? event.message.quotedMessageId : null,
+      };
       const now = new Date();
 
       // ── グループ / 複数人チャットイベント ──
@@ -147,6 +153,7 @@ export async function POST(req: Request) {
               externalId: groupId, // group の場合は groupId を externalId として保存
               senderId,
               senderName,
+              ...lineQuote,
             },
           });
           // チャット画面に出るグループ (パートナー紐づけ済み / パートナーではない内定後グループなど) だけ、担当者の表示言語に訳しておく
@@ -190,6 +197,7 @@ export async function POST(req: Request) {
             direction: "inbound",
             content: messageText,
             externalId: lineUserId,
+            ...lineQuote,
           },
         });
         if (saved.partnerId) after(() => translateForAllStaff(saved.id));

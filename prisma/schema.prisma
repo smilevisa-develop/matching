@@ -501,8 +501,16 @@ model Message {
   readAt     DateTime?
   /// 本文の言語 (ja / vi / id / en など)。翻訳したときに AI が判定して入れる。未判定は null
   sourceLang String?
+  /// LINE のメッセージID (受信は webhook、送信は push の応答から)
+  lineMessageId       String?
+  /// LINE の引用トークン。これを付けて送ると、このメッセージを引用した返信になる
+  quoteToken          String?
+  /// 引用して返信したときの、引用元の LINE メッセージID
+  quotedLineMessageId String?
 
   translations MessageTranslation[]
+
+  @@index([lineMessageId])
 }
 
 /// チャット画面でトークを一覧の上に固定する (担当者ごと。LINE のピン留めと同じ)

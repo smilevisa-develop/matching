@@ -31,3 +31,29 @@ export function buildLineTextMessage(to: string, text: string, opts?: { mentionA
     },
   };
 }
+
+/**
+ * 引用して返信するとき (チャット画面の「返信」)。返信先のメッセージ (Message.id) から、
+ * 送るメッセージに付ける quoteToken と、保存する引用元の LINE メッセージID を引く。
+ * 宛先が違うトークのメッセージや、引用トークンが無い (古い・LINE 以外) メッセージなら引用しない。
+ * 仕様: https://developers.line.biz/en/docs/messaging-api/get-quote-tokens/
+ */
+export async function findLineQuote(replyToMessageId: unknown, to: string): Promise<{ quoteToken: string; quotedLineMessageId: string | null } | null> {
+  const id = Number(replyToMessageId);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  const { prisma } = await import("@/lib/prisma");
+  const m = await prisma.message.findUnique({ where: { id }, select: { quoteToken: true, lineMessageId: true, externalId: true } });
+  if (!m?.quoteToken || m.externalId !== to) return null;
+  return { quoteToken: m.quoteToken, quotedLineMessageId: m.lineMessageId };
+}
+
+/** push の応答から、送ったメッセージの LINE メッセージID と引用トークン (あとでこのメッセージを引用できるように) */
+export async function readPushSent(res: Response): Promise<{ lineMessageId: string | null; quoteToken: string | null }> {
+  try {
+    const json = (await res.json()) as { sentMessages?: { id?: string; quoteToken?: string }[] };
+    const first = json.sentMessages?.[0];
+    return { lineMessageId: first?.id ?? null, quoteToken: first?.quoteToken ?? null };
+  } catch {
+    return { lineMessageId: null, quoteToken: null };
+  }
+}

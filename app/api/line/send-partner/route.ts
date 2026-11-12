@@ -9,7 +9,7 @@
  */
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { buildLineTextMessage } from "@/lib/line-message";
+import { buildLineTextMessage, findLineQuote, readPushSent } from "@/lib/line-message";
 import {
   expandTemplate,
   dealToBroadcast,
@@ -37,7 +37,7 @@ async function loadDealSnapshot() {
 
 export async function POST(req: Request) {
   try {
-    const { partnerId, message } = await req.json();
+    const { partnerId, message, replyToMessageId } = await req.json();
     if (!partnerId || !message?.trim()) {
       return Response.json(
         { ok: false, error: "partnerId と message は必須です" },
@@ -86,17 +86,23 @@ export async function POST(req: Request) {
           { status: 500 }
         );
       }
-      const res = await fetch("https://api.line.me/v2/bot/message/push", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          to: lineSendTo,
-          messages: [buildLineTextMessage(lineSendTo, expandedMessage)],
-        }),
-      });
+      // チャット画面で「返信」を押したときは、そのメッセージを引用して送る
+      let quote = await findLineQuote(replyToMessageId, lineSendTo);
+      const push = () =>
+        fetch("https://api.line.me/v2/bot/message/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            to: lineSendTo,
+            messages: [{ ...buildLineTextMessage(lineSendTo, expandedMessage), ...(quote ? { quoteToken: quote.quoteToken } : {}) }],
+          }),
+        });
+      let res = await push();
+      // 引用で断られた (古い引用トークンなど) ときは、引用なしで送り直す
+      if (!res.ok && quote) {
+        quote = null;
+        res = await push();
+      }
       if (!res.ok) {
         return Response.json(
           { ok: false, error: "LINE 送信に失敗しました", body: await res.text() },
@@ -111,11 +117,13 @@ export async function POST(req: Request) {
           direction: "outbound",
           content: expandedMessage,
           externalId: lineSendTo,
+          ...(await readPushSent(res)),
+          quotedLineMessageId: quote?.quotedLineMessageId ?? null,
         },
       });
       // 他の担当者が自分の言語で読めるように訳しておく
       after(() => translateForAllStaff(saved.id));
-      return Response.json({ ok: true, channel, content: expandedMessage, id: saved.id });
+      return Response.json({ ok: true, channel, content: expandedMessage, id: saved.id, lineMessageId: saved.lineMessageId, quoteToken: saved.quoteToken });
     }
 
     if (partner.messengerPsid) {
