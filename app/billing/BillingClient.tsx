@@ -212,7 +212,14 @@ export default function BillingClient({
     setTab("ledger");
     setEditing(r.personId);
     setDraft(draftOf(r));
-    setTimeout(() => document.getElementById(`bill-${r.personId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    // タブを切り替えて行が描かれてからスクロールする
+    let tries = 0;
+    const go = () => {
+      const el = document.getElementById(`bill-${r.personId}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      else if (tries++ < 20) setTimeout(go, 50);
+    };
+    setTimeout(go, 50);
   };
   const missing = (r: LedgerRow) => (
     <button
