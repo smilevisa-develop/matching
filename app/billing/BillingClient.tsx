@@ -247,29 +247,23 @@ export default function BillingClient({
     }
   };
 
+  /** 段階の状況 (表示だけ。済にするのは詳細・編集のチェック、または請求書の PDF を上げたとき) */
   const cell = (row: LedgerRow, key: StepKey) => {
-    const s = row.steps[key];
-    if (!s) return <span className="block text-center text-sm text-gray-500">対象外</span>;
-    const tone = s.done
-      ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-      : s.overdue
-        ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
-        : "border-gray-300 bg-white text-[var(--color-text-dark)] hover:border-[var(--color-primary)] hover:bg-gray-50";
-    const main = s.done ? "✓ 済" : s.due ? `${md(s.due)} まで` : "日付なし";
-    const by = s.doneBy && !s.doneBy.startsWith("請求管理") ? ` ${s.doneBy}` : "";
-    const sub = s.done ? (s.doneAt ? `${md(s.doneAt)}${by}` : "完了") : s.overdue ? "期限切れ" : "予定";
-    return (
-      <button
-        type="button"
-        onClick={() => void toggle(row, key)}
-        disabled={busy === `${row.personId}-${key}`}
-        title={s.done ? "押すと取り消し" : "押すと済にする"}
-        className={`flex w-full min-w-0 flex-col items-start rounded-lg border px-3 py-2 text-left shadow-sm transition disabled:opacity-50 ${tone}`}
-      >
-        <span className="whitespace-nowrap text-sm font-bold tabular-nums">{main}</span>
-        <span className="mt-0.5 truncate text-xs font-medium opacity-90">{sub}</span>
-      </button>
-    );
+    const st = row.steps[key];
+    if (!st) return <span className="text-xs text-gray-500">対象外</span>;
+    if (st.done)
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
+          <Icon d={ICON.check} className="h-3.5 w-3.5" />済{st.doneAt ? ` ${md(st.doneAt)}` : ""}
+        </span>
+      );
+    if (st.overdue)
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700">
+          {md(st.due)} 期限切れ
+        </span>
+      );
+    return <span className="text-xs font-medium text-gray-800">{st.due ? `${md(st.due)} まで` : "日付なし"}</span>;
   };
 
   const field = (label: string, key: keyof Draft, type: "text" | "date" | "yen" = "text", wide = false) => (
@@ -536,6 +530,25 @@ export default function BillingClient({
         {uploadBox(r, "invoice", "企業への請求書", r.invoiceUrl)}
         {draft?.route === "自社" ? null : uploadBox(r, "partnerInvoice", "パートナーの請求書", r.partnerInvoiceUrl)}
         {r.hasPlacement ? null : field("入社日", "joinDate", "date")}
+        <div className="md:col-span-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-gray-300 bg-white px-4 py-3">
+          <span className="text-xs font-bold text-gray-800">済にする</span>
+          {COLUMNS.map((c) => {
+            const st = r.steps[c.key];
+            if (!st) return null;
+            return (
+              <label key={c.key} className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-[var(--color-text-dark)]">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-emerald-600"
+                  checked={st.done}
+                  disabled={busy === `${r.personId}-${c.key}`}
+                  onChange={() => void toggle(r, c.key)}
+                />
+                {c.label.replace(/^[①-④] /, "")}（{c.sub}）
+              </label>
+            );
+          })}
+        </div>
         {field("備考", "note", "text", true)}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
