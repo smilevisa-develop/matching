@@ -66,7 +66,7 @@ const CHECK_LABELS: Record<string, string> = {
   birthDate: "生年月日", gender: "性別", phoneNumber: "電話", email: "メール", postalCode: "郵便番号", address: "住所",
   spouseStatus: "配偶者", childrenCount: "子供", japaneseLevel: "日本語レベル", japaneseLevelDate: "日本語検定取得日",
   licenseName: "免許", licenseExpiryDate: "免許の有効期限", otherQualificationName: "その他の資格",
-  otherQualificationExpiryDate: "その他資格の有効期限", traineeExperience: "実習経験", highSchoolName: "高校名",
+  otherQualificationExpiryDate: "その他資格の取得日", traineeExperience: "実習経験", highSchoolName: "高校名",
   highSchoolStartDate: "高校入学", highSchoolEndDate: "高校卒業", universityName: "大学名", universityStartDate: "大学入学",
   universityEndDate: "大学卒業", workExperiences: "職歴", currentJob: "現在の仕事",
 };

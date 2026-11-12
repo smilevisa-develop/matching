@@ -75,7 +75,7 @@ export const PERSONNEL_COLUMN_SECTIONS: {
       { key: "licenseName", label: "免許" },
       { key: "licenseExpiryDate", label: "免許の有効期限" },
       { key: "otherQualificationName", label: "その他の資格" },
-      { key: "otherQualificationExpiryDate", label: "その他資格の有効期限" },
+      { key: "otherQualificationExpiryDate", label: "その他資格の取得日" },
       { key: "traineeExperience", label: "実習経験の有無" },
       { key: "highSchoolName", label: "高校名" },
       { key: "highSchoolPeriod", label: "高校期間" },

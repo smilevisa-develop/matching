@@ -87,7 +87,7 @@ const FIELD_LABELS: { key: FieldKey; label: string }[] = [
   { key: "licenseName", label: "免許" },
   { key: "licenseExpiryDate", label: "免許の有効期限" },
   { key: "otherQualificationName", label: "その他の資格" },
-  { key: "otherQualificationExpiryDate", label: "その他資格の有効期限" },
+  { key: "otherQualificationExpiryDate", label: "その他資格の取得日" },
   { key: "traineeExperience", label: "実習経験" },
   { key: "highSchoolName", label: "高校名" },
   { key: "highSchoolStartDate", label: "高校入学" },

@@ -322,7 +322,7 @@ export default function OnboardingForm({
             <Field label="その他の資格">
               <input className={INPUT} value={form.otherQualificationName} onChange={(event) => set("otherQualificationName", event.target.value)} />
             </Field>
-            <Field label="その他資格の有効期限">
+            <Field label="その他資格の取得日">
               <input className={INPUT} type="date" value={form.otherQualificationExpiryDate} onChange={(event) => set("otherQualificationExpiryDate", event.target.value)} />
             </Field>
             <Field label="実習経験の有無">

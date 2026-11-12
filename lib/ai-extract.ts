@@ -173,7 +173,8 @@ const EXTRACTION_SCHEMA_DESCRIPTION = `次のJSONスキーマに沿って、読�
 - otherQualificationName: その他の資格名 (技能検定、フォークリフト等)
   エイリアス: "資格", "Certificate"
 
-- otherQualificationExpiryDate: その他の資格の有効期限 YYYY-MM-DD
+- otherQualificationExpiryDate: その他の資格の取得日 (合格日・試験日・発行日) YYYY-MM-DD
+  ※ 項目名は ExpiryDate だが、入れるのは取得日。合格証などに書かれた「有効期限」「Valid until」の日付は絶対に入れない。取得日が書かれていなければ空にする
 
 - traineeExperience: 実習経験 / 過去の在留歴
   エイリアス: "技能実習経験", "Trainee experience", "在留歴"
