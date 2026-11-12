@@ -216,7 +216,7 @@ export default function BillingClient({
     let tries = 0;
     const go = () => {
       const el = document.getElementById(`bill-${r.personId}`);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (el) el.scrollIntoView({ block: "start" });
       else if (tries++ < 20) setTimeout(go, 50);
     };
     setTimeout(go, 50);
