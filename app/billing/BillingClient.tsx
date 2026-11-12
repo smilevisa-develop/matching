@@ -388,7 +388,7 @@ export default function BillingClient({
       ...list.map((r) => [r.displayId, r.personName, `入社 ${mdFull(r.joinAt)}`, yen(r.costAmount) || "金額未入力", `入金期日 ${mdFull(partnerDue)}`].join(" / ")),
     ].join("\n");
 
-  const TH = "border-b border-gray-300 bg-gray-100 px-3 py-2 text-left text-xs font-semibold text-gray-800";
+  const TH = "whitespace-nowrap border-b border-gray-300 bg-gray-100 px-3 py-2 text-left text-xs font-semibold text-gray-800";
   const TD = "border-b border-gray-200 px-3 py-2 text-sm text-[var(--color-text-dark)] tabular-nums";
   const copyButton = (key: string, text: string) => (
     <button
