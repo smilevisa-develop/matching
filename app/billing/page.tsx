@@ -118,6 +118,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       };
     };
     const noPartner = b?.route === "自社";
+    // 入社したときにパートナーが登録されていなくて、パートナーの段階のタスクが無い人は、
+    // 請求管理シートでパートナー経由になっていれば入社日から期限を出す
+    const hasPartner = !noPartner && !!(b?.partnerName || person.partner?.name);
+    const sch = p.joinAt ? billingSchedule(ymd(p.joinAt)) : null;
+    const fromSchedule = (key: LedgerStepKey, due: Date | null): LedgerStep => {
+      const done = stepDoneFromBilling(key, b) ?? false;
+      return { due: ymd(due), done, doneAt: "", doneBy: "", owner: "", overdue: !done && !!due && due < now, inMonth: inMonth(due) };
+    };
+    const partnerStep = (key: LedgerStepKey, keys: string[], due: Date | null) =>
+      noPartner ? null : (step(key, keys) ?? (hasPartner && sch ? fromSchedule(key, due) : null));
     pushRow(
       person,
       ymd(p.joinAt),
@@ -125,8 +135,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       {
         invoice: step("invoice", ["invoice"]),
         payment: step("payment", ["payment"]),
-        partnerInvoice: noPartner ? null : step("partnerInvoice", ["pa-request", "pa-invoice"]),
-        partnerPayment: noPartner ? null : step("partnerPayment", ["pa-payment"]),
+        partnerInvoice: partnerStep("partnerInvoice", ["pa-request", "pa-invoice"], sch?.paInvoice.date ?? null),
+        partnerPayment: partnerStep("partnerPayment", ["pa-payment"], sch?.paPayment.date ?? null),
       },
       p.id,
     );
