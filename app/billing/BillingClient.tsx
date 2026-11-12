@@ -630,8 +630,8 @@ export default function BillingClient({
                       {r.costAmount ? (
                         <span className="mt-0.5 text-xs text-gray-700">PA {yen(r.costAmount)}</span>
                       ) : r.route !== "自社" && r.partnerName ? (
-                        <button type="button" onClick={() => openEditor(r)} className="mt-1 rounded-md border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-100">
-                          PA の金額を入れる
+                        <button type="button" onClick={() => openEditor(r)} className="mt-1 whitespace-nowrap rounded-md border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-100">
+                          PA 金額を入れる
                         </button>
                       ) : null}
                     </>
