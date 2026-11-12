@@ -42,17 +42,17 @@ export type LedgerRow = {
   open: boolean;
 };
 
-const COLUMNS: { key: StepKey; label: string }[] = [
-  { key: "invoice", label: "① 請求" },
-  { key: "payment", label: "② 入金" },
-  { key: "partnerInvoice", label: "③ PA請求書" },
-  { key: "partnerPayment", label: "④ PA支払" },
+const COLUMNS: { key: StepKey; label: string; sub: string }[] = [
+  { key: "invoice", label: "① 請求", sub: "企業へ請求書を送る" },
+  { key: "payment", label: "② 入金", sub: "企業からの入金を確認" },
+  { key: "partnerInvoice", label: "③ PA請求書", sub: "パートナーから受け取る" },
+  { key: "partnerPayment", label: "④ PA支払", sub: "パートナーへ支払う" },
 ];
 
 const md = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "");
 const yen = (n: number | null) => (n == null ? "" : `¥${Math.round(n).toLocaleString("ja-JP")}`);
 const today = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-const GRID = "grid grid-cols-[minmax(0,1.6fr)_0.5fr_0.7fr_repeat(4,minmax(0,0.75fr))] items-center gap-2";
+const GRID = "grid min-w-[1080px] grid-cols-[minmax(0,2.2fr)_0.55fr_0.85fr_repeat(4,minmax(0,1fr))] divide-x divide-gray-200";
 const INPUT = "w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-[var(--color-text-dark)]";
 
 type Draft = {
@@ -210,23 +210,24 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
 
   const cell = (row: LedgerRow, key: StepKey) => {
     const s = row.steps[key];
-    if (!s) return <span className="text-sm text-gray-400">—</span>;
-    const color = s.done ? "text-emerald-600" : s.overdue ? "text-red-600" : "text-gray-400";
-    const title = s.done
-      ? `済${s.doneAt ? ` ${md(s.doneAt)}` : ""}${s.doneBy ? ` ${s.doneBy}` : ""} (押すと取り消し)`
-      : `${s.overdue ? "期限切れ" : "予定"} ${md(s.due)} (押すと済)`;
+    if (!s) return <span className="block text-center text-sm text-gray-500">対象外</span>;
+    const tone = s.done
+      ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+      : s.overdue
+        ? "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+        : "border-gray-300 bg-white text-[var(--color-text-dark)] hover:border-[var(--color-primary)] hover:bg-gray-50";
+    const main = s.done ? "✓ 済" : s.due ? `${md(s.due)} まで` : "日付なし";
+    const sub = s.done ? (s.doneAt ? `${md(s.doneAt)}${s.doneBy ? ` ${s.doneBy}` : ""}` : "押すと取り消し") : s.overdue ? "期限切れ ・ 押して済に" : "押して済にする";
     return (
       <button
         type="button"
         onClick={() => void toggle(row, key)}
         disabled={busy === `${row.personId}-${key}`}
-        title={title}
-        className={`flex items-center gap-1 rounded-md px-1 py-0.5 text-left text-sm tabular-nums hover:bg-gray-100 disabled:opacity-50 ${color}`}
+        title={s.done ? "押すと取り消し" : "押すと済にする"}
+        className={`flex w-full flex-col items-start rounded-lg border px-3 py-2 text-left shadow-sm transition disabled:opacity-50 ${tone}`}
       >
-        <span aria-hidden>●</span>
-        <span className={s.done ? "text-emerald-700" : s.overdue ? "font-semibold text-red-700" : "text-gray-800"}>
-          {s.done ? "済" : md(s.due) || "未"}
-        </span>
+        <span className="text-sm font-bold tabular-nums">{main}</span>
+        <span className="mt-0.5 text-xs font-medium opacity-90">{sub}</span>
       </button>
     );
   };
@@ -269,7 +270,7 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
   );
 
   const editor = (r: LedgerRow) => (
-    <div className="border-t border-gray-100 bg-gray-50 px-4 py-4">
+    <div className="border-b border-gray-300 bg-gray-50 px-6 py-5">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {field("単価 (税抜)", "unitPrice", "yen")}
         {field("請求金額 (税込)", "invoiceAmount", "yen")}
@@ -355,35 +356,61 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
         {chip("overdue", filter, setFilter, "期限切れだけ", "text-red-700")}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-        <div className={`${GRID} bg-gray-50 px-4 py-2 text-xs font-semibold text-gray-700`}>
-          <span>内定者 ・ 企業</span>
-          <span>入社</span>
-          <span className="text-right">請求金額</span>
+      <div className="overflow-x-auto rounded-2xl border border-gray-300 bg-white shadow-sm">
+        <div className={`${GRID} border-b border-gray-300 bg-gray-100 text-xs font-semibold text-gray-800`}>
+          <span className="px-4 py-3">内定者 ・ 企業</span>
+          <span className="px-4 py-3">入社日</span>
+          <span className="px-4 py-3 text-right">請求金額</span>
           {COLUMNS.map((c) => (
-            <span key={c.key}>{c.label}</span>
+            <span key={c.key} className="px-4 py-3">
+              <span className="block text-sm">{c.label}</span>
+              <span className="block font-medium text-gray-700">{c.sub}</span>
+            </span>
           ))}
         </div>
         {visible.length === 0 ? (
-          <p className="px-4 py-6 text-center text-sm text-gray-700">当てはまる請求はありません。</p>
+          <p className="px-4 py-8 text-center text-sm text-gray-700">当てはまる請求はありません。</p>
         ) : (
           visible.map((r) => (
             <Fragment key={r.personId}>
-              <div className={`${GRID} border-t border-gray-100 px-4 py-2.5 ${overdueOf(r) ? "bg-red-50/60" : ""}`}>
-                <button type="button" onClick={() => openEditor(r)} className="min-w-0 text-left hover:underline">
-                  <p className="truncate text-sm font-semibold text-[var(--color-text-dark)]">{r.personName}</p>
-                  <p className="truncate text-xs text-gray-700">
-                    {[r.companyName, `担当 ${r.owner || "未定"}`, r.route === "自社" ? "自社" : r.partnerName ? `PA ${r.partnerName}${r.costAmount ? ` ${yen(r.costAmount)}` : ""}` : ""]
-                      .filter(Boolean)
-                      .join(" ・ ")}
-                  </p>
-                </button>
-                <span className="text-sm tabular-nums text-gray-800">{md(r.joinAt) || "-"}</span>
-                <span className={`text-right text-sm tabular-nums ${r.invoiceAmount == null ? "text-red-700" : "text-[var(--color-text-dark)]"}`}>
-                  {r.invoiceAmount == null ? "未入力" : yen(r.invoiceAmount)}
-                </span>
+              <div className={`${GRID} border-b border-gray-200 ${editing === r.personId ? "bg-gray-50" : ""}`}>
+                <div className={`flex min-w-0 items-start gap-3 px-4 py-4 ${overdueOf(r) ? "border-l-4 border-l-red-500" : "border-l-4 border-l-transparent"}`}>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-bold text-[var(--color-text-dark)]">{r.personName}</p>
+                    <p className="mt-1 truncate text-sm text-gray-800">{r.companyName || "企業未設定"}</p>
+                    <p className="mt-0.5 truncate text-xs text-gray-700">
+                      {[`担当 ${r.owner || "未定"}`, r.route === "自社" ? "自社" : r.partnerName ? `PA ${r.partnerName}` : ""].filter(Boolean).join(" ・ ")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openEditor(r)}
+                    className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                      editing === r.personId
+                        ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
+                        : "border-[var(--color-primary)] bg-white text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
+                    }`}
+                  >
+                    {editing === r.personId ? "閉じる ▲" : "詳細・編集 ▼"}
+                  </button>
+                </div>
+                <div className="flex items-center px-4 py-4 text-sm tabular-nums text-gray-800">{md(r.joinAt) || "-"}</div>
+                <div className="flex flex-col items-end justify-center px-4 py-4 tabular-nums">
+                  {r.invoiceAmount == null ? (
+                    <button type="button" onClick={() => openEditor(r)} className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100">
+                      金額を入れる
+                    </button>
+                  ) : (
+                    <>
+                      <span className="text-base font-bold text-[var(--color-text-dark)]">{yen(r.invoiceAmount)}</span>
+                      {r.costAmount ? <span className="mt-0.5 text-xs text-gray-700">PA {yen(r.costAmount)}</span> : null}
+                    </>
+                  )}
+                </div>
                 {COLUMNS.map((c) => (
-                  <span key={c.key}>{cell(r, c.key)}</span>
+                  <div key={c.key} className="flex items-center px-3 py-4">
+                    {cell(r, c.key)}
+                  </div>
                 ))}
               </div>
               {editing === r.personId ? editor(r) : null}
@@ -391,7 +418,7 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
           ))
         )}
       </div>
-      <p className="text-xs text-gray-700">丸を押すと「済」、名前を押すと金額やリンクを直せます。金額・状況は請求管理シートの内容で、ここで直すとシートにも入ります。</p>
+      <p className="text-xs text-gray-700">各段階のボタンを押すと「済」、「詳細・編集」で金額やリンクを直せます。金額・状況は請求管理シートの内容で、ここで直すとシートにも入ります。</p>
     </div>
   );
 }
