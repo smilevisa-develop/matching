@@ -55,7 +55,13 @@ const COLUMNS: { key: StepKey; label: string; sub: string }[] = [
   { key: "partnerPayment", label: "④ PA支払", sub: "PAへ支払う" },
 ];
 
-const md = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "");
+/** 日付を「11/20」で出す。今年でなければ「2024/11/20」 */
+const md = (ymd: string) => {
+  if (!ymd) return "";
+  const thisYear = new Date(Date.now() + 9 * 3600_000).getUTCFullYear();
+  const md0 = `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
+  return Number(ymd.slice(0, 4)) === thisYear ? md0 : `${ymd.slice(0, 4)}/${md0}`;
+};
 const yen = (n: number | null) => (n == null ? "" : `¥${Math.round(n).toLocaleString("ja-JP")}`);
 const today = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const GRID = "grid min-w-[1080px] grid-cols-[minmax(0,2.2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_repeat(4,minmax(0,1fr))] divide-x divide-gray-200";
