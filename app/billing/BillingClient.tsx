@@ -152,7 +152,7 @@ export default function BillingClient({
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
 
-  const visible = rows.filter((r) => r.inMonth || overdueOf(r));
+  const visible = rows.filter((r) => r.inMonth || overdueOf(r) || r.personId === editing);
 
   const summary = useMemo(() => {
     const sum = (list: LedgerRow[], pick: (r: LedgerRow) => number | null) => list.reduce((t, r) => t + (pick(r) ?? 0), 0);
@@ -206,6 +206,24 @@ export default function BillingClient({
       setBusy(null);
     }
   };
+
+  /** 一覧の「未入力」から、進み具合のその人の詳細・編集へ */
+  const jumpToEditor = (r: LedgerRow) => {
+    setTab("ledger");
+    setEditing(r.personId);
+    setDraft(draftOf(r));
+    setTimeout(() => document.getElementById(`bill-${r.personId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
+  const missing = (r: LedgerRow) => (
+    <button
+      type="button"
+      onClick={() => jumpToEditor(r)}
+      className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-bold text-red-700 hover:bg-red-100"
+    >
+      <Icon d={ICON.edit} className="h-3 w-3" />
+      未入力
+    </button>
+  );
 
   const openEditor = (r: LedgerRow) => {
     if (editing === r.personId) {
@@ -495,7 +513,7 @@ export default function BillingClient({
                     <td className={TD}>{r.companyName || "-"}</td>
                     <td className={TD}>{mdFull(r.offerAt)}</td>
                     <td className={TD}>{mdFull(r.joinAt)}</td>
-                    <td className={`${TD} text-right ${r.invoiceAmount == null ? "text-red-700" : ""}`}>{yen(r.invoiceAmount) || "未入力"}</td>
+                    <td className={`${TD} text-right`}>{r.invoiceAmount == null ? missing(r) : yen(r.invoiceAmount)}</td>
                     <td className={TD}>{mdFull(r.dueDate || companyDue)}</td>
                   </tr>
                 ))
@@ -537,7 +555,7 @@ export default function BillingClient({
                       <td className={TD}>{r.displayId}</td>
                       <td className={`${TD} font-semibold`}>{r.personName}</td>
                       <td className={TD}>{mdFull(r.joinAt)}</td>
-                      <td className={`${TD} text-right ${r.costAmount == null ? "text-red-700" : ""}`}>{yen(r.costAmount) || "未入力"}</td>
+                      <td className={`${TD} text-right`}>{r.costAmount == null ? missing(r) : yen(r.costAmount)}</td>
                       <td className={TD}>{mdFull(partnerDue)}</td>
                     </tr>
                   ))}
@@ -586,7 +604,7 @@ export default function BillingClient({
                       <td className={`${TD} font-semibold`}>{r.personName}</td>
                       <td className={TD}>{mdFull(r.offerAt)}</td>
                       <td className={TD}>{mdFull(r.joinAt)}</td>
-                      <td className={`${TD} text-right ${r.costAmount == null ? "text-red-700" : ""}`}>{yen(r.costAmount) || "未入力"}</td>
+                      <td className={`${TD} text-right`}>{r.costAmount == null ? missing(r) : yen(r.costAmount)}</td>
                       <td className={`${TD} ${late ? "font-semibold text-red-700" : ""}`}>{mdFull(due)}</td>
                       <td className={TD}>
                         {/^https?:\/\//.test(r.partnerInvoiceUrl) ? (
@@ -740,7 +758,7 @@ export default function BillingClient({
         ) : (
           visible.map((r) => (
             <Fragment key={r.personId}>
-              <div className={`${GRID} border-b border-gray-200 ${editing === r.personId ? "bg-gray-50" : ""}`}>
+              <div id={`bill-${r.personId}`} className={`${GRID} scroll-mt-4 border-b border-gray-200 ${editing === r.personId ? "bg-gray-50" : ""}`}>
                 <div className={`flex min-w-0 items-start gap-3 px-4 py-4 ${overdueOf(r) ? "border-l-4 border-l-red-500" : "border-l-4 border-l-transparent"}`}>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-base font-bold text-[var(--color-text-dark)]">{r.personName}</p>

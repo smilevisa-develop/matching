@@ -396,8 +396,9 @@ export async function removeUntouchedBillingRow(personId: number): Promise<{ rem
 
 /**
  * 請求管理に行が無い内定者の行を足す (毎時の全件同期で取りこぼしを拾う)。
- * 対象: 内定者管理 (アプリ) の人 (内定辞退・キャンセルを除く) と、2026/11 以降にカンバンで内定にした人。
- * ID で管理する前の古い行 (A 列「IDなし」) と重ならないよう、古いカンバンの内定は見ない。
+ * 対象は 2026/11 以降にカンバンで内定にした人だけ。
+ * 内定者管理に居ても請求管理に載せていない人 (自社の請求でない人など) が居るので、内定者管理の人は見ない
+ * (2026/11/12: 0277 を足してしまった)。
  */
 export async function ensureMissingBillingRows(): Promise<{ added: number[]; error: string | null }> {
   const added: number[] = [];
@@ -410,26 +411,18 @@ export async function ensureMissingBillingRows(): Promise<{ added: number[]; err
 
     const { prisma } = await import("@/lib/prisma");
     const { readFilledStages, readStageDates } = await import("@/lib/deal-stages");
-    const ymd = (d: Date | null) => (d ? new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10) : null);
-    const [placements, cands] = await Promise.all([
-      prisma.personPlacement.findMany({
-        where: { personId: { not: null }, stage: { notIn: ["declined", "card_cancelled"] } },
-        select: { personId: true, offerAt: true },
-      }),
-      prisma.dealCandidate.findMany({
-        where: { stage: { in: ["内定済み", "内定承諾", "入社待ち", "入社済み"] } },
-        orderBy: { updatedAt: "desc" },
-        select: { personId: true, stageDates: true },
-      }),
-    ]);
+    const cands = await prisma.dealCandidate.findMany({
+      where: { stage: { in: ["内定済み", "内定承諾", "入社待ち", "入社済み"] } },
+      orderBy: { updatedAt: "desc" },
+      select: { personId: true, stageDates: true },
+    });
     const candByPerson = new Map<number, (typeof cands)[number]>();
     for (const c of cands) if (!candByPerson.has(c.personId)) candByPerson.set(c.personId, c);
 
     const targets = new Map<number, string | null>();
-    for (const p of placements) targets.set(p.personId!, ymd(p.offerAt));
     for (const [pid, c] of candByPerson) {
       const d = readStageDates(c.stageDates)["内定済み"];
-      if (d && d >= "2026-11-01" && !targets.has(pid)) targets.set(pid, d);
+      if (d && d >= "2026-11-01") targets.set(pid, d);
     }
     for (const [pid, offerAt] of targets) {
       if (have.has(String(pid))) continue;
