@@ -409,8 +409,10 @@ export default function BillingClient({
   const toPay = rows
     .filter((r) => r.route !== "自社" && r.steps.partnerInvoice?.done && !!r.steps.partnerPayment && !r.steps.partnerPayment.done)
     .sort((a, b) => (payDueOf(a) < payDueOf(b) ? -1 : 1));
-  // まとめ: どこかの段階が残っている人 (全部済むまで出す)
-  const openRows = rows.filter((r) => r.open || r.personId === editing).sort(byJoin);
+  // まとめ: どこかの段階が残っている人 (全部済むまで出す)。
+  // まだ入社していない (入社日が無く、どの段階も手を付けていない) 人は出さない
+  const started = (r: LedgerRow) => !!r.joinAt || stepsOf(r).some((st) => st.done);
+  const openRows = rows.filter((r) => (r.open && started(r)) || r.personId === editing).sort(byJoin);
 
   const copy = async (key: string, text: string) => {
     try {
