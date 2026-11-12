@@ -385,13 +385,23 @@ export default function BillingClient({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-[var(--color-text-dark)]">{label}</p>
           {isLink ? (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-primary)] underline">
-              <Icon d={ICON.open} className="h-3.5 w-3.5" /> Drive で開く
-            </a>
+            <p className="text-xs text-gray-700">押すと PDF が開きます</p>
           ) : (
             <p className="text-xs text-gray-700">{url ? "スプシにあり" : "上げると「済」になります"}</p>
           )}
         </div>
+        {isLink ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700"
+          >
+            <Icon d={ICON.file} />
+            開く
+            <Icon d={ICON.open} className="h-3.5 w-3.5" />
+          </a>
+        ) : null}
         <label
           className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold ${
             done ? "border border-gray-300 bg-white text-gray-800 hover:bg-gray-50" : "bg-[var(--color-primary)] text-white hover:opacity-90"

@@ -94,7 +94,14 @@ function toCell(kind: Kind, v: unknown): string {
   return String(v);
 }
 
-type Sheet = { header: string[]; rows: string[][]; colOf: (f: Field) => number; rowOf: Map<number, number> };
+type Sheet = {
+  header: string[];
+  rows: string[][];
+  colOf: (f: Field) => number;
+  rowOf: Map<number, number>;
+  /** リンクの列のセルにあるリンク先 (ファイルのチップ・リンクつきの文字)。キーは "行,列" (0 始まり) */
+  links: Map<string, string>;
+};
 
 async function readSheet(): Promise<{ sheet: Sheet; spreadsheetId: string; sheets: Awaited<ReturnType<typeof getSheetsClient>> } | null> {
   const spreadsheetId = resolveCompanyMasterSpreadsheetId();
@@ -117,7 +124,29 @@ async function readSheet(): Promise<{ sheet: Sheet; spreadsheetId: string; sheet
     const a = (r[0] ?? "").trim();
     if (i > 0 && /^\d+$/.test(a)) rowOf.set(Number(a), i);
   });
-  return { sheet: { header, rows, colOf, rowOf }, spreadsheetId, sheets };
+  // リンクの列は、表示の文字 (ファイル名や「URL」) ではなくリンク先を読む
+  const links = new Map<string, string>();
+  const linkCols = BILLING_FIELDS.filter((f) => f.kind === "url").map((f) => colOf(f)).filter((c) => c >= 0);
+  if (linkCols.length > 0) {
+    const grid = await sheets.spreadsheets.get({
+      spreadsheetId,
+      ranges: linkCols.map((c) => `${quote(TAB)}!${colLetter(c)}1:${colLetter(c)}2005`),
+      fields: "sheets.data(startColumn,rowData.values(hyperlink,chipRuns.chip.richLinkProperties.uri,textFormatRuns.format.link.uri))",
+    });
+    for (const d of grid.data.sheets?.[0]?.data ?? []) {
+      const col = d.startColumn ?? 0;
+      (d.rowData ?? []).forEach((rd, i) => {
+        const v = rd.values?.[0];
+        const uri =
+          v?.hyperlink ??
+          v?.chipRuns?.find((r) => r.chip?.richLinkProperties?.uri)?.chip?.richLinkProperties?.uri ??
+          v?.textFormatRuns?.find((r) => r.format?.link?.uri)?.format?.link?.uri ??
+          null;
+        if (uri) links.set(`${i},${col}`, uri);
+      });
+    }
+  }
+  return { sheet: { header, rows, colOf, rowOf, links }, spreadsheetId, sheets };
 }
 
 /** 請求管理の行 (A 列が候補者ID) の値でアプリの請求を上書きする (スプシが最新) */
@@ -140,7 +169,7 @@ export async function refreshBillingFromSheet(): Promise<{ updated: number; crea
     for (const f of BILLING_FIELDS) {
       const c = s.sheet.colOf(f);
       if (c < 0) continue;
-      data[f.key] = fromCell(f.kind, row[c] ?? "");
+      data[f.key] = f.kind === "url" ? (s.sheet.links.get(`${s.sheet.rowOf.get(id)},${c}`) ?? fromCell(f.kind, row[c] ?? "")) : fromCell(f.kind, row[c] ?? "");
     }
     const cur = byPerson.get(id);
     if (!cur) {
@@ -182,7 +211,8 @@ export async function writeBillingToSheet(personIds: number[]): Promise<{ change
         const value = b[f.key];
         // リンクは、アプリで URL を入れたときだけ書く (チップを文字で消さない)
         if (f.kind === "url" && !(typeof value === "string" && /^https?:\/\//.test(value))) continue;
-        const now = s.sheet.rows[r]?.[c] ?? "";
+        // リンクの列は、セルのリンク先と比べる (ファイルのチップは表示がファイル名なので)
+        const now = (f.kind === "url" ? s.sheet.links.get(`${r},${c}`) : undefined) ?? s.sheet.rows[r]?.[c] ?? "";
         if (comparable(f.kind, value) === comparable(f.kind, now)) continue;
         // アプリが空で、スプシに数字や日付として読めない文字 (「確認不能」など) があるときは消さない
         if ((value == null || value === "") && now.trim() && fromCell(f.kind, now) == null) continue;
