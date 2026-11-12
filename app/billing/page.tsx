@@ -4,6 +4,7 @@ import { requireCurrentAccount } from "@/lib/auth";
 import { currentMonthJst, isMonthKey, monthRangeJst, shiftMonth } from "@/lib/month-stats";
 import { billingSchedule } from "@/lib/billing-flow";
 import { refreshBillingFromSheet, stepDoneFromBilling, type LedgerStepKey } from "@/lib/billing-ledger";
+import { readStageDates } from "@/lib/deal-stages";
 import BillingClient, { type LedgerRow, type LedgerStep } from "./BillingClient";
 
 export const dynamic = "force-dynamic";
@@ -33,11 +34,11 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     onboarding: { select: { englishName: true } },
     partner: { select: { name: true } },
     billing: true,
-    placement: { select: { id: true, joinAt: true } },
+    placement: { select: { id: true, joinAt: true, offerAt: true } },
     dealCandidates: {
       orderBy: { updatedAt: "desc" as const },
       take: 1,
-      select: { deal: { select: { unitPrice: true, company: { select: { name: true } }, owner: { select: { name: true } } } } },
+      select: { stageDates: true, deal: { select: { unitPrice: true, company: { select: { name: true } }, owner: { select: { name: true } } } } },
     },
   };
   const [placements, billings] = await Promise.all([
@@ -53,6 +54,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     }),
     prisma.personBilling.findMany({ select: { person: { select: personSelect } } }),
   ]);
+  const partners = (await prisma.partner.findMany({ select: { name: true }, orderBy: { name: "asc" } })).map((x) => x.name);
 
   const ymd = (d: Date | null) => (d ? new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10) : "");
   const jstStart = (s: string) => new Date(`${s}T00:00:00+09:00`);
@@ -76,6 +78,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       companyName: deal?.company.name ?? companyFallback,
       owner: deal?.owner?.name ?? all.find((s) => s.owner)?.owner ?? "",
       joinAt: joinYmd,
+      displayId: String(person.id).padStart(4, "0"),
+      offerAt: readStageDates(person.dealCandidates[0]?.stageDates)["内定済み"] ?? ymd(person.placement?.offerAt ?? null),
       hasPlacement: placementId != null,
       placementId,
       route: b?.route ?? (person.partner ? "パートナー" : ""),
@@ -194,7 +198,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         </nav>
       </div>
       {refreshError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">請求管理シートを読み込めませんでした (前回の内容を出しています): {refreshError}</p> : null}
-      <BillingClient key={month} rows={rows} me={account.name ?? ""} />
+      <BillingClient key={month} rows={rows} me={account.name ?? ""} month={month} partners={partners} />
     </div>
   );
 }

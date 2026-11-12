@@ -22,6 +22,9 @@ export type LedgerRow = {
   /** 企業 (求人) の担当者。請求・入金確認・パートナーへの支払いまで全部この人 */
   owner: string;
   joinAt: string;
+  /** 候補者ID (4 桁。請求管理の ID) */
+  displayId: string;
+  offerAt: string;
   /** 内定者管理にカードがある人 (無い人は入社日をここで入れる) */
   hasPlacement: boolean;
   placementId: number | null;
@@ -92,7 +95,33 @@ const draftOf = (r: LedgerRow): Draft => ({
 const stepsOf = (r: LedgerRow) => Object.values(r.steps).filter((s): s is LedgerStep => !!s);
 const overdueOf = (r: LedgerRow) => stepsOf(r).some((s) => s.overdue);
 
-export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]; me: string }) {
+/** "YYYY-MM" の n か月後の月末 (YYYY-MM-DD) */
+function monthEnd(month: string, n: number) {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n + 1, 0));
+  return d.toISOString().slice(0, 10);
+}
+function prevMonth(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+}
+const mdFull = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "-");
+
+export default function BillingClient({
+  rows: initial,
+  me,
+  month,
+  partners,
+}: {
+  rows: LedgerRow[];
+  me: string;
+  /** 表示している月 (YYYY-MM)。この月に請求するのは前の月に入社した人 */
+  month: string;
+  /** 登録済みのパートナー (選ぶ欄の候補) */
+  partners: string[];
+}) {
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -251,6 +280,215 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
     </label>
   );
 
+  const upload = async (r: LedgerRow, kind: "invoice" | "partnerInvoice", file: File) => {
+    if (file.type !== "application/pdf") {
+      alert("PDF を選んでください");
+      return;
+    }
+    setUploading(`${r.personId}-${kind}`);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result));
+        fr.onerror = () => reject(fr.error);
+        fr.readAsDataURL(file);
+      });
+      const res = await fetch(`/api/billing/${r.personId}/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, fileName: file.name, dataUrl }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) throw new Error(json.error || String(res.status));
+      const t = today();
+      const key: StepKey = kind === "invoice" ? "invoice" : "partnerInvoice";
+      setRows((prev) =>
+        prev.map((x) => {
+          if (x.personId !== r.personId) return x;
+          const st = x.steps[key];
+          const steps = st ? { ...x.steps, [key]: { ...st, done: true, overdue: false, doneAt: t, doneBy: me } } : x.steps;
+          return {
+            ...x,
+            ...(kind === "invoice" ? { invoiceUrl: json.url, invoiceDate: x.invoiceDate || t } : { partnerInvoiceUrl: json.url }),
+            steps,
+            open: Object.values(steps).some((v) => v && !v.done),
+          };
+        }),
+      );
+      setDraft((d) => (d ? { ...d, ...(kind === "invoice" ? { invoiceUrl: json.url } : { partnerInvoiceUrl: json.url }) } : d));
+    } catch (e) {
+      alert(`アップロードに失敗しました: ${e instanceof Error ? e.message : ""}`);
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const uploadBox = (r: LedgerRow, kind: "invoice" | "partnerInvoice", label: string, url: string) => {
+    const busyNow = uploading === `${r.personId}-${kind}`;
+    const isLink = /^https?:\/\//.test(url);
+    return (
+      <div className="md:col-span-2">
+        <p className="text-xs font-medium text-gray-700">{label}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-gray-400 bg-white px-3 py-2">
+          <label className={`cursor-pointer rounded-lg border border-[var(--color-primary)] px-3 py-1.5 text-sm font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white ${busyNow ? "pointer-events-none opacity-50" : ""}`}>
+            {busyNow ? "保存中…" : url ? "PDF を差し替える" : "PDF をアップロード"}
+            <input
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) void upload(r, kind, f);
+              }}
+            />
+          </label>
+          {isLink ? (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="truncate text-sm text-[var(--color-primary)] underline">
+              Drive で開く
+            </a>
+          ) : url ? (
+            <span className="truncate text-sm text-gray-800">シートに「{url}」</span>
+          ) : (
+            <span className="text-sm text-gray-700">アップロードすると Drive に保存して「済」になります</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // この月に請求するのは、前の月に入社した人 (入社の翌月 1 日に請求 → その月末に入金 → 次の月末にパートナーへ支払い)
+  const joinedMonth = prevMonth(month);
+  const billed = rows.filter((r) => r.joinAt.startsWith(joinedMonth)).sort((a, b) => (a.joinAt < b.joinAt ? -1 : 1));
+  const companyDue = monthEnd(month, 0);
+  const partnerDue = monthEnd(month, 1);
+  const byPartner = new Map<string, LedgerRow[]>();
+  for (const r of billed) {
+    if (r.route === "自社" || !r.partnerName) continue;
+    byPartner.set(r.partnerName, [...(byPartner.get(r.partnerName) ?? []), r]);
+  }
+  const copy = async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
+    } catch {
+      alert("コピーできませんでした");
+    }
+  };
+  const companyText = [
+    `【${Number(month.slice(5))}月の請求】${Number(joinedMonth.slice(5))}月入社 ${billed.length}件`,
+    ...billed.map((r) =>
+      [r.displayId, r.personName, r.companyName || "-", `内定 ${mdFull(r.offerAt)}`, `入社 ${mdFull(r.joinAt)}`, yen(r.invoiceAmount) || "金額未入力", `入金期日 ${mdFull(r.dueDate || companyDue)}`].join(" / "),
+    ),
+  ].join("\n");
+  const partnerText = (name: string, list: LedgerRow[]) =>
+    [
+      `【${name}】${Number(joinedMonth.slice(5))}月入社 ${list.length}件`,
+      ...list.map((r) => [r.displayId, r.personName, `入社 ${mdFull(r.joinAt)}`, yen(r.costAmount) || "金額未入力", `入金期日 ${mdFull(partnerDue)}`].join(" / ")),
+    ].join("\n");
+
+  const TH = "border-b border-gray-300 bg-gray-100 px-3 py-2 text-left text-xs font-semibold text-gray-800";
+  const TD = "border-b border-gray-200 px-3 py-2 text-sm text-[var(--color-text-dark)] tabular-nums";
+  const copyButton = (key: string, text: string) => (
+    <button
+      type="button"
+      onClick={() => void copy(key, text)}
+      className="rounded-lg border border-[var(--color-primary)] px-3 py-1 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
+    >
+      {copied === key ? "コピーしました" : "Slack 用にコピー"}
+    </button>
+  );
+
+  const monthLists = (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="rounded-2xl border border-gray-300 bg-white">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <h2 className="font-bold text-[var(--color-text-dark)]">代表へ ・ 企業への請求</h2>
+          <span className="text-sm text-gray-700">
+            {Number(joinedMonth.slice(5))}月入社 {billed.length}件 ・ 入金期日 {mdFull(companyDue)}
+          </span>
+          <span className="ml-auto">{copyButton("company", companyText)}</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] border-t border-gray-300">
+            <thead>
+              <tr>
+                {["ID", "名前", "企業名", "内定日", "入社日", "手数料", "入金期日"].map((h) => (
+                  <th key={h} className={`${TH} ${h === "手数料" ? "text-right" : ""}`}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {billed.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className={`${TD} text-center`}>
+                    この月に請求する人はいません
+                  </td>
+                </tr>
+              ) : (
+                billed.map((r) => (
+                  <tr key={r.personId}>
+                    <td className={TD}>{r.displayId}</td>
+                    <td className={`${TD} font-semibold`}>{r.personName}</td>
+                    <td className={TD}>{r.companyName || "-"}</td>
+                    <td className={TD}>{mdFull(r.offerAt)}</td>
+                    <td className={TD}>{mdFull(r.joinAt)}</td>
+                    <td className={`${TD} text-right ${r.invoiceAmount == null ? "text-red-700" : ""}`}>{yen(r.invoiceAmount) || "未入力"}</td>
+                    <td className={TD}>{mdFull(r.dueDate || companyDue)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="rounded-2xl border border-gray-300 bg-white">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <h2 className="font-bold text-[var(--color-text-dark)]">パートナーへ</h2>
+          <span className="text-sm text-gray-700">入金期日 {mdFull(partnerDue)}</span>
+        </div>
+        {byPartner.size === 0 ? (
+          <p className="border-t border-gray-300 px-4 py-3 text-sm text-gray-700">この月に送るパートナーはいません</p>
+        ) : (
+          [...byPartner.entries()].map(([name, list]) => (
+            <div key={name} className="border-t border-gray-300">
+              <div className="flex items-center gap-2 px-4 py-2">
+                <p className="font-semibold text-[var(--color-text-dark)]">{name}</p>
+                <span className="text-xs text-gray-700">{list.length}件</span>
+                <span className="ml-auto">{copyButton(`pa-${name}`, partnerText(name, list))}</span>
+              </div>
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    {["ID", "名前", "入社日", "手数料", "入金期日"].map((h) => (
+                      <th key={h} className={`${TH} ${h === "手数料" ? "text-right" : ""}`}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((r) => (
+                    <tr key={r.personId}>
+                      <td className={TD}>{r.displayId}</td>
+                      <td className={`${TD} font-semibold`}>{r.personName}</td>
+                      <td className={TD}>{mdFull(r.joinAt)}</td>
+                      <td className={`${TD} text-right ${r.costAmount == null ? "text-red-700" : ""}`}>{yen(r.costAmount) || "未入力"}</td>
+                      <td className={TD}>{mdFull(partnerDue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+
   const editor = (r: LedgerRow) => (
     <div className="border-b border-gray-300 bg-gray-50 px-6 py-5">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -268,13 +506,26 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
         </label>
         {draft?.route === "自社" ? null : (
           <>
-            {field("パートナー", "partnerName")}
+            <label className="block text-xs font-medium text-gray-700">
+              パートナー (選ぶか入力)
+              <input
+                className={`${INPUT} mt-1`}
+                list="billing-partners"
+                value={draft?.partnerName ?? ""}
+                onChange={(e) => setDraft((d) => (d ? { ...d, partnerName: e.target.value } : d))}
+              />
+              <datalist id="billing-partners">
+                {partners.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+            </label>
             {field("パートナーへの支払い (仕入高)", "partnerCost", "yen")}
             {field("パートナーへの支払日", "partnerPaidDate", "date")}
           </>
         )}
-        {field("請求書のリンク", "invoiceUrl", "text", true)}
-        {draft?.route === "自社" ? null : field("パートナーの請求書のリンク", "partnerInvoiceUrl", "text", true)}
+        {uploadBox(r, "invoice", "企業への請求書 (PDF)", r.invoiceUrl)}
+        {draft?.route === "自社" ? null : uploadBox(r, "partnerInvoice", "パートナーの請求書 (PDF)", r.partnerInvoiceUrl)}
         {r.hasPlacement ? null : field("入社日", "joinDate", "date")}
         {field("備考", "note", "text", true)}
       </div>
@@ -301,6 +552,8 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
 
   return (
     <div className="space-y-3">
+      {monthLists}
+
       <div className="flex flex-wrap divide-x divide-gray-200 rounded-xl border border-gray-200 bg-white text-sm">
         {[
           { label: "この月の請求", value: `${summary.invoiceCount}件 ${yen(summary.invoiceTotal) || "¥0"}` },
