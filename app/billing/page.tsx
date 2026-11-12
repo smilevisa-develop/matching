@@ -68,8 +68,32 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const rows: LedgerRow[] = [];
   const seen = new Set<number>();
 
-  const pushRow = (person: P, joinYmd: string, companyFallback: string, steps: LedgerRow["steps"], placementId: number | null) => {
+  const todayYmd = ymd(now);
+  /**
+   * 請求管理シートに担当者が入れた予定日があれば、それを期限にする (シートが最新)。
+   *   ② 入金 = 入金期日 / ③ PA請求書・④ PA支払 = 支払日 (振込の予定日) / ① 請求 = 請求日
+   * ④ が支払済なら ③ も済 (請求書を受け取らずに払うことは無いので)。
+   */
+  const applySheet = (steps: LedgerRow["steps"], b: { invoiceDate: string | null; dueDate: string | null; partnerPaidDate: string | null; partnerPayStatus: string | null } | null) => {
+    if (!b) return steps;
+    const fix = (s: LedgerStep | null, due: string | null, forceDone = false): LedgerStep | null => {
+      if (!s) return s;
+      const done = s.done || forceDone;
+      const d = due && /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : s.due;
+      return { ...s, done, due: d, overdue: !done && !!d && d < todayYmd, inMonth: due ? d.startsWith(month) : s.inMonth };
+    };
+    const paid = b.partnerPayStatus === "支払済";
+    return {
+      invoice: fix(steps.invoice, b.invoiceDate),
+      payment: fix(steps.payment, b.dueDate),
+      partnerInvoice: fix(steps.partnerInvoice, b.partnerPaidDate, paid),
+      partnerPayment: fix(steps.partnerPayment, b.partnerPaidDate),
+    };
+  };
+
+  const pushRow = (person: P, joinYmd: string, companyFallback: string, rawSteps: LedgerRow["steps"], placementId: number | null) => {
     const b = person.billing;
+    const steps = applySheet(rawSteps, b);
     const deal = person.dealCandidates[0]?.deal;
     const all = Object.values(steps).filter((s): s is LedgerStep => !!s);
     rows.push({

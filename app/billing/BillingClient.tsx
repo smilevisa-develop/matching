@@ -433,16 +433,40 @@ export default function BillingClient({
       alert("コピーできませんでした");
     }
   };
+  // Slack に貼る文 (トゥイさんがこれまで送っていた形に合わせる。2026/11 の #請求管理_to_お客様 / #請求管理_to_パートナー)
+  const MENTION = "@kawamura cc @APRILIA CINDY MARANATHA ROHI";
+  const LINE = "ーーーーーーーーーーーー";
+  const num = (i: number) => (i < 20 ? String.fromCharCode(0x2460 + i) : `(${i + 1})`);
+  const slash = (ymd: string) => (ymd ? ymd.replace(/-/g, "/") : "-");
+  const man = (n: number | null) => (n == null ? "未入力" : n % 10000 === 0 ? `${n / 10000}万円` : n >= 10000 ? `${(n / 10000).toFixed(1)}万円` : `${n.toLocaleString("ja-JP")}円`);
   const companyText = [
-    `【請求書の発行のお願い】${Number(month.slice(5))}月請求 (${Number(joinedMonth.slice(5))}月入社) ${billed.length}件`,
-    ...billed.map((r) =>
-      [`請求書ID ${r.invoiceNo || "-"}`, r.personName, r.companyName || "-", `内定 ${mdFull(r.offerAt)}`, `入社 ${mdFull(r.joinAt)}`, yen(r.invoiceAmount) || "金額未入力", `入金期日 ${mdFull(r.dueDate || companyDue)}`].join(" / "),
-    ),
+    MENTION,
+    `${Number(month.slice(5))}月頭に請求する内容です。よろしくお願いいたします。`,
+    "",
+    ...billed.flatMap((r, i) => [
+      `${num(i)} 請求ID: ${r.invoiceNo || "-"}`,
+      r.personName,
+      `案件名：${r.companyName || "-"}`,
+      `内定日：${slash(r.offerAt)}`,
+      `入社日：${slash(r.joinAt)}`,
+      `手数料：${man(r.unitPrice)}`,
+      `入金期日：${slash(r.dueDate || companyDue)}`,
+      LINE,
+    ]),
   ].join("\n");
   const partnerText = (name: string, list: LedgerRow[]) =>
     [
-      `【${name} 様 請求書の発行のお願い】${Number(joinedMonth.slice(5))}月入社 ${list.length}件`,
-      ...list.map((r) => [r.displayId, r.personName, `入社 ${mdFull(r.joinAt)}`, yen(r.costAmount) || "金額未入力", `入金期日 ${mdFull(partnerDue)}`].join(" / ")),
+      `${name} 様`,
+      `${Number(joinedMonth.slice(5))}月入社の件です。請求書の発行をお願いいたします。`,
+      "",
+      ...list.flatMap((r, i) => [
+        `${num(i)} ID: ${r.displayId}`,
+        r.personName,
+        `入社日：${slash(r.joinAt)}`,
+        `手数料：${man(r.costAmount)}`,
+        `入金期日：${slash(partnerDue)}`,
+        LINE,
+      ]),
     ].join("\n");
 
   // ③ 川村さんへ振込の依頼: パートナーの請求書が届いていて、まだ振り込んでいない人 (月に関係なく。請求書が遅れて月がずれることがあるため)
@@ -450,21 +474,22 @@ export default function BillingClient({
   const toPay = rows
     .filter((r) => r.route !== "自社" && r.steps.partnerInvoice?.done && !r.steps.partnerPayment?.done)
     .sort((a, b) => (payDueOf(a) < payDueOf(b) ? -1 : 1));
+  const payMonths = [...new Set(toPay.map((r) => payDueOf(r).slice(5, 7)).filter(Boolean))];
   const payText = [
-    `【パートナーへの振込のお願い】${toPay.length}件`,
-    ...toPay.map((r) =>
-      [
-        `請求書ID ${r.invoiceNo || "-"}`,
-        r.companyName || "-",
-        r.partnerName || "-",
-        r.personName,
-        `内定 ${mdFull(r.offerAt)}`,
-        `入社 ${mdFull(r.joinAt)}`,
-        yen(r.costAmount) || "金額未入力",
-        `振込期日 ${mdFull(payDueOf(r))}`,
-        /^https?:\/\//.test(r.partnerInvoiceUrl) ? r.partnerInvoiceUrl : "請求書: シート参照",
-      ].join(" / "),
-    ),
+    MENTION,
+    `${payMonths.length === 1 ? `${Number(payMonths[0])}月の` : ""}振り込み件です。よろしくお願いいたします。`,
+    "",
+    ...toPay.flatMap((r, i) => [
+      `${num(i)}【請求ID ${r.invoiceNo || "-"}】 パートナー：${r.partnerName || "-"}`,
+      `案件名：${r.companyName || "-"}（${man(r.unitPrice)}）`,
+      `対象者：${r.personName}`,
+      `内定日：${slash(r.offerAt)}`,
+      `入社日：${slash(r.joinAt)}`,
+      `手数料：${man(r.costAmount)}`,
+      `振込期日：${slash(payDueOf(r))}`,
+      ...(/^https?:\/\//.test(r.partnerInvoiceUrl) ? [`請求書：${r.partnerInvoiceUrl}`] : []),
+      LINE,
+    ]),
   ].join("\n");
 
   const TH = "whitespace-nowrap border-b border-gray-300 bg-gray-100 px-3 py-2 text-left text-xs font-semibold text-gray-800";
@@ -520,7 +545,7 @@ export default function BillingClient({
                     <td className={TD}>{r.companyName || "-"}</td>
                     <td className={TD}>{mdFull(r.offerAt)}</td>
                     <td className={TD}>{mdFull(r.joinAt)}</td>
-                    <td className={`${TD} text-right`}>{r.invoiceAmount == null ? missing(r) : yen(r.invoiceAmount)}</td>
+                    <td className={`${TD} text-right`}>{r.unitPrice == null ? missing(r) : yen(r.unitPrice)}</td>
                     <td className={TD}>{mdFull(r.dueDate || companyDue)}</td>
                   </tr>
                 ))
