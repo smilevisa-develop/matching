@@ -1,9 +1,9 @@
 /**
  * 請求 (PersonBilling) と企業データベース「請求管理」タブのやり取り (2026/11 土田さん: 請求の管理をアプリで回す)。
  *
- * アプリが正で、スプシはバックアップ (ほかの同期と同じ)。
- *   - 取り込み: アプリにまだ請求が無い人だけ、請求管理の行 (A 列が候補者ID) から作る。一度作ったらスプシからは読まない
- *   - 書き出し: アプリの値とスプシの値が違うセルだけ上書きする (毎時 + 保存したとき)
+ * 請求管理タブ (スプシ) が最新 (2026/11/12 土田さん)。
+ *   - 読み込み: 請求管理ページを開いたときと毎時の同期で、スプシの値をアプリに上書きする (refreshBillingFromSheet)
+ *   - 書き込み: アプリで直した (保存した・丸を押した) ときだけ、その人の違うセルをスプシに書く (writeBillingToSheet)
  *   - 書かない列: 関数の列 (候補者名・企業・日付・状況・パートナーなど) と、リンクの列でアプリに URL が無いもの
  *     (スプシのリンクはファイルのチップで、文字だけ書くとリンクが消えるため)
  */
@@ -118,43 +118,57 @@ async function readSheet(): Promise<{ sheet: Sheet; spreadsheetId: string; sheet
   return { sheet: { header, rows, colOf, rowOf }, spreadsheetId, sheets };
 }
 
-/** アプリにまだ請求が無い人を、請求管理の行から作る (一度作ったらスプシからは読まない) */
-export async function importMissingBillingFromSheet(): Promise<{ created: number[] }> {
-  const created: number[] = [];
+/** 請求管理の行 (A 列が候補者ID) の値でアプリの請求を上書きする (スプシが最新) */
+export async function refreshBillingFromSheet(): Promise<{ updated: number; created: number }> {
+  let updated = 0;
+  let created = 0;
   const s = await readSheet();
-  if (!s) return { created };
+  if (!s) return { updated, created };
   const ids = [...s.sheet.rowOf.keys()];
   const [persons, existing] = await Promise.all([
     prisma.person.findMany({ where: { id: { in: ids } }, select: { id: true } }),
-    prisma.personBilling.findMany({ where: { personId: { in: ids } }, select: { personId: true } }),
+    prisma.personBilling.findMany({ where: { personId: { in: ids } } }),
   ]);
   const known = new Set(persons.map((p) => p.id));
-  const have = new Set(existing.map((b) => b.personId));
+  const byPerson = new Map(existing.map((b) => [b.personId, b]));
   for (const id of ids) {
-    if (!known.has(id) || have.has(id)) continue;
+    if (!known.has(id)) continue;
     const row = s.sheet.rows[s.sheet.rowOf.get(id)!];
     const data: Record<string, unknown> = {};
     for (const f of BILLING_FIELDS) {
       const c = s.sheet.colOf(f);
       if (c < 0) continue;
-      const v = fromCell(f.kind, row[c] ?? "");
-      if (v != null) data[f.key] = v;
+      data[f.key] = fromCell(f.kind, row[c] ?? "");
     }
-    await prisma.personBilling.create({ data: { personId: id, ...data, updatedBy: "請求管理シートから取り込み" } });
-    created.push(id);
+    const cur = byPerson.get(id);
+    if (!cur) {
+      await prisma.personBilling.create({ data: { personId: id, ...data, updatedBy: "請求管理シート" } });
+      created++;
+      continue;
+    }
+    // リンクは、スプシがチップ (文字だけ) でアプリに URL があるときはアプリの URL を残す
+    for (const f of BILLING_FIELDS) {
+      if (f.kind !== "url") continue;
+      const appUrl = cur[f.key];
+      if (typeof appUrl === "string" && /^https?:\/\//.test(appUrl) && !/^https?:\/\//.test(String(data[f.key] ?? ""))) data[f.key] = appUrl;
+    }
+    const changed = BILLING_FIELDS.some((f) => f.key in data && comparable(f.kind, cur[f.key]) !== comparable(f.kind, data[f.key]));
+    if (!changed) continue;
+    await prisma.personBilling.update({ where: { personId: id }, data: { ...data, updatedBy: "請求管理シート" } });
+    updated++;
   }
-  return { created };
+  return { updated, created };
 }
 
 export type BillingSheetChange = { personId: number; cell: string; header: string; from: string; to: string };
 
-/** アプリの請求を請求管理へ書く (違うセルだけ)。personIds を渡せばその人だけ */
-export async function writeBillingToSheet(personIds?: number[]): Promise<{ changes: BillingSheetChange[]; error: string | null }> {
+/** アプリで直した人の請求を請求管理へ書く (違うセルだけ) */
+export async function writeBillingToSheet(personIds: number[]): Promise<{ changes: BillingSheetChange[]; error: string | null }> {
   const changes: BillingSheetChange[] = [];
   try {
     const s = await readSheet();
     if (!s) return { changes, error: "企業データベースのスプシIDが未設定" };
-    const list = await prisma.personBilling.findMany({ where: personIds ? { personId: { in: personIds } } : {} });
+    const list = await prisma.personBilling.findMany({ where: { personId: { in: personIds } } });
     const data: { range: string; values: string[][] }[] = [];
     for (const b of list) {
       const r = s.sheet.rowOf.get(b.personId);

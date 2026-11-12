@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
 import { currentMonthJst, isMonthKey, monthRangeJst, shiftMonth } from "@/lib/month-stats";
 import { billingSchedule } from "@/lib/billing-flow";
-import { stepDoneFromBilling, type LedgerStepKey } from "@/lib/billing-ledger";
+import { refreshBillingFromSheet, stepDoneFromBilling, type LedgerStepKey } from "@/lib/billing-ledger";
 import BillingClient, { type LedgerRow, type LedgerStep } from "./BillingClient";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
  *  2026/11: 金額・パートナー・請求書リンクもアプリで持ち、企業データベースの請求管理へ書く)。
  *
  * 載る人 = 内定者管理で入社して請求のタスクがある人 + 請求 (アプリ) がある人 (人材紹介会社経由など内定者管理に居ない人も)。
+ * 金額・状況は企業データベースの請求管理 (スプシが最新) を開くたびに読み込む。
  * 段階の期限は入社日から決まる (入社の翌月 1 日に請求 → その月末に入金 → 翌月にパートナーへ依頼・受け取り → 翌月末に支払い)。
  */
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
@@ -23,6 +24,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const month = isMonthKey(requested) ? requested : thisMonth;
   const range = monthRangeJst(month);
   const now = new Date();
+  // 請求管理 (スプシ) が最新なので、開くたびに読み込んでから出す
+  const refreshError = await refreshBillingFromSheet().then(() => null, (e) => (e instanceof Error ? e.message : String(e)));
 
   const personSelect = {
     id: true,
@@ -180,6 +183,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           </Link>
         </nav>
       </div>
+      {refreshError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">請求管理シートを読み込めませんでした (前回の内容を出しています): {refreshError}</p> : null}
       <BillingClient key={month} rows={rows} me={account.name ?? ""} />
     </div>
   );

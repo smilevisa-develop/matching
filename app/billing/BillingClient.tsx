@@ -391,7 +391,7 @@ export default function BillingClient({ rows: initial, me }: { rows: LedgerRow[]
           ))
         )}
       </div>
-      <p className="text-xs text-gray-700">丸を押すと「済」、名前を押すと金額やリンクを直せます。保存した内容は企業データベースの請求管理に入ります。</p>
+      <p className="text-xs text-gray-700">丸を押すと「済」、名前を押すと金額やリンクを直せます。金額・状況は請求管理シートの内容で、ここで直すとシートにも入ります。</p>
     </div>
   );
 }
