@@ -307,3 +307,141 @@ export async function removeUntouchedOfferRow(personId: number): Promise<{ remov
   });
   return { removed: true };
 }
+
+/**
+ * 請求管理タブに候補者の行を用意する (2026/11 土田さん: 内定になったら請求管理にも行を足す)。
+ *
+ * 請求管理は A 列に候補者ID を入れれば、候補者名・企業・案件・担当者・状況・内定日〜入社日・パートナーは
+ * 関数で内定者管理などから引かれる。なので、内定者管理と同じく「N月」区切りの中に関数入りの空き行を写して ID を入れる。
+ * あわせて、アプリにある事前面談日・企業面接日 (飛ばして自動で埋めた日付は除く) を入れる。
+ * 単価・請求額・パートナーへの支払いなどの手入力の列は触らない。
+ */
+export async function ensureBillingRow(args: {
+  personId: number;
+  offerDate: string; // YYYY-MM-DD (月の区切りを決める)
+  stageDates?: Record<string, string>;
+  filled?: Set<string>;
+}): Promise<{ created: boolean; row?: number; reason?: string }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.offerDate)) return { created: false, reason: "内定日の形式が不正" };
+  const spreadsheetId = resolveCompanyMasterSpreadsheetId();
+  if (!spreadsheetId) return { created: false, reason: "企業データベースのスプシIDが未設定" };
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${quote(BILLING_SHEET_TAB)}!A1:AZ2000` });
+  const rows = (res.data.values ?? []).map((r) => r.map((c) => String(c ?? "")));
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) if (rows[i].some((c) => c.trim() === "内定日")) { headerRow = i; break; }
+  if (headerRow < 0) return { created: false, reason: "請求管理に見出し「内定日」が無い" };
+  const head = rows[headerRow].map((c) => c.trim());
+  const id = sheetPersonId(args.personId);
+  const idNum = String(args.personId);
+  if (rows.some((r, i) => i > headerRow && [id, idNum].includes((r[0] ?? "").trim()))) return { created: false, reason: "もう行がある" };
+
+  const row = await insertOfferRow({
+    sheets,
+    spreadsheetId,
+    tab: BILLING_SHEET_TAB,
+    rows,
+    headerRow,
+    dateCol: head.indexOf("内定日"),
+    date: args.offerDate,
+    id,
+  });
+
+  // 事前面談日・企業面接日 (実際に入力した日付だけ)
+  const data: { range: string; values: string[][] }[] = [];
+  for (const [stage, header] of [["事前面談済み", "事前面談日"], ["面接済み", "企業面接日"]] as const) {
+    const d = args.stageDates?.[stage];
+    const col = head.indexOf(header);
+    if (!d || col < 0 || args.filled?.has(stage)) continue;
+    data.push({ range: `${quote(BILLING_SHEET_TAB)}!${colLetter(col)}${row + 1}`, values: [[toSheetYmd(d)]] });
+  }
+  if (data.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({ spreadsheetId, requestBody: { valueInputOption: "USER_ENTERED", data } });
+  }
+  return { created: true, row: row + 1 };
+}
+
+/** 請求管理の、関数やアプリが入れる列 (これ以外に何か入っていれば手で触った行とみなす) */
+const BILLING_AUTO_HEADERS = new Set([
+  "ID", "請求書ID", "候補者名", "企業名", "企業ID", "案件名", "担当者", "状況",
+  "事前面談日", "企業面接日", "内定日", "内定承諾日", "申請日", "入社日", "パートナー", "次アクション(自動)",
+]);
+
+/** 間違えて内定にしたときに、システムが足した請求管理の行を消す (手で何か入れていれば残す) */
+export async function removeUntouchedBillingRow(personId: number): Promise<{ removed: boolean; reason?: string }> {
+  const spreadsheetId = resolveCompanyMasterSpreadsheetId();
+  if (!spreadsheetId) return { removed: false, reason: "企業データベースのスプシIDが未設定" };
+  const sheets = await getSheetsClient();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${quote(BILLING_SHEET_TAB)}!A1:AZ2000` });
+  const rows = (res.data.values ?? []).map((r) => r.map((c) => String(c ?? "")));
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) if (rows[i].some((c) => c.trim() === "内定日")) { headerRow = i; break; }
+  if (headerRow < 0) return { removed: false, reason: "見出しが無い" };
+  const head = rows[headerRow].map((c) => c.trim());
+  const id = sheetPersonId(personId);
+  const row = rows.findIndex((r, i) => i > headerRow && [id, String(personId)].includes((r[0] ?? "").trim()));
+  if (row < 0) return { removed: false, reason: "行が無い" };
+  const touched = rows[row].some((v, j) => v.trim() !== "" && !BILLING_AUTO_HEADERS.has(head[j] ?? ""));
+  if (touched) return { removed: false, reason: "手で入れた内容があるので残す" };
+  const a = (i: number) => (rows[i]?.[0] ?? "").trim();
+  const belowIsBoundary = !a(row + 1) || MONTH_HEADER_RE.test(a(row + 1));
+  const start = MONTH_HEADER_RE.test(a(row - 1)) && belowIsBoundary ? row - 1 : row;
+  const sheetId = await tabSheetId(sheets, spreadsheetId, BILLING_SHEET_TAB);
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: start, endIndex: row + 1 } } }] },
+  });
+  return { removed: true };
+}
+
+/**
+ * 請求管理に行が無い内定者の行を足す (毎時の全件同期で取りこぼしを拾う)。
+ * 対象: 内定者管理 (アプリ) の人 (内定辞退・キャンセルを除く) と、2026/11 以降にカンバンで内定にした人。
+ * ID で管理する前の古い行 (A 列「IDなし」) と重ならないよう、古いカンバンの内定は見ない。
+ */
+export async function ensureMissingBillingRows(): Promise<{ added: number[]; error: string | null }> {
+  const added: number[] = [];
+  try {
+    const spreadsheetId = resolveCompanyMasterSpreadsheetId();
+    if (!spreadsheetId) return { added, error: "企業データベースのスプシIDが未設定" };
+    const sheets = await getSheetsClient();
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${quote(BILLING_SHEET_TAB)}!A1:A2000` });
+    const have = new Set((res.data.values ?? []).map((r) => String(r?.[0] ?? "").trim().replace(/^0+/, "")));
+
+    const { prisma } = await import("@/lib/prisma");
+    const { readFilledStages, readStageDates } = await import("@/lib/deal-stages");
+    const ymd = (d: Date | null) => (d ? new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10) : null);
+    const [placements, cands] = await Promise.all([
+      prisma.personPlacement.findMany({
+        where: { personId: { not: null }, stage: { notIn: ["declined", "card_cancelled"] } },
+        select: { personId: true, offerAt: true },
+      }),
+      prisma.dealCandidate.findMany({
+        where: { stage: { in: ["内定済み", "内定承諾", "入社待ち", "入社済み"] } },
+        orderBy: { updatedAt: "desc" },
+        select: { personId: true, stageDates: true },
+      }),
+    ]);
+    const candByPerson = new Map<number, (typeof cands)[number]>();
+    for (const c of cands) if (!candByPerson.has(c.personId)) candByPerson.set(c.personId, c);
+
+    const targets = new Map<number, string | null>();
+    for (const p of placements) targets.set(p.personId!, ymd(p.offerAt));
+    for (const [pid, c] of candByPerson) {
+      const d = readStageDates(c.stageDates)["内定済み"];
+      if (d && d >= "2026-11-01" && !targets.has(pid)) targets.set(pid, d);
+    }
+    for (const [pid, offerAt] of targets) {
+      if (have.has(String(pid))) continue;
+      const c = candByPerson.get(pid);
+      const dates = readStageDates(c?.stageDates);
+      const offerDate = dates["内定済み"] ?? offerAt ?? new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      const r = await ensureBillingRow({ personId: pid, offerDate, stageDates: dates, filled: readFilledStages(c?.stageDates) });
+      if (r.created) added.push(pid);
+      if (added.length >= 20) break;
+    }
+    return { added, error: null };
+  } catch (e) {
+    return { added, error: e instanceof Error ? e.message : String(e) };
+  }
+}

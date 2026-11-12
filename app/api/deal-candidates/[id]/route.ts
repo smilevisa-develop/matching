@@ -3,13 +3,14 @@ import { AuthError, requireApiAccount } from "@/lib/auth";
 import { isOfferedStage, onDealCandidateStageChanged, removeUntouchedOnboardingCard } from "@/lib/onboarding-autolink";
 import { after } from "next/server";
 import {
+  readFilledStages,
   readStageDates,
   stageCounterDeltas,
   todayJst,
   type CounterField,
 } from "@/lib/deal-stages";
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
-import { removeUntouchedOfferRow, writeStageDateToSheet } from "@/lib/candidate-date-sheet";
+import { ensureBillingRow, removeUntouchedBillingRow, removeUntouchedOfferRow, writeStageDateToSheet } from "@/lib/candidate-date-sheet";
 import { requestKpiSheetSync } from "@/lib/kpi-sheet-sync";
 import { moveDealCandidateStage } from "@/lib/deal-candidate-move";
 
@@ -61,6 +62,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             if (!r.ok) console.info(`ステージ日付のスプシ反映をスキップ (${s}):`, r.skipped);
           } catch (e) {
             console.warn(`ステージ日付のスプシ反映に失敗 (${s}):`, e instanceof Error ? e.message : e);
+          }
+        }
+        // 内定になったら請求管理にも行を足す (関数で名前・企業・日付が入る。事前面談日・企業面接日はアプリから)
+        if (["内定済み", "内定承諾", "入社待ち", "入社済み"].includes(stage)) {
+          try {
+            const dates = readStageDates(candidate.stageDates);
+            const r = await ensureBillingRow({
+              personId: candidate.personId,
+              offerDate: dates["内定済み"] ?? date,
+              stageDates: dates,
+              filled: readFilledStages(candidate.stageDates),
+            });
+            if (!r.created) console.info(`請求管理の行は足さない (${candidate.personId}):`, r.reason);
+          } catch (e) {
+            console.warn("請求管理の行の追加に失敗:", e instanceof Error ? e.message : e);
           }
         }
       });
@@ -139,6 +155,8 @@ async function cleanUpMistakenOffer(personId: number) {
     }
     const row = await removeUntouchedOfferRow(personId);
     if (!row.removed) console.info(`内定者管理の行は残す (${personId}):`, row.reason);
+    const bill = await removeUntouchedBillingRow(personId);
+    if (!bill.removed) console.info(`請求管理の行は残す (${personId}):`, bill.reason);
   } catch (e) {
     console.warn("内定の後片付けに失敗:", e instanceof Error ? e.message : e);
   }
