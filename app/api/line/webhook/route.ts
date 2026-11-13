@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { reconcileMessagePersonLinks } from "@/lib/message-linking";
 import { translateForAllStaff } from "@/lib/chat-translate";
+import { forwardRecruitLineToSlack } from "@/lib/recruit-line-slack";
 
 export async function GET() {
   return new Response("LINE webhook endpoint is alive", { status: 200 });
@@ -79,6 +80,8 @@ export async function POST(req: Request) {
     const body = JSON.parse(text);
     const events = Array.isArray(body.events) ? body.events : [];
     console.log(`[line/webhook] received ${events.length} event(s)`);
+    // 1 対 1 のメッセージと友だち追加を Slack (#recruit-line) に転送する。返事を待たせないよう後で行う
+    after(() => forwardRecruitLineToSlack(events, token));
 
     for (const event of events) {
       const source = event?.source;
