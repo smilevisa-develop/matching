@@ -19,6 +19,9 @@ export type CandidateCard = {
   id: number;
   note: string | null;
   stage: string;
+  /** 企業が共有の推薦リストで書いた面接時間・メモ */
+  interviewTime?: string | null;
+  companyNote?: string | null;
   person: {
     id: number;
     name: string;
@@ -242,6 +245,11 @@ export default function CandidateKanban({
                 {candidate.note ? (
                   <p className="mt-1.5 text-[10px] text-gray-500 line-clamp-2">{candidate.note}</p>
                 ) : null}
+                {candidate.interviewTime || candidate.companyNote ? (
+                  <p className="mt-1.5 rounded bg-amber-50 px-1 py-0.5 text-[10px] font-medium text-amber-900 line-clamp-2">
+                    企業: {[candidate.interviewTime ? `面接 ${candidate.interviewTime}` : "", candidate.companyNote ?? ""].filter(Boolean).join(" / ")}
+                  </p>
+                ) : null}
               </Link>
             ))}
             {columnCandidates.length === 0 && !isTarget ? (
@@ -367,6 +375,18 @@ function HoverCard({ candidate, rect }: { candidate: CandidateCard; rect: DOMRec
           <div className="flex gap-2">
             <dt className="w-20 shrink-0 text-gray-500">備考</dt>
             <dd className="whitespace-pre-wrap text-gray-800">{candidate.note}</dd>
+          </div>
+        ) : null}
+        {candidate.interviewTime ? (
+          <div className="flex gap-2">
+            <dt className="w-20 shrink-0 text-gray-500">面接時間</dt>
+            <dd className="text-gray-800">{candidate.interviewTime}（企業が入力）</dd>
+          </div>
+        ) : null}
+        {candidate.companyNote ? (
+          <div className="flex gap-2">
+            <dt className="w-20 shrink-0 text-gray-500">企業メモ</dt>
+            <dd className="whitespace-pre-wrap text-gray-800">{candidate.companyNote}</dd>
           </div>
         ) : null}
       </dl>

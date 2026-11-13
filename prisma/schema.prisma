@@ -1068,6 +1068,10 @@ model DealCandidate {
   /// カンバンで動かしたときに入力した日付。進捗管理の月別集計とスプシ反映に使う。
   /// 例: { "接続済み": "2026-10-01", "推薦済み": "2026-10-05" }
   stageDates Json?
+  /// 企業が共有の推薦リスト (/list/{token}) で書いた面接時間とメモ (2026/11)
+  interviewTime    String?
+  companyNote      String?
+  companyEditedAt  DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

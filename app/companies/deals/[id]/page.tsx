@@ -127,6 +127,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
             deal={{
               id: deal.id,
               title: deal.title,
+              shareToken: deal.shareToken,
               field: deal.field,
               company: { ...deal.company, contacts: readCompanyContacts(deal.company.contacts) },
               owner: deal.owner,
@@ -146,6 +147,8 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
                 id: candidate.id,
                 note: candidate.note,
                 stage: candidate.stage,
+                interviewTime: candidate.interviewTime,
+                companyNote: candidate.companyNote,
                 person: {
                   id: candidate.person.id,
                   name: candidate.person.name,

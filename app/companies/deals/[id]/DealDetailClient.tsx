@@ -20,6 +20,8 @@ const STATUS_OPTIONS = DEAL_STATUSES;
 type DealDetail = {
   id: number;
   title: string;
+  /** 企業向けの推薦リストの URL (/list/{shareToken})。共有していなければ null */
+  shareToken: string | null;
   field: string | null;
   company: {
     id: number;
@@ -344,6 +346,7 @@ export default function DealDetailClient({
             ) : null}
           </div>
           <div className="flex gap-2">
+            {!editing ? <ShareListButton dealId={currentDeal.id} initialToken={currentDeal.shareToken} /> : null}
             {!editing ? (
               <button
                 type="button"
@@ -765,3 +768,78 @@ function CounterCell({
   );
 }
 
+
+/** 企業向けの推薦リストの共有 URL (企業はログインなしで見て、進捗・面接時間・備考を書ける) */
+function ShareListButton({ dealId, initialToken }: { dealId: number; initialToken: string | null }) {
+  const [token, setToken] = useState(initialToken);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const url = token && typeof window !== "undefined" ? `${window.location.origin}/list/${token}` : "";
+  const call = async (method: "POST" | "DELETE") => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/deals/${dealId}/share`, { method });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) throw new Error(json.error || String(res.status));
+      setToken(method === "POST" ? json.token : null);
+    } catch (e) {
+      alert(`できませんでした: ${e instanceof Error ? e.message : ""}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="relative self-start">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-lg border border-[var(--color-primary)] bg-white px-4 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+      >
+        企業に共有{token ? "中" : ""}
+      </button>
+      {open ? (
+        <div className="absolute right-0 z-40 mt-2 w-[360px] rounded-xl border border-gray-200 bg-white p-4 text-sm shadow-xl">
+          <p className="font-bold text-[var(--color-text-dark)]">推薦リストの共有 URL</p>
+          <p className="mt-1 text-xs font-medium text-gray-700">企業はログインなしで開けます。進捗・面接時間・備考を企業が書くと、このカンバンに反映されます。個人情報が載るので、渡す相手に注意してください。</p>
+          {token ? (
+            <>
+              <input readOnly value={url} onFocus={(e) => e.target.select()} className="mt-3 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-900" />
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(url).then(() => {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1500);
+                    });
+                  }}
+                  className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-bold text-white"
+                >
+                  {copied ? "コピーしました" : "URL をコピー"}
+                </button>
+                <a href={url} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-800">
+                  開く
+                </a>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    if (confirm("共有をやめますか？ 企業はこの URL を開けなくなります")) void call("DELETE");
+                  }}
+                  className="ml-auto text-xs font-bold text-red-700 disabled:opacity-50"
+                >
+                  共有をやめる
+                </button>
+              </div>
+            </>
+          ) : (
+            <button type="button" disabled={busy} onClick={() => void call("POST")} className="mt-3 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">
+              {busy ? "作成中…" : "共有 URL を作る"}
+            </button>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
