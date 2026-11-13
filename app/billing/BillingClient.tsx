@@ -398,11 +398,16 @@ export default function BillingClient({
 
   const uploadBox = (r: LedgerRow, kind: "invoice" | "partnerInvoice", label: string, url: string) => (
     <div className="md:col-span-2 flex flex-col gap-2 rounded-xl border border-gray-300 bg-white p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-bold text-[var(--color-text-dark)]">{label}</p>
-        {url ? docLink(url, "開く") : null}
-      </div>
-      {uploadButton(r, kind)}
+      <p className="text-sm font-bold text-[var(--color-text-dark)]">{label}</p>
+      {/* 上げてあればリンクと差し替えだけ */}
+      {url ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {docLink(url, "開く")}
+          {replaceButton(r, kind)}
+        </div>
+      ) : (
+        uploadButton(r, kind)
+      )}
     </div>
   );
 
@@ -612,6 +617,9 @@ export default function BillingClient({
   );
 
   type Mode = "all" | Sub;
+  /** 請求書を上げるタブ (請求・PA請求書) は、請求書のリンクと上げる欄を 1 列にまとめる */
+  const GRID_UP = "grid min-w-[900px] grid-cols-[minmax(0,2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_minmax(0,0.9fr)_minmax(0,1.8fr)] divide-x divide-gray-200";
+  const isUpMode = (m: Mode) => m === "invoice" || m === "paInvoice";
   const GRID1 = "grid min-w-[960px] grid-cols-[minmax(0,2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.5fr)] divide-x divide-gray-200";
   const MODE: Record<Sub, { step: StepKey; label: string; sub: string }> = {
     invoice: { step: "invoice", label: "請求", sub: "企業へ請求書を送る" },
@@ -663,6 +671,43 @@ export default function BillingClient({
       </label>
     );
   };
+  /** 上げてある請求書の差し替え (ボタンにもドロップできる) */
+  const replaceButton = (r: LedgerRow, kind: "invoice" | "partnerInvoice") => {
+    const key = `${r.personId}-${kind}`;
+    const busyNow = uploading === key;
+    return (
+      <label
+        {...dropProps(r, kind)}
+        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors ${
+          dropOver === key ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10" : "border-gray-400 bg-white text-gray-800 hover:border-[var(--color-primary)]"
+        } ${busyNow ? "pointer-events-none opacity-50" : ""}`}
+      >
+        <Icon d={ICON.cloud} className="h-3.5 w-3.5 text-[var(--color-primary)]" />
+        {busyNow ? "アップロード中…" : "差し替え"}
+        <input
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) void upload(r, kind, f);
+          }}
+        />
+      </label>
+    );
+  };
+  /** 請求書の欄: 上げてあればリンクと差し替え、無ければ上げる欄 */
+  const docCell = (r: LedgerRow, kind: "invoice" | "partnerInvoice") => {
+    const url = kind === "invoice" ? r.invoiceUrl : r.partnerInvoiceUrl;
+    if (!url) return uploadButton(r, kind);
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        {docLink(url, "請求書")}
+        {replaceButton(r, kind)}
+      </div>
+    );
+  };
   /** その人の請求書を置く Drive フォルダ (入社の翌月。まだ無ければ請求書フォルダ) */
   const folderOf = (r: LedgerRow) => {
     const j = r.joinAt;
@@ -712,7 +757,7 @@ export default function BillingClient({
 
   /** 台帳。まとめは 4 つの段階すべて、ほかのタブはその作業の状況とやることだけ */
   const ledger = (list: LedgerRow[], empty: string, mode: Mode) => {
-    const grid = mode === "all" ? GRID : GRID1;
+    const grid = mode === "all" ? GRID : isUpMode(mode) ? GRID_UP : GRID1;
     return (
       <div className="rounded-2xl border border-gray-300 bg-white shadow-sm">
         <div className={`${grid} sticky z-10 rounded-t-2xl border-b border-gray-300 bg-gray-100 text-xs font-semibold text-gray-800`} style={{ top: stickyH }}>
@@ -739,10 +784,13 @@ export default function BillingClient({
               </span>
               <span className="px-4 py-3">
                 <span className="block text-sm">{mode === "invoice" || mode === "payment" ? "企業への請求書" : "PA の請求書"}</span>
+                {isUpMode(mode) ? <span className="block font-medium text-gray-700">上げると済</span> : null}
               </span>
-              <span className="px-4 py-3">
-                <span className="block text-sm">やること</span>
-              </span>
+              {isUpMode(mode) ? null : (
+                <span className="px-4 py-3">
+                  <span className="block text-sm">やること</span>
+                </span>
+              )}
             </>
           )}
         </div>
@@ -827,10 +875,16 @@ export default function BillingClient({
                 ) : (
                   <>
                     <div className="flex items-center px-3 py-4">{cell(r, MODE[mode].step)}</div>
-                    <div className="flex items-center px-3 py-4">
-                      {mode === "invoice" || mode === "payment" ? docLink(r.invoiceUrl, "請求書") : docLink(r.partnerInvoiceUrl, "請求書")}
-                    </div>
-                    <div className="flex items-center px-3 py-4">{action(r, mode)}</div>
+                    {isUpMode(mode) ? (
+                      <div className="flex items-center px-3 py-4">{docCell(r, mode === "invoice" ? "invoice" : "partnerInvoice")}</div>
+                    ) : (
+                      <>
+                        <div className="flex items-center px-3 py-4">
+                          {mode === "payment" ? docLink(r.invoiceUrl, "請求書") : docLink(r.partnerInvoiceUrl, "請求書")}
+                        </div>
+                        <div className="flex items-center px-3 py-4">{action(r, mode)}</div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
