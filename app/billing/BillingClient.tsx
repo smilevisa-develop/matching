@@ -64,7 +64,7 @@ const md = (ymd: string) => {
 };
 const yen = (n: number | null) => (n == null ? "" : `¥${Math.round(n).toLocaleString("ja-JP")}`);
 const today = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-const GRID = "grid min-w-[1080px] grid-cols-[minmax(0,2.2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_repeat(4,minmax(0,1fr))] divide-x divide-gray-200";
+const GRID = "grid min-w-[1200px] grid-cols-[minmax(0,2.2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_repeat(4,minmax(0,1fr))_minmax(0,1.1fr)] divide-x divide-gray-200";
 const INPUT = "w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-[var(--color-text-dark)]";
 
 type Draft = {
@@ -125,6 +125,7 @@ const ICON = {
   list: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
   edit: "M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4",
   close: "M6 15l6-6 6 6",
+  cloud: "M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.75 4.75 0 0 1-.5 9.5M12 12v8M9 15l3-3 3 3",
 };
 
 /** "YYYY-MM" の n か月後の月末 (YYYY-MM-DD) */
@@ -389,62 +390,15 @@ export default function BillingClient({
     };
   };
 
-  const uploadBox = (r: LedgerRow, kind: "invoice" | "partnerInvoice", label: string, url: string) => {
-    const busyNow = uploading === `${r.personId}-${kind}`;
-    const isLink = /^https?:\/\//.test(url);
-    const done = !!url;
-    const over = dropOver === `${r.personId}-${kind}`;
-    return (
-      <div
-        {...dropProps(r, kind)}
-        className={`md:col-span-2 flex items-center gap-3 rounded-xl border-2 px-4 py-3 ${
-          over ? "border-solid border-[var(--color-primary)] bg-[var(--color-primary)]/10" : done ? "border-emerald-300 bg-emerald-50" : "border-dashed border-[var(--color-primary)] bg-white"
-        }`}
-      >
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${done ? "bg-emerald-600 text-white" : "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"}`}>
-          <Icon d={done ? ICON.check : ICON.file} className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-[var(--color-text-dark)]">{label}</p>
-          {isLink ? (
-            <p className="text-xs text-gray-700">押すと PDF が開きます</p>
-          ) : (
-            <p className="text-xs text-gray-700">{url ? "スプシにあり" : "ここに PDF を落とすか、ボタンで選ぶ。上げると「済」"}</p>
-          )}
-        </div>
-        {isLink ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700"
-          >
-            <Icon d={ICON.file} />
-            開く
-            <Icon d={ICON.open} className="h-3.5 w-3.5" />
-          </a>
-        ) : null}
-        <label
-          className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold ${
-            done ? "border border-gray-300 bg-white text-gray-800 hover:bg-gray-50" : "bg-[var(--color-primary)] text-white hover:opacity-90"
-          } ${busyNow ? "pointer-events-none opacity-50" : ""}`}
-        >
-          <Icon d={ICON.upload} />
-          {busyNow ? "保存中…" : done ? "差し替え" : "PDF を上げる"}
-          <input
-            type="file"
-            accept="application/pdf"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) void upload(r, kind, f);
-            }}
-          />
-        </label>
+  const uploadBox = (r: LedgerRow, kind: "invoice" | "partnerInvoice", label: string, url: string) => (
+    <div className="md:col-span-2 flex flex-col gap-2 rounded-xl border border-gray-300 bg-white p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-bold text-[var(--color-text-dark)]">{label}</p>
+        {url ? docLink(url, "開く") : null}
       </div>
-    );
-  };
+      {uploadButton(r, kind)}
+    </div>
+  );
 
   // タブごとの一覧 (実際の流れの順。それぞれ、その作業が済んだら一覧から消える)
   //   企業: 請求書の依頼 (① 期限がこの月の末までで未発行) → 入金確認 (① 済で ② 未)
@@ -621,7 +575,7 @@ export default function BillingClient({
   );
 
   type Mode = "all" | Sub;
-  const GRID1 = "grid min-w-[960px] grid-cols-[minmax(0,2.2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_minmax(0,0.9fr)_minmax(0,1.5fr)] divide-x divide-gray-200";
+  const GRID1 = "grid min-w-[1080px] grid-cols-[minmax(0,2.2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.5fr)] divide-x divide-gray-200";
   const MODE: Record<Sub, { step: StepKey; label: string; sub: string }> = {
     invoice: { step: "invoice", label: "請求", sub: "企業へ請求書を送る" },
     payment: { step: "payment", label: "入金", sub: "企業からの入金" },
@@ -637,34 +591,59 @@ export default function BillingClient({
     </label>
   );
   /** PDF を上げるボタン (上げると済) */
-  const uploadButton = (r: LedgerRow, kind: "invoice" | "partnerInvoice") => (
-    <div
-      {...dropProps(r, kind)}
-      className={`inline-flex flex-col items-start gap-1 rounded-xl border-2 border-dashed p-1.5 ${
-        dropOver === `${r.personId}-${kind}` ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10" : "border-gray-300"
-      }`}
-    >
-    <label
-      className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-bold text-white hover:opacity-90 ${
-        uploading === `${r.personId}-${kind}` ? "pointer-events-none opacity-50" : ""
-      }`}
-    >
-      <Icon d={ICON.upload} />
-      {uploading === `${r.personId}-${kind}` ? "保存中…" : "PDF を上げる"}
-      <input
-        type="file"
-        accept="application/pdf"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (f) void upload(r, kind, f);
-        }}
-      />
-    </label>
-      <span className="px-1 text-xs font-medium text-gray-700">ここに落としても上がります</span>
-    </div>
-  );
+  const uploadButton = (r: LedgerRow, kind: "invoice" | "partnerInvoice") => {
+    const key = `${r.personId}-${kind}`;
+    const busyNow = uploading === key;
+    return (
+      <label
+        {...dropProps(r, kind)}
+        className={`flex w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-3 py-3 text-center transition-colors ${
+          dropOver === key ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10" : "border-gray-400 bg-gray-50 hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"
+        } ${busyNow ? "pointer-events-none opacity-50" : ""}`}
+      >
+        <Icon d={ICON.cloud} className="h-6 w-6 text-[var(--color-primary)]" />
+        <span className="text-sm text-gray-800">
+          {busyNow ? (
+            "アップロード中…"
+          ) : (
+            <>
+              <span className="font-bold text-[var(--color-primary)] underline">ファイルを選択</span>
+              <span className="text-gray-700"> またはドロップ</span>
+            </>
+          )}
+        </span>
+        <span className="text-xs text-gray-600">PDF</span>
+        <input
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) void upload(r, kind, f);
+          }}
+        />
+      </label>
+    );
+  };
+  /** 請求書のリンク (押すと Drive の PDF が開く) */
+  const docLink = (url: string, label: string) =>
+    /^https?:\/\//.test(url) ? (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
+      >
+        <Icon d={ICON.file} className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{label}</span>
+        <Icon d={ICON.open} className="h-3 w-3 shrink-0" />
+      </a>
+    ) : url ? (
+      <span className="text-xs text-gray-700">{label}: スプシにあり</span>
+    ) : (
+      <span className="text-xs text-gray-500">{label}: なし</span>
+    );
   /** タブごとの「やること」 */
   const action = (r: LedgerRow, mode: Sub) => {
     switch (mode) {
@@ -697,12 +676,20 @@ export default function BillingClient({
                 <span className="block text-sm">{c.label}</span>
                 <span className="block font-medium text-gray-700">{c.sub}</span>
               </span>
-            ))
+            )).concat(
+              <span key="docs" className="px-4 py-3">
+                <span className="block text-sm">請求書</span>
+                <span className="block font-medium text-gray-700">押すと開く</span>
+              </span>,
+            )
           ) : (
             <>
               <span className="px-4 py-3">
                 <span className="block text-sm">{MODE[mode].label}</span>
                 <span className="block font-medium text-gray-700">{MODE[mode].sub}</span>
+              </span>
+              <span className="px-4 py-3">
+                <span className="block text-sm">{mode === "invoice" || mode === "payment" ? "企業への請求書" : "PA の請求書"}</span>
               </span>
               <span className="px-4 py-3">
                 <span className="block text-sm">やること</span>
@@ -774,10 +761,18 @@ export default function BillingClient({
                     <div key={c.key} className="flex items-center px-3 py-4">
                       {cell(r, c.key)}
                     </div>
-                  ))
+                  )).concat(
+                    <div key="docs" className="flex flex-col items-start justify-center gap-1.5 px-3 py-4">
+                      {docLink(r.invoiceUrl, "企業")}
+                      {r.route === "自社" ? null : docLink(r.partnerInvoiceUrl, "PA")}
+                    </div>,
+                  )
                 ) : (
                   <>
                     <div className="flex items-center px-3 py-4">{cell(r, MODE[mode].step)}</div>
+                    <div className="flex items-center px-3 py-4">
+                      {mode === "invoice" || mode === "payment" ? docLink(r.invoiceUrl, "請求書") : docLink(r.partnerInvoiceUrl, "請求書")}
+                    </div>
                     <div className="flex items-center px-3 py-4">{action(r, mode)}</div>
                   </>
                 )}
