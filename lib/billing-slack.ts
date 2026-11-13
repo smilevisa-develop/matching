@@ -20,6 +20,9 @@ import { downloadSlackFile, slackConfig, slackPost, slackUpdate, textWithButton 
 import { todayJst } from "@/lib/deal-stages";
 
 const BY = "Slack";
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/1S5wQF99n_-1nka8KNjrxKmrjCPQKIauRuDXjlSZi8hY/edit?gid=641093054#gid=641093054";
+const SHEET_LINK = `📊 <${SHEET_URL}|請求管理スプシ>`;
+const pdfLink = (url: string) => `📄 <${url}|請求書 PDF>`;
 const CHECKS = new Set(["white_check_mark", "heavy_check_mark", "ballot_box_with_check", "o", "ok"]);
 
 type Cand = { personId: number; invoiceNo: string; name: string; company: string; partner: string; b: PersonBilling };
@@ -149,11 +152,11 @@ export async function handleSlackFiles(ev: { channel: string; ts: string; thread
       });
       if (m.kind === "invoice") {
         const company = m.people[0].company || "企業";
-        const text = [`✅ ${company} への請求書を保存して「請求済」にしました`, peopleLine(m.people), `📁 ${saved.url}`].join("\n");
+        const text = [`✅ ${company} への請求書を保存して「請求済」にしました`, peopleLine(m.people), "", `${pdfLink(saved.url)}　${SHEET_LINK}`].join("\n");
         const r = await slackPost(ev.channel, text, thread, textWithButton(text, BUTTON.payment, "入金を確認したら押してください"));
         if (r.ts) await prisma.slackBillingPost.create({ data: { channel: ev.channel, ts: r.ts, kind: "invoice", personIds: m.people.map((c) => c.personId) } });
       } else {
-        await slackPost(ev.channel, [`✅ パートナーの請求書を保存して「受領済」にしました`, peopleLine(m.people), `📁 ${saved.url}`].join("\n"), thread);
+        await slackPost(ev.channel, [`✅ パートナーの請求書を保存して「受領済」にしました`, peopleLine(m.people), "", `${pdfLink(saved.url)}　${SHEET_LINK}`].join("\n"), thread);
         await postTransferRequest(ev.channel, thread, m.people.map((c) => c.personId));
       }
     } catch (e) {
@@ -177,9 +180,10 @@ async function postTransferRequest(channel: string, thread: string, personIds: n
       `入社日：${slash(c.b.joinDate)}`,
       `手数料：${man(c.b.partnerCost)}`,
       `振込期日：${slash(c.b.partnerPaidDate)}`,
-      ...(c.b.partnerInvoiceUrl ? [`請求書：${c.b.partnerInvoiceUrl}`] : []),
+      ...(c.b.partnerInvoiceUrl ? [`請求書：<${c.b.partnerInvoiceUrl}|PDF を開く>`] : []),
       "ーーーーーーーーーーーー",
     ]),
+    SHEET_LINK,
   ].join("\n");
   const r = await slackPost(channel, text, thread, textWithButton(text, BUTTON.partnerPayment, "振り込んだら押してください"));
   if (!r.ts) return;
@@ -243,7 +247,7 @@ export async function postBillingThread(text: string) {
   const { channel } = slackConfig();
   if (!channel) throw new Error("SLACK_BILLING_CHANNEL が未設定です");
   const body = text.replace(/^@kawamura cc @APRILIA CINDY MARANATHA ROHI/, mention("@kawamura cc @APRILIA CINDY MARANATHA ROHI"));
-  const r = await slackPost(channel, `${body}\n\n請求書の PDF はこのスレッドに貼ってください (アプリが Drive に保存して「請求済」にします)`);
+  const r = await slackPost(channel, `${body}\n\n${SHEET_LINK}\n請求書の PDF はこのスレッドに貼ってください (アプリが Drive に保存して「請求済」にします)`);
   if (!r.ok || !r.ts) throw new Error(`Slack に投稿できませんでした: ${r.error ?? ""}`);
   await prisma.slackBillingPost.create({ data: { channel, ts: r.ts, kind: "thread", personIds: [] } });
   return { ts: r.ts };
