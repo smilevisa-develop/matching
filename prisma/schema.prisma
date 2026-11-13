@@ -1333,3 +1333,21 @@ model PersonBilling {
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 }
+
+/// Slack の請求スレッドにアプリが出した投稿。kind = "invoice" (企業の請求書を保存した → ✅ で入金確認) / "transfer" (川村さんへ振込依頼 → ✅ で支払済)
+model SlackBillingPost {
+  id        Int      @id @default(autoincrement())
+  channel   String
+  ts        String
+  kind      String
+  personIds Int[]
+  createdAt DateTime @default(now())
+
+  @@unique([channel, ts])
+}
+
+/// 処理した Slack のイベント (再送で 2 回処理しないため)
+model SlackEventSeen {
+  id        String   @id
+  createdAt DateTime @default(now())
+}

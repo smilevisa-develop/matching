@@ -126,6 +126,7 @@ const ICON = {
   edit: "M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4",
   close: "M6 15l6-6 6 6",
   folder: "M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z",
+  send: "M22 2L11 13M22 2l-7 20-4-9-9-4z",
   cloud: "M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.75 4.75 0 0 1-.5 9.5M12 12v8M9 15l3-3 3 3",
 };
 
@@ -508,12 +509,45 @@ export default function BillingClient({
     </button>
   );
 
+  /** Slack に請求スレッドを立てる (川村さんは Slack のスレッドに PDF を貼るだけ) */
+  const [slackState, setSlackState] = useState<"idle" | "busy" | "done">("idle");
+  const slackButton = (text: string) => (
+    <button
+      type="button"
+      disabled={slackState === "busy"}
+      onClick={async () => {
+        if (!confirm("この内容で Slack に請求スレッドを立てますか？")) return;
+        setSlackState("busy");
+        try {
+          const res = await fetch("/api/billing/slack", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok || !json.ok) throw new Error(json.error || String(res.status));
+          setSlackState("done");
+        } catch (e) {
+          setSlackState("idle");
+          alert(`Slack に投稿できませんでした: ${e instanceof Error ? e.message : ""}`);
+        }
+      }}
+      className={`inline-flex items-center gap-1.5 rounded-lg border-2 px-3 py-1 text-sm font-bold ${
+        slackState === "done" ? "border-emerald-600 bg-emerald-600 text-white" : "border-[var(--color-primary)] bg-white text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
+      } disabled:opacity-50`}
+    >
+      <Icon d={slackState === "done" ? ICON.check : ICON.send} />
+      {slackState === "done" ? "Slack に投稿しました" : slackState === "busy" ? "投稿中…" : "Slack に投稿"}
+    </button>
+  );
+
   /** 見出し (左にタイトルと件数、右にコピー) */
   const head = (title: string, count: number, copyKey?: string, text?: string) => (
     <div className="flex items-center gap-3">
       <h2 className="font-bold text-[var(--color-text-dark)]">{title}</h2>
       <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-800">{count}件</span>
-      {copyKey && text && count > 0 ? <span className="ml-auto">{copyButton(copyKey, text)}</span> : null}
+      {copyKey && text && count > 0 ? (
+        <span className="ml-auto flex items-center gap-2">
+          {copyKey === "company" ? slackButton(text) : null}
+          {copyButton(copyKey, text)}
+        </span>
+      ) : null}
     </div>
   );
 

@@ -1,0 +1,60 @@
+/**
+ * Slack (請求スレッド用のボット)。
+ *
+ * 環境変数 (Coolify に入れる。未設定なら何もしない):
+ *   SLACK_BOT_TOKEN        … ボットのトークン (xoxb-)
+ *   SLACK_SIGNING_SECRET   … Slack から届いたイベントの確認用
+ *   SLACK_BILLING_CHANNEL  … 請求スレッドを立てるチャンネルの ID (C… / G…)。最初は土田さんだけのテスト用チャンネル
+ *   SLACK_BILLING_MENTION  … 依頼の先頭に付けるメンション (例 "<@U123> cc <@U456>")。無ければ文字のまま
+ */
+
+import crypto from "node:crypto";
+
+export const slackConfig = () => ({
+  token: process.env.SLACK_BOT_TOKEN?.trim() || "",
+  secret: process.env.SLACK_SIGNING_SECRET?.trim() || "",
+  channel: process.env.SLACK_BILLING_CHANNEL?.trim() || "",
+  mention: process.env.SLACK_BILLING_MENTION?.trim() || "",
+});
+
+/** Slack から届いたリクエストか確かめる (署名と 5 分以内の時刻) */
+export function verifySlackRequest(rawBody: string, headers: Headers): boolean {
+  const { secret } = slackConfig();
+  if (!secret) return false;
+  const ts = headers.get("x-slack-request-timestamp") ?? "";
+  const sig = headers.get("x-slack-signature") ?? "";
+  if (!ts || !sig || Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+  const mine = "v0=" + crypto.createHmac("sha256", secret).update(`v0:${ts}:${rawBody}`).digest("hex");
+  const a = Buffer.from(mine);
+  const b = Buffer.from(sig);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/** Slack の Web API を呼ぶ */
+export async function slackApi<T = Record<string, unknown>>(method: string, body: Record<string, unknown>): Promise<T & { ok: boolean; error?: string }> {
+  const { token } = slackConfig();
+  if (!token) throw new Error("SLACK_BOT_TOKEN が未設定です");
+  const res = await fetch(`https://slack.com/api/${method}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json()) as T & { ok: boolean; error?: string };
+  if (!json.ok) console.warn(`Slack ${method} に失敗:`, json.error);
+  return json;
+}
+
+export async function slackPost(channel: string, text: string, threadTs?: string) {
+  return slackApi<{ ts?: string }>("chat.postMessage", { channel, text, thread_ts: threadTs, unfurl_links: false, unfurl_media: false });
+}
+
+/** Slack に上がったファイルを取ってくる (ボットのトークンが要る) */
+export async function downloadSlackFile(url: string): Promise<Buffer> {
+  const { token } = slackConfig();
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Slack のファイルを取れませんでした (${res.status})`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  // 権限が足りないと HTML のログイン画面が返る
+  if (buf.subarray(0, 5).toString() !== "%PDF-") throw new Error("PDF として読めませんでした (ボットに files:read の権限があるか確認)");
+  return buf;
+}
