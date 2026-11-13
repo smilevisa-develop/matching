@@ -142,7 +142,12 @@ export async function handleSlackFiles(ev: { channel: string; ts: string; thread
     try {
       const cands = await loadCandidates();
       const role = billingChannelRole(ev.channel);
-      const m = matchInvoice(cands, fileName, ev.text ?? "", role === "customer" ? "invoice" : role === "partner" ? "partnerInvoice" : undefined);
+      // パートナーのチャンネル: PA が作るファイル名はばらばらなので、今月の PA 請求から選んでもらう
+      if (role === "partner") {
+        await askPartnerInvoice(ev.channel, thread, f, fileName, ev.text ?? "", cands);
+        continue;
+      }
+      const m = matchInvoice(cands, fileName, ev.text ?? "", role === "customer" ? "invoice" : undefined);
       if ("error" in m) {
         await slackPost(ev.channel, `⚠️ ${fileName}\n${m.error}。メッセージに「請求ID 85」のように書いて、もう一度貼ってください。`, thread);
         continue;
@@ -170,6 +175,71 @@ export async function handleSlackFiles(ev: { channel: string; ts: string; thread
       console.warn("Slack の請求書の保存に失敗:", e);
       await slackPost(ev.channel, `⚠️ ${fileName} を保存できませんでした: ${e instanceof Error ? e.message : String(e)}`, thread).catch(() => {});
     }
+  }
+}
+
+const cut = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1) + "…" : t);
+
+/** PA の請求書: だれの分かを選ぶメニューをスレッドに出す (選んで「保存する」で Drive に保存) */
+async function askPartnerInvoice(channel: string, thread: string, f: SlackFile, fileName: string, text: string, cands: Cand[]) {
+  const fileUrl = f.url_private_download ?? f.url_private;
+  if (!fileUrl) throw new Error("ファイルの URL がありません");
+  // 今月の PA 請求 = パートナー経由で、企業への請求は済んでいて、PA の請求書がまだ届いていない人 (入社の新しい順)
+  const list = cands
+    .filter((c) => hasPartner(c) && done(c, "invoice") && !done(c, "partnerInvoice"))
+    .sort((a, b) => (b.b.joinDate ?? "").localeCompare(a.b.joinDate ?? ""))
+    .slice(0, 100);
+  if (list.length === 0) {
+    await slackPost(channel, `⚠️ ${fileName}\nPA の請求書を待っている人がいません。請求管理で、企業への請求が「済」になっているか確かめてください。`, thread);
+    return;
+  }
+  const opt = (c: Cand) => ({ text: { type: "plain_text", text: cut(`${c.name}｜${c.partner || "-"}｜${c.company || "-"}`, 75) }, value: String(c.personId) });
+  const guess = matchInvoice(cands, fileName, text, "partnerInvoice");
+  const pre = "error" in guess ? [] : guess.people.filter((p) => list.some((c) => c.personId === p.personId));
+  const blocks = [
+    { type: "section", text: { type: "mrkdwn", text: `📄 *${fileName}*\nだれの請求書ですか？ 選んで「保存する」を押してください（何人分でも選べます）` } },
+    {
+      type: "actions",
+      block_id: "pa",
+      elements: [
+        { type: "multi_static_select", action_id: "pa_pick", placeholder: { type: "plain_text", text: "内定者を選ぶ" }, options: list.map(opt), ...(pre.length ? { initial_options: pre.map(opt) } : {}) },
+        { type: "button", text: { type: "plain_text", text: "保存する" }, style: "primary", action_id: "pa_save" },
+      ],
+    },
+  ];
+  const r = await slackPost(channel, `${fileName} はだれの請求書ですか？`, thread, blocks);
+  if (r.ts) await prisma.slackBillingPost.create({ data: { channel, ts: r.ts, kind: "paPick", personIds: [], data: { fileUrl, fileName, thread } } });
+}
+
+/** PA の請求書のメニューで「保存する」が押された */
+export async function handlePartnerInvoicePick(p: { channel: string; ts: string; personIds: number[]; userName: string }) {
+  const post = await prisma.slackBillingPost.findUnique({ where: { channel_ts: { channel: p.channel, ts: p.ts } } });
+  if (!post || post.kind !== "paPick") return;
+  const d = post.data as { fileUrl: string; fileName: string; thread: string };
+  if (p.personIds.length === 0) {
+    await slackPost(p.channel, "⚠️ 内定者を選んでから「保存する」を押してください", d.thread);
+    return;
+  }
+  // 2 回押されても 1 回だけ保存する
+  const lock = await prisma.slackBillingPost.updateMany({ where: { id: post.id, kind: "paPick" }, data: { kind: "paSaving" } });
+  if (lock.count === 0) return;
+  try {
+    const people = (await loadCandidates()).filter((c) => p.personIds.includes(c.personId));
+    const buf = await downloadSlackFile(d.fileUrl);
+    const saved = await saveInvoicePdf({
+      personIds: people.map((c) => c.personId),
+      kind: "partnerInvoice",
+      dataUrl: `data:application/pdf;base64,${buf.toString("base64")}`,
+      fileName: d.fileName,
+      by: p.userName || BY,
+    });
+    const text = [`✅ パートナーの請求書を保存して「受領済」にしました`, peopleLine(people), "", `${pdfLink(saved.url)}　${SHEET_LINK}`].join("\n");
+    await slackUpdate(p.channel, p.ts, text, [{ type: "section", text: { type: "mrkdwn", text } }]);
+    await prisma.slackBillingPost.update({ where: { id: post.id }, data: { kind: "paDone", personIds: people.map((c) => c.personId) } });
+    await postTransferRequest(p.channel, d.thread, people.map((c) => c.personId));
+  } catch (e) {
+    await prisma.slackBillingPost.update({ where: { id: post.id }, data: { kind: "paPick" } });
+    throw e;
   }
 }
 

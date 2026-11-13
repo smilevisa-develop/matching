@@ -6,7 +6,7 @@
 
 import { after } from "next/server";
 import { billingChannelRole, verifySlackRequest } from "@/lib/slack";
-import { handleSlackButton } from "@/lib/billing-slack";
+import { handlePartnerInvoicePick, handleSlackButton } from "@/lib/billing-slack";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +20,20 @@ export async function POST(req: Request) {
   const channel = payload.channel?.id ?? payload.container?.channel_id;
   const ts = payload.message?.ts ?? payload.container?.message_ts;
   if (!action || !channel || !ts || !billingChannelRole(channel)) return new Response("");
+  // PA の請求書のメニュー: 選ぶだけのときは何もしない。「保存する」で保存
+  if (action.action_id === "pa_save") {
+    const picked: { value: string }[] = payload.state?.values?.pa?.pa_pick?.selected_options ?? [];
+    after(async () => {
+      try {
+        await handlePartnerInvoicePick({ channel, ts, personIds: picked.map((o) => Number(o.value)), userName: payload.user?.name ?? "" });
+      } catch (e) {
+        console.warn("PA の請求書の保存に失敗:", e);
+        const { slackPost } = await import("@/lib/slack");
+        await slackPost(channel, `⚠️ 保存できませんでした: ${e instanceof Error ? e.message : String(e)}`, payload.message?.thread_ts ?? ts).catch(() => {});
+      }
+    });
+    return new Response("");
+  }
   if (action.action_id !== "billing_done" && action.action_id !== "billing_undo") return new Response("");
   // 元の文 (ボタンの上の段) はそのまま残す
   const text: string = payload.message?.blocks?.find((b: { type: string }) => b.type === "section")?.text?.text ?? payload.message?.text ?? "";
