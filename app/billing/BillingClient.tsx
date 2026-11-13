@@ -720,38 +720,35 @@ export default function BillingClient({
           list.map((r) => (
             <Fragment key={r.personId}>
               <div id={`bill-${r.personId}`} className={`${grid} scroll-mt-4 border-b border-gray-200 ${editing === r.personId ? "bg-gray-50" : ""}`}>
-                <div className={`flex min-w-0 items-start gap-3 px-3 py-4 ${overdueOf(r) ? "border-l-4 border-l-red-500" : "border-l-4 border-l-transparent"}`}>
-                  <div className="flex shrink-0 flex-col gap-1.5">
+                <div className={`min-w-0 px-4 py-4 ${overdueOf(r) ? "border-l-4 border-l-red-500" : "border-l-4 border-l-transparent"}`}>
+                  <p className="truncate text-base font-bold text-[var(--color-text-dark)]">{r.personName}</p>
+                  <p className="mt-1 truncate text-sm text-gray-800">{r.companyName || "企業未設定"}</p>
+                  <p className="mt-0.5 truncate text-xs text-gray-700">
+                    {[`担当 ${r.owner || "未定"}`, r.route === "自社" ? "自社" : r.partnerName ? `PA ${r.partnerName}` : ""].filter(Boolean).join(" ・ ")}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => openEditor(r)}
-                      title={editing === r.personId ? "閉じる" : "詳細・編集"}
-                      aria-label={editing === r.personId ? "閉じる" : "詳細・編集"}
-                      className={`flex h-7 w-7 items-center justify-center rounded-md border ${
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold ${
                         editing === r.personId
-                          ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
-                          : "border-gray-300 bg-white text-[var(--color-primary)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
+                          ? "bg-gray-700 text-white hover:bg-gray-800"
+                          : "bg-[var(--color-primary)] text-white hover:opacity-90"
                       }`}
                     >
-                      <Icon d={editing === r.personId ? ICON.close : ICON.edit} className="h-3.5 w-3.5" />
+                      <Icon d={editing === r.personId ? ICON.close : ICON.edit} className="h-5 w-5" />
+                      {editing === r.personId ? "閉じる" : "編集"}
                     </button>
                     <a
                       href={folderOf(r)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title="Drive の請求書フォルダを開く"
-                      aria-label="Drive の請求書フォルダを開く"
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-white text-[var(--color-primary)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
+                      className="inline-flex items-center gap-1.5 rounded-lg border-2 border-[var(--color-primary)] bg-white px-3 py-1.5 text-sm font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
                     >
-                      <Icon d={ICON.folder} className="h-3.5 w-3.5" />
+                      <Icon d={ICON.folder} className="h-5 w-5" />
+                      Drive
+                      <Icon d={ICON.open} className="h-3.5 w-3.5" />
                     </a>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-bold text-[var(--color-text-dark)]">{r.personName}</p>
-                    <p className="mt-1 truncate text-sm text-gray-800">{r.companyName || "企業未設定"}</p>
-                    <p className="mt-0.5 truncate text-xs text-gray-700">
-                      {[`担当 ${r.owner || "未定"}`, r.route === "自社" ? "自社" : r.partnerName ? `PA ${r.partnerName}` : ""].filter(Boolean).join(" ・ ")}
-                    </p>
                   </div>
                 </div>
                 <div className="flex items-center px-4 py-4 text-sm tabular-nums text-gray-800">{md(r.joinAt) || "-"}</div>
