@@ -640,9 +640,9 @@ export default function BillingClient({
         <Icon d={ICON.open} className="h-3 w-3 shrink-0" />
       </a>
     ) : url ? (
-      <span className="text-xs text-gray-700">{label}: スプシにあり</span>
+      <span className="text-xs text-gray-700">{label === "請求書" ? "" : `${label}: `}スプシにあり</span>
     ) : (
-      <span className="text-xs text-gray-500">{label}: なし</span>
+      <span className="text-xs text-gray-600">{label === "請求書" ? "" : `${label}: `}なし</span>
     );
   /** タブごとの「やること」 */
   const action = (r: LedgerRow, mode: Sub) => {
