@@ -27,9 +27,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const range = monthRangeJst(month);
   const now = new Date();
   // 請求管理 (スプシ) が最新なので、開くたびに読み込んでから出す
-  // 請求書フォルダの月ごとのフォルダ (「2026年11月」→ URL)。行の Drive アイコンから開く
+  // 請求書フォルダ「01_売上」の月ごとのフォルダ (「11月」→ URL)。行の Drive ボタンから開く
+  const salesRoot = (await listChildFolders(INVOICE_ROOT_FOLDER_URL).catch(() => [])).find((f) => f.name === "01_売上");
   const invoiceFolders: Record<string, string> = Object.fromEntries(
-    (await listChildFolders(INVOICE_ROOT_FOLDER_URL).catch(() => [])).map((f) => [f.name, `https://drive.google.com/drive/folders/${f.id}`]),
+    (salesRoot ? await listChildFolders(`https://drive.google.com/drive/folders/${salesRoot.id}`).catch(() => []) : []).map((f) => [
+      f.name,
+      `https://drive.google.com/drive/folders/${f.id}`,
+    ]),
   );
   const refreshError = await refreshBillingFromSheet().then(() => null, (e) => (e instanceof Error ? e.message : String(e)));
 

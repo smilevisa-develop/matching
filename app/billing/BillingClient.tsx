@@ -719,13 +719,9 @@ export default function BillingClient({
   const folderOf = (r: LedgerRow) => {
     const j = r.joinAt;
     if (!/^\d{4}-\d{2}/.test(j || "")) return invoiceRootUrl;
-    let y = Number(j.slice(0, 4));
-    let m = Number(j.slice(5, 7)) + 1;
-    if (m > 12) {
-      m = 1;
-      y++;
-    }
-    return invoiceFolders[`${y}年${m}月`] ?? invoiceRootUrl;
+    // 01_売上 / 請求した月 (入社の翌月)
+    const m = (Number(j.slice(5, 7)) % 12) + 1;
+    return invoiceFolders[`${m}月`] ?? invoiceRootUrl;
   };
   /** 請求書のリンク (押すと Drive の PDF が開く) */
   const docLink = (url: string, label: string) =>
