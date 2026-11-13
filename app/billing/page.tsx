@@ -6,6 +6,7 @@ import { billingSchedule } from "@/lib/billing-flow";
 import { INVOICE_ROOT_FOLDER_URL, refreshBillingFromSheet, stepDoneFromBilling, type LedgerStepKey } from "@/lib/billing-ledger";
 import { listChildFolders } from "@/lib/google-docs";
 import { isTestCompany } from "@/lib/test-companies";
+import { BILLING_TEST } from "@/lib/billing-test-mode";
 import { readStageDates } from "@/lib/deal-stages";
 import BillingClient, { type LedgerRow, type LedgerStep } from "./BillingClient";
 
@@ -106,8 +107,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     const b = person.billing;
     const steps = applySheet(rawSteps, b);
     const deal = person.dealCandidates[0]?.deal;
-    // テスト企業 (株式会社お寿司) の人は請求の一覧に出さない
-    if (isTestCompany(deal?.company.externalId)) return;
+    // テスト企業 (株式会社お寿司) の人は請求の一覧に出さない。通しテスト中はテストの人だけ出す
+    if (BILLING_TEST.on ? !BILLING_TEST.personIds.includes(person.id) : isTestCompany(deal?.company.externalId)) return;
     const all = Object.values(steps).filter((s): s is LedgerStep => !!s);
     rows.push({
       personId: person.id,

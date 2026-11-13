@@ -11,13 +11,24 @@
 
 import crypto from "node:crypto";
 
-export const slackConfig = () => ({
+import { BILLING_TEST } from "@/lib/billing-test-mode";
+
+export const slackConfig = () =>
+  BILLING_TEST.on
+    ? {
+        token: process.env.SLACK_BOT_TOKEN?.trim() || "",
+        secret: process.env.SLACK_SIGNING_SECRET?.trim() || "",
+        channel: BILLING_TEST.channel,
+        partnerChannel: BILLING_TEST.partnerChannel,
+        mention: "(テスト) 川村さん cc シンディさん",
+      }
+    : {
   token: process.env.SLACK_BOT_TOKEN?.trim() || "",
   secret: process.env.SLACK_SIGNING_SECRET?.trim() || "",
   channel: process.env.SLACK_BILLING_CHANNEL?.trim() || "",
   partnerChannel: process.env.SLACK_PARTNER_CHANNEL?.trim() || process.env.SLACK_BILLING_CHANNEL?.trim() || "",
   mention: process.env.SLACK_BILLING_MENTION?.trim() || "",
-});
+      };
 
 /** 請求で見るチャンネルか。お客様用 / パートナー用 / 両方 (同じチャンネルのとき) */
 export function billingChannelRole(channel: string | undefined): "customer" | "partner" | "both" | null {

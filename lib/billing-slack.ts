@@ -20,6 +20,7 @@ import { billingPatchForStep, stepDoneFromBilling, writeBillingToSheet, type Led
 import { saveInvoicePdf, type InvoiceKind } from "@/lib/billing-invoice";
 import { billingChannelRole, downloadSlackFile, slackConfig, slackPost, slackUpdate, textSections, textWithButton } from "@/lib/slack";
 import { todayJst } from "@/lib/deal-stages";
+import { BILLING_TEST } from "@/lib/billing-test-mode";
 
 const BY = "Slack";
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1S5wQF99n_-1nka8KNjrxKmrjCPQKIauRuDXjlSZi8hY/edit?gid=641093054#gid=641093054";
@@ -56,6 +57,8 @@ async function loadCandidates(): Promise<Cand[]> {
   });
   return list
     .filter((x) => !["card_cancelled", "declined"].includes(x.person.placement?.stage ?? ""))
+    // 通しテスト中はテストの人だけを候補にする
+    .filter((x) => !BILLING_TEST.on || BILLING_TEST.personIds.includes(x.personId))
     .map((x) => ({
       personId: x.personId,
       invoiceNo: x.invoiceNo ?? "",
