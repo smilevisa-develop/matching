@@ -350,3 +350,14 @@ export async function postTransferList(text: string, personIds: number[]) {
   await prisma.personBilling.updateMany({ where: { personId: { in: personIds } }, data: { partnerTransferRequestedAt: todayJst(), updatedBy: BY } });
   return { ts: r.ts };
 }
+
+/** /billing の PA タブから、パートナーへの請求書の発行依頼をパートナーのチャンネルに出す (届いた PDF はこのスレッドに貼る) */
+export async function postPartnerRequest(text: string) {
+  const { partnerChannel: channel } = slackConfig();
+  if (!channel) throw new Error("SLACK_PARTNER_CHANNEL が未設定です");
+  const all = `${text.replace(/^ー{6,}$/gm, `${LINE}\n`)}\n\n${SHEET_LINK}\n${LINE}\nパートナーの請求書が届いたら、PDF をこのスレッドに貼ってください`;
+  const r = await slackPost(channel, all, undefined, textSections(all));
+  if (!r.ok || !r.ts) throw new Error(`Slack に投稿できませんでした: ${r.error ?? ""}`);
+  await prisma.slackBillingPost.create({ data: { channel, ts: r.ts, kind: "thread", personIds: [] } });
+  return { ts: r.ts };
+}

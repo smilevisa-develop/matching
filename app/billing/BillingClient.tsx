@@ -515,14 +515,14 @@ export default function BillingClient({
   /** Slack に請求スレッドを立てる (川村さんは Slack のスレッドに PDF を貼るだけ) */
   /** 企業: 請求スレッド (お客様のチャンネル) / PA: 振込のお願い (パートナーのチャンネル、「振り込んだ」ボタン付き) */
   const [slackStates, setSlackStates] = useState<Record<string, "idle" | "busy" | "done">>({});
-  const slackButton = (key: "company" | "pay", text: string, personIds: number[] = []) => {
+  const slackButton = (key: string, text: string, personIds: number[] = []) => {
     const state = slackStates[key] ?? "idle";
     const set = (v: "idle" | "busy" | "done") => setSlackStates((m) => ({ ...m, [key]: v }));
     const send = async () => {
-      if (!confirm(key === "pay" ? "この内容で Slack (パートナーのチャンネル) に振込のお願いを送りますか？" : "この内容で Slack に請求スレッドを立てますか？")) return;
+      if (!confirm(key === "pay" ? "この内容で Slack (パートナーのチャンネル) に振込のお願いを送りますか？" : key.startsWith("pa-") ? "この内容で Slack (パートナーのチャンネル) に請求書の依頼を送りますか？" : "この内容で Slack に請求スレッドを立てますか？")) return;
       set("busy");
       try {
-        const body = key === "pay" ? { text, kind: "pay", personIds } : { text };
+        const body = key === "pay" ? { text, kind: "pay", personIds } : key.startsWith("pa-") ? { text, kind: "paRequest" } : { text };
         const res = await fetch("/api/billing/slack", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         const json = await res.json().catch(() => ({}));
         if (!res.ok || !json.ok) throw new Error(json.error || String(res.status));
@@ -554,7 +554,7 @@ export default function BillingClient({
       <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-800">{count}件</span>
       {copyKey && text && count > 0 ? (
         <span className="ml-auto flex items-center gap-2">
-          {copyKey === "company" ? slackButton("company", text) : copyKey === "pay" ? slackButton("pay", text, toPay.map((r) => r.personId)) : null}
+          {copyKey === "company" ? slackButton("company", text) : copyKey === "pay" ? slackButton("pay", text, toPay.map((r) => r.personId)) : copyKey.startsWith("pa-") ? slackButton(copyKey, text) : null}
           {copyButton(copyKey, text)}
         </span>
       ) : null}
