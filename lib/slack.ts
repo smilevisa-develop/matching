@@ -14,7 +14,7 @@ import crypto from "node:crypto";
 import { BILLING_TEST } from "@/lib/billing-test-mode";
 
 export const slackConfig = () =>
-  BILLING_TEST.on
+  BILLING_TEST.on && BILLING_TEST.slackToTestChannels
     ? {
         token: process.env.SLACK_BOT_TOKEN?.trim() || "",
         secret: process.env.SLACK_SIGNING_SECRET?.trim() || "",
