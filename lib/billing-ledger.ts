@@ -68,6 +68,9 @@ const ymd = (v: string) => {
   return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : null;
 };
 
+/** 関数のエラー (#REF! など)。読み込みが止まっているだけなので、アプリの値を残す */
+const isSheetError = (v: string) => /^#(REF!|N\/A|VALUE!|NAME\?|DIV\/0!|NUM!|NULL!|ERROR!|SPILL!|CALC!)$/.test(v.trim()) || v.trim() === "Loading...";
+
 /** スプシのセル → アプリの値 */
 function fromCell(kind: Kind, v: string): string | number | null {
   const t = v.trim();
@@ -168,7 +171,7 @@ export async function refreshBillingFromSheet(): Promise<{ updated: number; crea
     const data: Record<string, unknown> = {};
     for (const f of BILLING_FIELDS) {
       const c = s.sheet.colOf(f);
-      if (c < 0) continue;
+      if (c < 0 || isSheetError(row[c] ?? "")) continue;
       data[f.key] = f.kind === "url" ? (s.sheet.links.get(`${s.sheet.rowOf.get(id)},${c}`) ?? fromCell(f.kind, row[c] ?? "")) : fromCell(f.kind, row[c] ?? "");
     }
     const cur = byPerson.get(id);
