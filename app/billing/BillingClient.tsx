@@ -490,7 +490,6 @@ export default function BillingClient({
   const paListText = [
     PA_MENTION,
     `${listMonths.length === 1 ? `${Number(listMonths[0])}月分の` : "今月の"}パートナー様へのお振込み予定の一覧です。`,
-    "各パートナー様から請求書が届き次第、本スレッドにてお振込みをご依頼いたします。よろしくお願いいたします。",
     "",
     ...toRequest.flatMap((r, i) => [
       `${num(i)}【請求ID ${r.invoiceNo || "-"}】 パートナー：${r.partnerName || "-"}`,
