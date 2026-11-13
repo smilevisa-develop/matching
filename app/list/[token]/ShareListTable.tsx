@@ -112,7 +112,7 @@ export default function ShareListTable(props: {
                     {h}
                   </th>
                 ))}
-                <th className={`${th} min-w-[170px]`}>{editTh("面接時間")}</th>
+                <th className={`${th} min-w-[210px]`}>{editTh("面接時間")}</th>
                 <th className={`${th} min-w-[240px]`}>{editTh("備考")}</th>
               </tr>
             </thead>
@@ -207,7 +207,7 @@ function EditCell({ value, placeholder, state, onSave }: { value: string; placeh
         }}
         placeholder={placeholder}
         maxLength={500}
-        className="w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-sm text-gray-900 outline-none placeholder:text-gray-500 hover:border-gray-300 focus:border-[var(--color-primary)] focus:bg-white focus:ring-2 focus:ring-[var(--color-light)]"
+        className="w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-sm text-gray-900 outline-none placeholder:text-gray-600 hover:border-gray-300 focus:border-[var(--color-primary)] focus:bg-white focus:ring-2 focus:ring-[var(--color-light)]"
       />
       <Mark state={state} />
     </div>
