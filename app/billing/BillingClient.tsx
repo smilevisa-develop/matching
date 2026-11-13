@@ -64,7 +64,7 @@ const md = (ymd: string) => {
 };
 const yen = (n: number | null) => (n == null ? "" : `¥${Math.round(n).toLocaleString("ja-JP")}`);
 const today = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-const GRID = "grid min-w-[1200px] grid-cols-[minmax(0,2.2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_repeat(4,minmax(0,1fr))_minmax(0,1.1fr)] divide-x divide-gray-200";
+const GRID = "grid min-w-[1040px] grid-cols-[minmax(0,1.8fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_repeat(4,minmax(0,1fr))_minmax(0,1.1fr)] divide-x divide-gray-200";
 const INPUT = "w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-[var(--color-text-dark)]";
 
 type Draft = {
@@ -575,7 +575,7 @@ export default function BillingClient({
   );
 
   type Mode = "all" | Sub;
-  const GRID1 = "grid min-w-[1080px] grid-cols-[minmax(0,2.2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.5fr)] divide-x divide-gray-200";
+  const GRID1 = "grid min-w-[960px] grid-cols-[minmax(0,2fr)_minmax(0,0.55fr)_minmax(0,0.85fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.5fr)] divide-x divide-gray-200";
   const MODE: Record<Sub, { step: StepKey; label: string; sub: string }> = {
     invoice: { step: "invoice", label: "請求", sub: "企業へ請求書を送る" },
     payment: { step: "payment", label: "入金", sub: "企業からの入金" },
