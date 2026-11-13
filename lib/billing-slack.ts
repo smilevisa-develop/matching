@@ -247,7 +247,7 @@ export async function postBillingThread(text: string) {
   const { channel } = slackConfig();
   if (!channel) throw new Error("SLACK_BILLING_CHANNEL が未設定です");
   const body = text.replace(/^@kawamura cc @APRILIA CINDY MARANATHA ROHI/, mention("@kawamura cc @APRILIA CINDY MARANATHA ROHI"));
-  const r = await slackPost(channel, `${body}\n\n${SHEET_LINK}\n請求書の PDF はこのスレッドに貼ってください (アプリが Drive に保存して「請求済」にします)`);
+  const r = await slackPost(channel, `${body}\n\n${SHEET_LINK}\n請求書の PDF はこのスレッドに貼ってください`);
   if (!r.ok || !r.ts) throw new Error(`Slack に投稿できませんでした: ${r.error ?? ""}`);
   await prisma.slackBillingPost.create({ data: { channel, ts: r.ts, kind: "thread", personIds: [] } });
   return { ts: r.ts };
