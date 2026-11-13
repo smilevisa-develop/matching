@@ -23,6 +23,9 @@
  */
 
 import { getCoreSettings } from "@/lib/app-settings";
+import { prisma } from "@/lib/prisma";
+import { dealGroup, normalizeDealStatus } from "@/lib/deal-stages";
+import { isTestCompany } from "@/lib/test-companies";
 import { computeMonthStats, currentMonthJst, isMonthKey, shiftMonth } from "@/lib/month-stats";
 import { getSheetsClient, parseSheetIdFromUrl, serialToDateString } from "@/lib/sheets-sync";
 
@@ -163,6 +166,69 @@ export async function syncKpiSheet(args: { month: string; apply: boolean }): Pro
   return { ...base, cells };
 }
 
+/**
+ * 「データ」タブ (手入力のタブ) へは、関数で取れない 4 項目だけ書く (2026/11 土田さん「KPI シートに反映」)。
+ *   成約数・売上・仕入高・内定数・入社人数 は「取込」タブ (請求管理の IMPORTRANGE) からの関数なので触らない
+ *   リード数 … その月に追加した候補者   事前面談数 / 推薦数 … カンバンの日付
+ *   求人数 … いま募集中 (至急を含む) の案件数。その時点の数なので今月だけ書く
+ * 2026-11 より前の月は、確認して手で入れた値なので書かない。
+ */
+export const KPI_DATA_TAB = "データ";
+export const KPI_DATA_FROM_MONTH = "2026-11";
+
+export async function syncKpiDataTab(args: { month: string; apply: boolean }): Promise<KpiSyncResult> {
+  const { month, apply } = args;
+  const base: KpiSyncResult = { month, tab: KPI_DATA_TAB, apply, cells: [] };
+  if (!isMonthKey(month) || month < KPI_DATA_FROM_MONTH) return { ...base, skipped: `${KPI_DATA_FROM_MONTH} より前の月は書かない` };
+  const spreadsheetId = resolveKpiSpreadsheetId();
+  if (!spreadsheetId) return { ...base, skipped: "KPI シートの ID を解決できません" };
+  const sheets = await getSheetsClient();
+  const [headerRes, labelRes] = await Promise.all([
+    sheets.spreadsheets.values.get({ spreadsheetId, range: `${quote(KPI_DATA_TAB)}!A1:BZ6`, valueRenderOption: "UNFORMATTED_VALUE" }),
+    sheets.spreadsheets.values.get({ spreadsheetId, range: `${quote(KPI_DATA_TAB)}!B1:B60` }),
+  ]);
+  const headerRows = headerRes.data.values ?? [];
+  let monthRow = -1;
+  let col = -1;
+  for (let r = 0; r < headerRows.length; r++) {
+    const months = headerRows[r].map(cellToMonth);
+    if (months.filter(Boolean).length < 2) continue;
+    monthRow = r;
+    col = months.indexOf(month);
+    break;
+  }
+  if (monthRow < 0 || col < 0) return { ...base, skipped: `「${KPI_DATA_TAB}」に ${month} の列がありません` };
+  const labels = (labelRes.data.values ?? []).map((r) => String(r?.[0] ?? "").trim());
+  const rowOf = (key: RowKey) => {
+    const def = ROW_LABELS.find((d) => d.key === key)!;
+    return labels.findIndex((l, i) => i > monthRow + 1 && l && def.match(l));
+  };
+  const stats = await computeMonthStats(month);
+  const actualCol = colLetter(col + 1);
+  const cells: KpiSyncResult["cells"] = [];
+  const put = (key: RowKey, value: number, label: string) => {
+    const r = rowOf(key);
+    if (r >= 0) cells.push({ range: `${actualCol}${r + 1}`, label, value });
+  };
+  put("リード数", stats.leads, "リード数 (追加した候補者)");
+  put("事前面談数", stats.preInterviewed, "事前面談数");
+  put("推薦数", stats.recommended, "推薦数");
+  if (month === currentMonthJst()) put("求人数", await countOpenDeals(), "求人数 (いま募集中)");
+  if (apply && cells.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId,
+      requestBody: { valueInputOption: "USER_ENTERED", data: cells.map((c) => ({ range: `${quote(KPI_DATA_TAB)}!${c.range}`, values: [[c.value]] })) },
+    });
+  }
+  return { ...base, cells };
+}
+
+/** いま募集中 (至急を含む) の案件数。テスト企業は除く */
+async function countOpenDeals(): Promise<number> {
+  const deals = await prisma.deal.findMany({ select: { status: true, company: { select: { externalId: true } } } });
+  return deals.filter((d) => !isTestCompany(d.company.externalId) && dealGroup(normalizeDealStatus(d.status)) !== "stopped").length;
+}
+
 let running: Promise<void> | null = null;
 let rerun = false;
 
@@ -186,6 +252,8 @@ export function requestKpiSheetSync(): Promise<void> {
         for (const m of months) {
           const r = await syncKpiSheet({ month: m, apply: true });
           if (r.skipped) console.info("KPI シート転記をスキップ:", m, r.skipped);
+          const d = await syncKpiDataTab({ month: m, apply: true });
+          if (d.skipped) console.info("KPI シート (データ) 転記をスキップ:", m, d.skipped);
         }
       } catch (e) {
         console.warn("KPI シート転記に失敗:", e instanceof Error ? e.message : e);
