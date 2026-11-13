@@ -44,8 +44,24 @@ export async function slackApi<T = Record<string, unknown>>(method: string, body
   return json;
 }
 
-export async function slackPost(channel: string, text: string, threadTs?: string) {
-  return slackApi<{ ts?: string }>("chat.postMessage", { channel, text, thread_ts: threadTs, unfurl_links: false, unfurl_media: false });
+export async function slackPost(channel: string, text: string, threadTs?: string, blocks?: unknown[]) {
+  return slackApi<{ ts?: string }>("chat.postMessage", { channel, text, thread_ts: threadTs, blocks, unfurl_links: false, unfurl_media: false });
+}
+
+export async function slackUpdate(channel: string, ts: string, text: string, blocks: unknown[]) {
+  return slackApi("chat.update", { channel, ts, text, blocks });
+}
+
+/** 文 + ボタン 1 つのメッセージ (Block Kit) */
+export function textWithButton(text: string, button: { label: string; actionId: string; style?: "primary" | "danger" }, note?: string) {
+  return [
+    { type: "section", text: { type: "mrkdwn", text } },
+    ...(note ? [{ type: "context", elements: [{ type: "mrkdwn", text: note }] }] : []),
+    {
+      type: "actions",
+      elements: [{ type: "button", text: { type: "plain_text", text: button.label }, action_id: button.actionId, ...(button.style ? { style: button.style } : {}) }],
+    },
+  ];
 }
 
 /** Slack に上がったファイルを取ってくる (ボットのトークンが要る) */

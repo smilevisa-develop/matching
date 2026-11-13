@@ -7,7 +7,7 @@ const PUBLIC_PATHS = ["/login"];
 /** 外部からの Webhook (LINE / Messenger / WhatsApp)。メンテナンス中も受け取る */
 const isWebhook = (pathname: string) =>
   pathname.startsWith("/api/line/webhook") ||
-  pathname.startsWith("/api/slack/events") ||
+  pathname.startsWith("/api/slack/") ||
   pathname.startsWith("/api/messenger/webhook") ||
   pathname.startsWith("/api/whatsapp/webhook");
 

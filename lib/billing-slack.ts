@@ -7,16 +7,16 @@
  *      - 企業への請求書: ファイル名の「〇〇御中」やメッセージの企業名・請求ID から。同じ企業の何人分かは全員に入れる
  *      - パートナーの請求書: 請求ID・候補者名・パートナー名から。保存したら川村さんへの振込依頼をスレッドに出す
  *      - 分からないときは「請求ID を書いて送り直して」と返す (勝手に決めない)
- *   3. アプリの投稿に ✅ が付いたら済にする
- *      - 「企業への請求書を保存しました」に ✅ = 入金を確認した
- *      - 「振込のお願い」に ✅ = 振り込んだ
+ *   3. アプリの投稿のボタンで済にする (押すと「取り消す」に変わる。✅ のリアクションでも同じ)
+ *      - 「企業への請求書を保存しました」の「入金を確認した」
+ *      - 「振込のお願い」の「振り込んだ」
  */
 
 import { prisma } from "@/lib/prisma";
 import type { PersonBilling } from "@/generated/prisma/client";
 import { billingPatchForStep, stepDoneFromBilling, writeBillingToSheet, type LedgerStepKey } from "@/lib/billing-ledger";
 import { saveInvoicePdf, type InvoiceKind } from "@/lib/billing-invoice";
-import { downloadSlackFile, slackConfig, slackPost } from "@/lib/slack";
+import { downloadSlackFile, slackConfig, slackPost, slackUpdate, textWithButton } from "@/lib/slack";
 import { todayJst } from "@/lib/deal-stages";
 
 const BY = "Slack";
@@ -149,11 +149,8 @@ export async function handleSlackFiles(ev: { channel: string; ts: string; thread
       });
       if (m.kind === "invoice") {
         const company = m.people[0].company || "企業";
-        const r = await slackPost(
-          ev.channel,
-          [`✅ ${company} への請求書を保存して「請求済」にしました`, peopleLine(m.people), `📁 ${saved.url}`, "", "入金を確認したら、このメッセージに ✅ を押してください"].join("\n"),
-          thread,
-        );
+        const text = [`✅ ${company} への請求書を保存して「請求済」にしました`, peopleLine(m.people), `📁 ${saved.url}`].join("\n");
+        const r = await slackPost(ev.channel, text, thread, textWithButton(text, BUTTON.payment, "入金を確認したら押してください"));
         if (r.ts) await prisma.slackBillingPost.create({ data: { channel: ev.channel, ts: r.ts, kind: "invoice", personIds: m.people.map((c) => c.personId) } });
       } else {
         await slackPost(ev.channel, [`✅ パートナーの請求書を保存して「受領済」にしました`, peopleLine(m.people), `📁 ${saved.url}`].join("\n"), thread);
@@ -171,7 +168,7 @@ async function postTransferRequest(channel: string, thread: string, personIds: n
   const cands = (await loadCandidates()).filter((c) => personIds.includes(c.personId));
   const text = [
     mention("@kawamura"),
-    "パートナーへの振込をお願いします。振り込んだら、このメッセージに ✅ を押してください。",
+    "パートナーへの振込をお願いします。",
     "",
     ...cands.flatMap((c) => [
       `【請求ID ${c.invoiceNo || "-"}】 パートナー：${c.partner || "-"}`,
@@ -184,35 +181,61 @@ async function postTransferRequest(channel: string, thread: string, personIds: n
       "ーーーーーーーーーーーー",
     ]),
   ].join("\n");
-  const r = await slackPost(channel, text, thread);
+  const r = await slackPost(channel, text, thread, textWithButton(text, BUTTON.partnerPayment, "振り込んだら押してください"));
   if (!r.ts) return;
   await prisma.slackBillingPost.create({ data: { channel, ts: r.ts, kind: "transfer", personIds } });
   await prisma.personBilling.updateMany({ where: { personId: { in: personIds } }, data: { partnerTransferRequestedAt: todayJst(), updatedBy: BY } });
 }
 
-/** アプリの投稿に ✅ が付いた / 外された */
-export async function handleSlackReaction(ev: { reaction: string; item: { channel?: string; ts?: string } }, added: boolean) {
-  if (!CHECKS.has(ev.reaction.replace(/::skin-tone-\d$/, "")) || !ev.item.channel || !ev.item.ts) return;
-  const post = await prisma.slackBillingPost.findUnique({ where: { channel_ts: { channel: ev.item.channel, ts: ev.item.ts } } });
-  if (!post || (post.kind !== "invoice" && post.kind !== "transfer")) return;
+const BUTTON = {
+  payment: { label: "入金を確認した", actionId: "billing_done", style: "primary" as const },
+  partnerPayment: { label: "振り込んだ", actionId: "billing_done", style: "primary" as const },
+  undo: { label: "取り消す", actionId: "billing_undo" },
+};
+
+/** アプリの投稿 (請求書を保存しました / 振込のお願い) を済 / 取り消しにする。済にしたら true */
+async function setPostDone(channel: string, ts: string, done: boolean, by: string) {
+  const post = await prisma.slackBillingPost.findUnique({ where: { channel_ts: { channel, ts } } });
+  if (!post || (post.kind !== "invoice" && post.kind !== "transfer")) return null;
   const step: LedgerStepKey = post.kind === "invoice" ? "payment" : "partnerPayment";
   const today = todayJst();
   for (const personId of post.personIds) {
     const current = await prisma.personBilling.findUnique({ where: { personId }, include: { person: { select: { placement: { select: { id: true } } } } } });
     if (!current) continue;
-    await prisma.personBilling.update({ where: { personId }, data: { ...billingPatchForStep(step, added, today, current), updatedBy: BY } });
+    await prisma.personBilling.update({ where: { personId }, data: { ...billingPatchForStep(step, done, today, current), updatedBy: by } });
     const placementId = current.person.placement?.id;
     if (placementId) {
       await prisma.placementTask.updateMany({
         where: { placementId, billingStep: { in: step === "payment" ? ["payment"] : ["pa-payment"] } },
-        data: added ? { doneAt: new Date(), doneBy: BY } : { doneAt: null, doneBy: null },
+        data: done ? { doneAt: new Date(), doneBy: by } : { doneAt: null, doneBy: null },
       });
     }
   }
   const r = await writeBillingToSheet(post.personIds);
   if (r.error) console.warn("請求管理への反映に失敗:", r.error);
-  const what = step === "payment" ? "入金" : "振込";
-  await slackPost(post.channel, added ? `☑️ ${what}を「済」にしました` : `↩️ ${what}の「済」を取り消しました`, post.ts);
+  return { post, step };
+}
+
+/** ボタンが押された (/api/slack/interactions) */
+export async function handleSlackButton(p: { channel: string; ts: string; actionId: string; userId: string; userName: string; text: string }) {
+  const done = p.actionId === "billing_done";
+  const res = await setPostDone(p.channel, p.ts, done, p.userName || BY);
+  if (!res) return;
+  const what = res.step === "payment" ? "入金済" : "振込済";
+  const md = `${todayJst().slice(5).replace("-", "/")} <@${p.userId}>`;
+  const blocks = done
+    ? textWithButton(p.text, BUTTON.undo, `☑️ *${what}* にしました（${md}）`)
+    : textWithButton(p.text, BUTTON[res.step], `↩️ ${what}を取り消しました（${md}）`);
+  await slackUpdate(p.channel, p.ts, p.text, blocks);
+}
+
+/** アプリの投稿に ✅ が付いた / 外された (ボタンの代わりにも使える) */
+export async function handleSlackReaction(ev: { reaction: string; item: { channel?: string; ts?: string } }, added: boolean) {
+  if (!CHECKS.has(ev.reaction.replace(/::skin-tone-\d$/, "")) || !ev.item.channel || !ev.item.ts) return;
+  const res = await setPostDone(ev.item.channel, ev.item.ts, added, BY);
+  if (!res) return;
+  const what = res.step === "payment" ? "入金" : "振込";
+  await slackPost(res.post.channel, added ? `☑️ ${what}を「済」にしました` : `↩️ ${what}の「済」を取り消しました`, res.post.ts);
 }
 
 /** /billing から、その月の請求スレッドを立てる (川村さんへの請求書の発行依頼) */
