@@ -276,7 +276,7 @@ export default function BillingClient({
     }
   };
 
-  /** 段階の状況 (表示だけ。済にするのは詳細・編集のチェック、または請求書の PDF を上げたとき) */
+  /** 段階の状況 (表示だけ。済になるのは請求書の PDF を上げたときと、入金確認・振込依頼のチェック) */
   const cell = (row: LedgerRow, key: StepKey) => {
     const st = row.steps[key];
     if (!st) return <span className="text-xs text-gray-500">対象外</span>;
@@ -295,6 +295,11 @@ export default function BillingClient({
     return <span className="text-xs font-medium text-gray-800">{st.due ? `${md(st.due)} まで` : "日付なし"}</span>;
   };
 
+  /** 金額の入力欄は「¥15,000」と出す (中身は数字だけ) */
+  const yenInput = (v: string) => {
+    const d = v.replace(/[^0-9]/g, "");
+    return d ? `¥${Number(d).toLocaleString("ja-JP")}` : "";
+  };
   const field = (label: string, key: keyof Draft, type: "text" | "date" | "yen" = "text", wide = false) => (
     <label className={`block text-xs font-medium text-gray-700 ${wide ? "md:col-span-2" : ""}`}>
       {label}
@@ -302,9 +307,9 @@ export default function BillingClient({
         className={`${INPUT} mt-1 ${type === "yen" ? "text-right tabular-nums" : ""}`}
         type={type === "date" ? "date" : "text"}
         inputMode={type === "yen" ? "numeric" : undefined}
-        value={draft?.[key] ?? ""}
+        value={type === "yen" ? yenInput(draft?.[key] ?? "") : (draft?.[key] ?? "")}
         onChange={(e) => {
-          const v = e.target.value;
+          const v = type === "yen" ? e.target.value.replace(/[^0-9]/g, "") : e.target.value;
           setDraft((d) => {
             if (!d) return d;
             const next = { ...d, [key]: v };
@@ -365,12 +370,37 @@ export default function BillingClient({
     }
   };
 
+  /** PDF を落として上げられるようにする (ボタンも残す) */
+  const [dropOver, setDropOver] = useState<string | null>(null);
+  const dropProps = (r: LedgerRow, kind: "invoice" | "partnerInvoice") => {
+    const key = `${r.personId}-${kind}`;
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        e.preventDefault();
+        if (dropOver !== key) setDropOver(key);
+      },
+      onDragLeave: () => setDropOver((k) => (k === key ? null : k)),
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        setDropOver(null);
+        const f = e.dataTransfer.files?.[0];
+        if (f) void upload(r, kind, f);
+      },
+    };
+  };
+
   const uploadBox = (r: LedgerRow, kind: "invoice" | "partnerInvoice", label: string, url: string) => {
     const busyNow = uploading === `${r.personId}-${kind}`;
     const isLink = /^https?:\/\//.test(url);
     const done = !!url;
+    const over = dropOver === `${r.personId}-${kind}`;
     return (
-      <div className={`md:col-span-2 flex items-center gap-3 rounded-xl border-2 px-4 py-3 ${done ? "border-emerald-300 bg-emerald-50" : "border-dashed border-[var(--color-primary)] bg-white"}`}>
+      <div
+        {...dropProps(r, kind)}
+        className={`md:col-span-2 flex items-center gap-3 rounded-xl border-2 px-4 py-3 ${
+          over ? "border-solid border-[var(--color-primary)] bg-[var(--color-primary)]/10" : done ? "border-emerald-300 bg-emerald-50" : "border-dashed border-[var(--color-primary)] bg-white"
+        }`}
+      >
         <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${done ? "bg-emerald-600 text-white" : "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"}`}>
           <Icon d={done ? ICON.check : ICON.file} className="h-5 w-5" />
         </span>
@@ -379,7 +409,7 @@ export default function BillingClient({
           {isLink ? (
             <p className="text-xs text-gray-700">押すと PDF が開きます</p>
           ) : (
-            <p className="text-xs text-gray-700">{url ? "スプシにあり" : "上げると「済」になります"}</p>
+            <p className="text-xs text-gray-700">{url ? "スプシにあり" : "ここに PDF を落とすか、ボタンで選ぶ。上げると「済」"}</p>
           )}
         </div>
         {isLink ? (
@@ -563,28 +593,10 @@ export default function BillingClient({
             {field("パートナーへの支払日", "partnerPaidDate", "date")}
           </>
         )}
-        {uploadBox(r, "invoice", "企業への請求書", r.invoiceUrl)}
-        {draft?.route === "自社" ? null : uploadBox(r, "partnerInvoice", "パートナーの請求書", r.partnerInvoiceUrl)}
+        {/* 請求書の欄はまとめだけ (企業・PA のタブは一覧の「やること」から上げる) */}
+        {tab === "summary" ? uploadBox(r, "invoice", "企業への請求書", r.invoiceUrl) : null}
+        {tab === "summary" && draft?.route !== "自社" ? uploadBox(r, "partnerInvoice", "パートナーの請求書", r.partnerInvoiceUrl) : null}
         {r.hasPlacement ? null : field("入社日", "joinDate", "date")}
-        <div className="md:col-span-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-gray-300 bg-white px-4 py-3">
-          <span className="text-xs font-bold text-gray-800">済にする</span>
-          {COLUMNS.map((c) => {
-            const st = r.steps[c.key];
-            if (!st) return null;
-            return (
-              <label key={c.key} className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-[var(--color-text-dark)]">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-emerald-600"
-                  checked={st.done}
-                  disabled={busy === `${r.personId}-${c.key}`}
-                  onChange={() => void toggle(r, c.key)}
-                />
-                {c.label.replace(/^[①-④] /, "")}（{c.sub}）
-              </label>
-            );
-          })}
-        </div>
         {field("備考", "note", "text", true)}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -626,6 +638,12 @@ export default function BillingClient({
   );
   /** PDF を上げるボタン (上げると済) */
   const uploadButton = (r: LedgerRow, kind: "invoice" | "partnerInvoice") => (
+    <div
+      {...dropProps(r, kind)}
+      className={`inline-flex flex-col items-start gap-1 rounded-xl border-2 border-dashed p-1.5 ${
+        dropOver === `${r.personId}-${kind}` ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10" : "border-gray-300"
+      }`}
+    >
     <label
       className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-bold text-white hover:opacity-90 ${
         uploading === `${r.personId}-${kind}` ? "pointer-events-none opacity-50" : ""
@@ -644,17 +662,15 @@ export default function BillingClient({
         }}
       />
     </label>
+      <span className="px-1 text-xs font-medium text-gray-700">ここに落としても上がります</span>
+    </div>
   );
   /** タブごとの「やること」 */
   const action = (r: LedgerRow, mode: Sub) => {
     switch (mode) {
       case "invoice":
-        return (
-          <div className="flex flex-wrap items-center gap-2">
-            {uploadButton(r, "invoice")}
-            {check(`${r.personId}-invoice`, "発行済にする", !!r.steps.invoice?.done, () => void toggle(r, "invoice"))}
-          </div>
-        );
+        // PDF を上げる = 発行済
+        return uploadButton(r, "invoice");
       case "payment":
         return check(`${r.personId}-payment`, "入金を確認した", !!r.steps.payment?.done, () => void toggle(r, "payment"));
       case "paInvoice":
