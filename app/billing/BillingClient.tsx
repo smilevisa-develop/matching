@@ -447,7 +447,9 @@ export default function BillingClient({
     }
   };
   // Slack に貼る文 (トゥイさんがこれまで送っていた形に合わせる。2026/11 の #請求管理_to_お客様 / #請求管理_to_パートナー)
+  // お客様のチャンネルはトゥイさんが送る (川村さん cc シンディさん)、パートナーのチャンネルはシンディさんが送る (川村さん cc トゥイさん)
   const MENTION = "@kawamura cc @APRILIA CINDY MARANATHA ROHI";
+  const PA_MENTION = "@kawamura cc @Huong Thuy";
   const LINE = "ーーーーーーーーーーーー";
   const num = (i: number) => (i < 20 ? String.fromCharCode(0x2460 + i) : `(${i + 1})`);
   const slash = (ymd: string) => (ymd ? ymd.replace(/-/g, "/") : "-");
@@ -467,23 +469,42 @@ export default function BillingClient({
       LINE,
     ]),
   ].join("\n");
+  // 各パートナーへの請求書の発行依頼 (LINE などで送る文。コピーして使う)
   const partnerText = (name: string, list: LedgerRow[]) =>
     [
       `${name} 様`,
       "請求書の発行をお願いいたします。",
       "",
       ...list.flatMap((r, i) => [
-        `${num(i)} ID: ${r.displayId}`,
-        r.personName,
+        ...(list.length > 1 ? [num(i)] : []),
+        `案件ID：${r.invoiceNo || r.displayId}`,
+        `名前：${r.personName}`,
+        `内定日：${slash(r.offerAt)}`,
         `入社日：${slash(r.joinAt)}`,
         `手数料：${man(r.costAmount)}`,
-        `入金期日：${slash(r.steps.partnerPayment?.due || "")}`,
+        `入金期日：${slash(payDueOf(r))}`,
         LINE,
       ]),
     ].join("\n");
+  // パートナーのチャンネルに最初に出す、今月の PA 請求の一覧 (スレッドの親。届いた請求書はここに貼る)
+  const listMonths = [...new Set(toRequest.map((r) => payDueOf(r).slice(5, 7)).filter(Boolean))];
+  const paListText = [
+    PA_MENTION,
+    `${listMonths.length === 1 ? `${Number(listMonths[0])}月の` : ""}振り込み件です。よろしくお願いいたします。`,
+    "",
+    ...toRequest.flatMap((r, i) => [
+      `${num(i)}【請求ID ${r.invoiceNo || "-"}】 パートナー：${r.partnerName || "-"}`,
+      `案件名：${r.companyName || "-"}（${man(r.unitPrice)}）`,
+      `対象者：${r.personName}`,
+      `内定日：${slash(r.offerAt)}`,
+      `入社日：${slash(r.joinAt)}`,
+      `手数料：${man(r.costAmount)}`,
+      LINE,
+    ]),
+  ].join("\n");
   const payMonths = [...new Set(toPay.map((r) => payDueOf(r).slice(5, 7)).filter(Boolean))];
   const payText = [
-    MENTION,
+    PA_MENTION,
     `${payMonths.length === 1 ? `${Number(payMonths[0])}月の` : ""}振り込み件です。よろしくお願いいたします。`,
     "",
     ...toPay.flatMap((r, i) => [
@@ -519,10 +540,10 @@ export default function BillingClient({
     const state = slackStates[key] ?? "idle";
     const set = (v: "idle" | "busy" | "done") => setSlackStates((m) => ({ ...m, [key]: v }));
     const send = async () => {
-      if (!confirm(key === "pay" ? "この内容で Slack (パートナーのチャンネル) に振込のお願いを送りますか？" : key.startsWith("pa-") ? "この内容で Slack (パートナーのチャンネル) に請求書の依頼を送りますか？" : "この内容で Slack に請求スレッドを立てますか？")) return;
+      if (!confirm(key === "pay" ? "この内容で Slack (パートナーのチャンネル) に振込のお願いを送りますか？" : key === "paList" ? "この内容で Slack (パートナーのチャンネル) に今月の PA 請求の一覧を送りますか？" : "この内容で Slack (お客様のチャンネル) に請求スレッドを立てますか？")) return;
       set("busy");
       try {
-        const body = key === "pay" ? { text, kind: "pay", personIds } : key.startsWith("pa-") ? { text, kind: "paRequest" } : { text };
+        const body = key === "pay" ? { text, kind: "pay", personIds } : key === "paList" ? { text, kind: "paRequest" } : { text };
         const res = await fetch("/api/billing/slack", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         const json = await res.json().catch(() => ({}));
         if (!res.ok || !json.ok) throw new Error(json.error || String(res.status));
@@ -554,7 +575,7 @@ export default function BillingClient({
       <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-800">{count}件</span>
       {copyKey && text && count > 0 ? (
         <span className="ml-auto flex items-center gap-2">
-          {copyKey === "company" ? slackButton("company", text) : copyKey === "pay" ? slackButton("pay", text, toPay.map((r) => r.personId)) : copyKey.startsWith("pa-") ? slackButton(copyKey, text) : null}
+          {copyKey === "company" || copyKey === "paList" ? slackButton(copyKey, text) : copyKey === "pay" ? slackButton("pay", text, toPay.map((r) => r.personId)) : null}
           {copyButton(copyKey, text)}
         </span>
       ) : null}
@@ -1005,10 +1026,11 @@ export default function BillingClient({
 
       {tab === "pa" && sub === "paInvoice" && (
         <div className="space-y-5">
+          {head("Slack ・ 今月の PA 請求の一覧", toRequest.length, "paList", paListText)}
           {byPartner.size === 0 ? ledger([], "パートナーに依頼する人はいません", "paInvoice") : null}
           {[...byPartner.entries()].map(([name, list]) => (
             <div key={name} className="space-y-3">
-              {head(`${name} 様へ ・ 請求書の発行依頼`, list.length, `pa-${name}`, partnerText(name, list))}
+              {head(`${name} 様へ ・ 請求書の発行依頼 (LINE などに貼る文)`, list.length, `pa-${name}`, partnerText(name, list))}
               {ledger(list, "", "paInvoice")}
             </div>
           ))}

@@ -133,6 +133,9 @@ export function matchInvoice(cands: Cand[], fileName: string, text: string, only
 const slash = (ymd: string | null) => (ymd ? ymd.replace(/-/g, "/") : "-");
 const man = (n: number | null) => (n == null ? "未入力" : n % 10000 === 0 ? `${n / 10000}万円` : n >= 10000 ? `${(n / 10000).toFixed(1)}万円` : `${n.toLocaleString("ja-JP")}円`);
 const mention = (fallback: string) => slackConfig().mention || fallback;
+const partnerMention = (fallback: string) => slackConfig().partnerMention || fallback;
+/** 画面から来た文の 1 行目 (「@kawamura cc …」) を本物のメンションに替える */
+const withMention = (text: string, m: string) => text.replace(/^@kawamura[^\n]*/, m);
 const peopleLine = (people: Cand[]) => people.map((c) => `・${c.name}（請求ID ${c.invoiceNo || "-"}）`).join("\n");
 
 type SlackFile = { name?: string; filetype?: string; mimetype?: string; url_private_download?: string; url_private?: string };
@@ -253,7 +256,7 @@ export async function handlePartnerInvoicePick(p: { channel: string; ts: string;
 async function postTransferRequest(channel: string, thread: string, personIds: number[]) {
   const cands = (await loadCandidates()).filter((c) => personIds.includes(c.personId));
   const text = [
-    mention("@kawamura"),
+    partnerMention("@kawamura"),
     "パートナーへの振込をお願いします。",
     "",
     ...cands.flatMap((c) => [
@@ -330,7 +333,7 @@ export async function handleSlackReaction(ev: { reaction: string; item: { channe
 export async function postBillingThread(text: string) {
   const { channel } = slackConfig();
   if (!channel) throw new Error("SLACK_BILLING_CHANNEL が未設定です");
-  const body = text.replace(/^@kawamura cc @APRILIA CINDY MARANATHA ROHI/, mention("@kawamura cc @APRILIA CINDY MARANATHA ROHI"));
+  const body = withMention(text, mention("@kawamura cc @APRILIA CINDY MARANATHA ROHI"));
   const all = `${body}\n\n${SHEET_LINK}\n${LINE}\n請求書の PDF はこのスレッドに貼ってください`;
   const r = await slackPost(channel, all, undefined, textSections(all));
   if (!r.ok || !r.ts) throw new Error(`Slack に投稿できませんでした: ${r.error ?? ""}`);
@@ -343,8 +346,7 @@ export async function postTransferList(text: string, personIds: number[]) {
   const { partnerChannel: channel } = slackConfig();
   if (!channel) throw new Error("SLACK_PARTNER_CHANNEL が未設定です");
   if (personIds.length === 0) throw new Error("振込の依頼がありません");
-  const body = text
-    .replace(/^@kawamura cc @APRILIA CINDY MARANATHA ROHI/, mention("@kawamura cc @APRILIA CINDY MARANATHA ROHI"))
+  const body = withMention(text, partnerMention("@kawamura cc @Huong Thuy"))
     .replace(/^請求書：(https?:\/\/\S+)$/gm, "請求書：<$1|PDF を開く>")
     .replace(/^ー{6,}$/gm, `${SHEET_LINK}\n${LINE}\n`);
   const r = await slackPost(channel, body, undefined, textWithButton(body, BUTTON.partnerPayment, "振り込んだら押してください"));
@@ -354,11 +356,12 @@ export async function postTransferList(text: string, personIds: number[]) {
   return { ts: r.ts };
 }
 
-/** /billing の PA タブから、パートナーへの請求書の発行依頼をパートナーのチャンネルに出す (届いた PDF はこのスレッドに貼る) */
+/** /billing の PA タブから、今月の PA 請求の一覧をパートナーのチャンネルに出す (スレッドの親)。
+ *  シンディさんが PA の請求書をこのスレッドかチャンネルに貼る → アプリが保存して川村さんへ振込のお願いを出す */
 export async function postPartnerRequest(text: string) {
   const { partnerChannel: channel } = slackConfig();
   if (!channel) throw new Error("SLACK_PARTNER_CHANNEL が未設定です");
-  const all = `${text.replace(/^ー{6,}$/gm, `${LINE}\n`)}\n\n${SHEET_LINK}\n${LINE}\nパートナーの請求書が届いたら、PDF をこのスレッドに貼ってください`;
+  const all = `${withMention(text, partnerMention("@kawamura cc @Huong Thuy"))}\n\n${SHEET_LINK}\n${LINE}`;
   const r = await slackPost(channel, all, undefined, textSections(all));
   if (!r.ok || !r.ts) throw new Error(`Slack に投稿できませんでした: ${r.error ?? ""}`);
   await prisma.slackBillingPost.create({ data: { channel, ts: r.ts, kind: "thread", personIds: [] } });

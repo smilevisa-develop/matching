@@ -6,7 +6,8 @@
  *   SLACK_SIGNING_SECRET   … Slack から届いたイベントの確認用
  *   SLACK_BILLING_CHANNEL  … お客様 (企業への請求) のチャンネルの ID (C… / G…)。本番は「請求管理_to_お客様」。最初は土田さんだけのテスト用チャンネル
  *   SLACK_PARTNER_CHANNEL  … パートナー (PA への支払い) のチャンネルの ID。本番は「請求管理_to_パートナー」。無ければお客様と同じチャンネル
- *   SLACK_BILLING_MENTION  … 依頼の先頭に付けるメンション (例 "<@U123> cc <@U456>")。無ければ文字のまま
+ *   SLACK_BILLING_MENTION  … お客様のチャンネルの投稿の先頭に付けるメンション (トゥイさんが送る → 川村さん cc シンディさん)
+ *   SLACK_PARTNER_MENTION  … パートナーのチャンネルの投稿の先頭 (シンディさんが送る → 川村さん cc トゥイさん)。無ければ下の既定
  */
 
 import crypto from "node:crypto";
@@ -21,6 +22,7 @@ export const slackConfig = () =>
         channel: BILLING_TEST.channel,
         partnerChannel: BILLING_TEST.partnerChannel,
         mention: "(テスト) 川村さん cc シンディさん",
+        partnerMention: "(テスト) 川村さん cc トゥイさん",
       }
     : {
   token: process.env.SLACK_BOT_TOKEN?.trim() || "",
@@ -28,6 +30,8 @@ export const slackConfig = () =>
   channel: process.env.SLACK_BILLING_CHANNEL?.trim() || "",
   partnerChannel: process.env.SLACK_PARTNER_CHANNEL?.trim() || process.env.SLACK_BILLING_CHANNEL?.trim() || "",
   mention: process.env.SLACK_BILLING_MENTION?.trim() || "",
+  // 川村さん cc トゥイさん (2026/11 土田さん)
+  partnerMention: process.env.SLACK_PARTNER_MENTION?.trim() || "<@U07AAGK8TMK> cc <@U09RDDMV0TS>",
       };
 
 /** 請求で見るチャンネルか。お客様用 / パートナー用 / 両方 (同じチャンネルのとき) */

@@ -6,7 +6,7 @@
  * テストが終わったら on を false にして戻す。
  */
 export const BILLING_TEST = {
-  on: true,
+  on: false,
   personIds: [1],
   slackToTestChannels: false,
   channel: "C0CHGFFHR9A", // テスト-請求 (お客様)
