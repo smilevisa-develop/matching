@@ -632,7 +632,7 @@ export default function BillingClient({
     invoice: { step: "invoice", label: "請求", sub: "企業へ請求書を送る" },
     payment: { step: "payment", label: "入金", sub: "企業からの入金" },
     paInvoice: { step: "partnerInvoice", label: "PA請求書", sub: "パートナーから受け取る" },
-    transfer: { step: "partnerPayment", label: "振込", sub: "川村さんへ依頼" },
+    transfer: { step: "partnerPayment", label: "振込", sub: "振込の確認" },
   };
 
   /** チェックボックス (押すとすぐ保存) */
@@ -754,7 +754,7 @@ export default function BillingClient({
         return uploadButton(r, "partnerInvoice");
       case "transfer":
         // 振込の確認はしない (2026/11 土田さん)。川村さんに依頼したら ④ PA支払を済にする
-        return check(`${r.personId}-partnerPayment`, "川村さんに依頼した", !!r.steps.partnerPayment?.done, () => void toggle(r, "partnerPayment"));
+        return check(`${r.personId}-partnerPayment`, "振込を確認した", !!r.steps.partnerPayment?.done, () => void toggle(r, "partnerPayment"));
     }
   };
 
