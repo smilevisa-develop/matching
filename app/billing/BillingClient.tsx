@@ -413,9 +413,7 @@ export default function BillingClient({
   const monthEndStr = monthEnd(month, 0);
   const dueBy = (st: LedgerStep | null) => !!st && !st.done && !!st.due && st.due <= monthEndStr;
   const byJoin = (a: LedgerRow, b: LedgerRow) => ((a.joinAt || "9") < (b.joinAt || "9") ? -1 : 1);
-  // テスト用 (2026/11 土田さん): KODAI TSUCHIDA (0001) はどのタブにも出す。テストが終わったら消す
-  const TEST_ID = "0001";
-  const keep = (r: LedgerRow) => r.personId === editing || r.displayId === TEST_ID;
+  const keep = (r: LedgerRow) => r.personId === editing;
   const toInvoice = rows.filter((r) => dueBy(r.steps.invoice) || (keep(r) && tab === "company" && sub === "invoice")).sort(byJoin);
   const toConfirmPayment = rows
     .filter((r) => (r.steps.invoice?.done && !!r.steps.payment && !r.steps.payment.done) || (keep(r) && tab === "company" && sub === "payment"))
