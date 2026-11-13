@@ -125,6 +125,7 @@ const ICON = {
   list: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
   edit: "M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4",
   close: "M6 15l6-6 6 6",
+  folder: "M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z",
   cloud: "M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.75 4.75 0 0 1-.5 9.5M12 12v8M9 15l3-3 3 3",
 };
 
@@ -140,6 +141,8 @@ export default function BillingClient({
   me,
   month,
   partners,
+  invoiceFolders,
+  invoiceRootUrl,
   header,
 }: {
   rows: LedgerRow[];
@@ -148,6 +151,8 @@ export default function BillingClient({
   month: string;
   /** 登録済みのパートナー (選ぶ欄の候補) */
   partners: string[];
+  invoiceFolders: Record<string, string>;
+  invoiceRootUrl: string;
   /** タイトルと月の切り替え (タブと一緒に上に固定する) */
   header?: React.ReactNode;
 }) {
@@ -626,6 +631,18 @@ export default function BillingClient({
       </label>
     );
   };
+  /** その人の請求書を置く Drive フォルダ (入社の翌月。まだ無ければ請求書フォルダ) */
+  const folderOf = (r: LedgerRow) => {
+    const j = r.joinAt;
+    if (!/^\d{4}-\d{2}/.test(j || "")) return invoiceRootUrl;
+    let y = Number(j.slice(0, 4));
+    let m = Number(j.slice(5, 7)) + 1;
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
+    return invoiceFolders[`${y}年${m}月`] ?? invoiceRootUrl;
+  };
   /** 請求書のリンク (押すと Drive の PDF が開く) */
   const docLink = (url: string, label: string) =>
     /^https?:\/\//.test(url) ? (
@@ -703,7 +720,32 @@ export default function BillingClient({
           list.map((r) => (
             <Fragment key={r.personId}>
               <div id={`bill-${r.personId}`} className={`${grid} scroll-mt-4 border-b border-gray-200 ${editing === r.personId ? "bg-gray-50" : ""}`}>
-                <div className={`flex min-w-0 items-start gap-3 px-4 py-4 ${overdueOf(r) ? "border-l-4 border-l-red-500" : "border-l-4 border-l-transparent"}`}>
+                <div className={`flex min-w-0 items-start gap-3 px-3 py-4 ${overdueOf(r) ? "border-l-4 border-l-red-500" : "border-l-4 border-l-transparent"}`}>
+                  <div className="flex shrink-0 flex-col gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openEditor(r)}
+                      title={editing === r.personId ? "閉じる" : "詳細・編集"}
+                      aria-label={editing === r.personId ? "閉じる" : "詳細・編集"}
+                      className={`flex h-7 w-7 items-center justify-center rounded-md border ${
+                        editing === r.personId
+                          ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
+                          : "border-gray-300 bg-white text-[var(--color-primary)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
+                      }`}
+                    >
+                      <Icon d={editing === r.personId ? ICON.close : ICON.edit} className="h-3.5 w-3.5" />
+                    </button>
+                    <a
+                      href={folderOf(r)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Drive の請求書フォルダを開く"
+                      aria-label="Drive の請求書フォルダを開く"
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-white text-[var(--color-primary)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
+                    >
+                      <Icon d={ICON.folder} className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-base font-bold text-[var(--color-text-dark)]">{r.personName}</p>
                     <p className="mt-1 truncate text-sm text-gray-800">{r.companyName || "企業未設定"}</p>
@@ -711,20 +753,6 @@ export default function BillingClient({
                       {[`担当 ${r.owner || "未定"}`, r.route === "自社" ? "自社" : r.partnerName ? `PA ${r.partnerName}` : ""].filter(Boolean).join(" ・ ")}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openEditor(r)}
-                    className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold ${
-                      editing === r.personId
-                        ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
-                        : "border-[var(--color-primary)] bg-white text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white"
-                    }`}
-                  >
-                    <span className="inline-flex items-center gap-1.5">
-                      <Icon d={editing === r.personId ? ICON.close : ICON.edit} className="h-3.5 w-3.5" />
-                      {editing === r.personId ? "閉じる" : "詳細・編集"}
-                    </span>
-                  </button>
                 </div>
                 <div className="flex items-center px-4 py-4 text-sm tabular-nums text-gray-800">{md(r.joinAt) || "-"}</div>
                 <div className="flex flex-col items-end justify-center px-4 py-4 tabular-nums">

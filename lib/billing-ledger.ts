@@ -269,3 +269,7 @@ export function stepDoneFromBilling(step: LedgerStepKey, b: Partial<PersonBillin
       return b.partnerPayStatus ? b.partnerPayStatus === "支払済" : null;
   }
 }
+
+/** 請求書を置く Drive フォルダ (この下に「2026年11月 / 売上・支払い」を作る) */
+export const INVOICE_ROOT_FOLDER_URL =
+  process.env.INVOICE_DRIVE_FOLDER_URL?.trim() || "https://drive.google.com/drive/folders/10S9rOBp7ztLqFnfNOr_WGxNP5MbHTmVl";

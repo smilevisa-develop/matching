@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireCurrentAccount } from "@/lib/auth";
 import { currentMonthJst, isMonthKey, monthRangeJst, shiftMonth } from "@/lib/month-stats";
 import { billingSchedule } from "@/lib/billing-flow";
-import { refreshBillingFromSheet, stepDoneFromBilling, type LedgerStepKey } from "@/lib/billing-ledger";
+import { INVOICE_ROOT_FOLDER_URL, refreshBillingFromSheet, stepDoneFromBilling, type LedgerStepKey } from "@/lib/billing-ledger";
+import { listChildFolders } from "@/lib/google-docs";
 import { readStageDates } from "@/lib/deal-stages";
 import BillingClient, { type LedgerRow, type LedgerStep } from "./BillingClient";
 
@@ -26,6 +27,10 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const range = monthRangeJst(month);
   const now = new Date();
   // 請求管理 (スプシ) が最新なので、開くたびに読み込んでから出す
+  // 請求書フォルダの月ごとのフォルダ (「2026年11月」→ URL)。行の Drive アイコンから開く
+  const invoiceFolders: Record<string, string> = Object.fromEntries(
+    (await listChildFolders(INVOICE_ROOT_FOLDER_URL).catch(() => [])).map((f) => [f.name, `https://drive.google.com/drive/folders/${f.id}`]),
+  );
   const refreshError = await refreshBillingFromSheet().then(() => null, (e) => (e instanceof Error ? e.message : String(e)));
 
   const personSelect = {
@@ -213,6 +218,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         me={account.name ?? ""}
         month={month}
         partners={partners}
+        invoiceFolders={invoiceFolders}
+        invoiceRootUrl={INVOICE_ROOT_FOLDER_URL}
         header={
       <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">請求管理</h1>

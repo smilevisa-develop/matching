@@ -10,16 +10,12 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
-import { billingPatchForStep, writeBillingToSheet } from "@/lib/billing-ledger";
+import { INVOICE_ROOT_FOLDER_URL, billingPatchForStep, writeBillingToSheet } from "@/lib/billing-ledger";
 import { ensureSubFolder, uploadDataUrlToDrive } from "@/lib/google-docs";
 import { todayJst } from "@/lib/deal-stages";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-/** 請求書を置く Drive フォルダ (この下に「2026年11月 / 売上・支払い」を作る) */
-const INVOICE_ROOT_FOLDER_URL =
-  process.env.INVOICE_DRIVE_FOLDER_URL?.trim() || "https://drive.google.com/drive/folders/10S9rOBp7ztLqFnfNOr_WGxNP5MbHTmVl";
 
 const KINDS = {
   invoice: { folder: "売上", suffix: "請求書", urlField: "invoiceUrl", tasks: ["invoice"] },
