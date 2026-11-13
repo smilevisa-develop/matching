@@ -65,7 +65,7 @@ async function loadCandidates(): Promise<Cand[]> {
 }
 
 const done = (c: Cand, step: LedgerStepKey) => stepDoneFromBilling(step, c.b) === true;
-const hasPartner = (c: Cand) => c.b.route !== "自社" && !!c.partner;
+const hasPartner = (c: Cand) => c.b.route === "パートナー" || (c.b.route !== "自社" && !!c.partner);
 const recent = (ymd: string | null, days: number) => !!ymd && Date.now() - new Date(`${ymd}T00:00:00+09:00`).getTime() < days * 86400_000;
 
 /** 貼られた PDF がだれの、どちらの請求書かを決める */
