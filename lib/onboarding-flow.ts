@@ -262,9 +262,9 @@ export function isGijinkoku(residenceStatus: string | null | undefined): boolean
 }
 export type ApplicationType = (typeof APPLICATION_TYPES)[number];
 
-/** 入管への退社・入社報告が要る人 (変更・特定活動。実習生は対象外) */
-export function needsImmigrationReport(applicationType: string | null | undefined, residenceStatus: string | null | undefined): boolean {
-  return (applicationType === "変更" || applicationType === "特定活動") && !residenceStatus?.includes("実習");
+/** 入管への退社・入社の届出が要る人 = 変更申請の人 (技人国・特定技能とも。認定・更新は対象外。2026/11 土田さん) */
+export function needsImmigrationReport(applicationType: string | null | undefined, _residenceStatus?: string | null): boolean {
+  return applicationType === "変更";
 }
 
 /** 工程名 → ステージ */
