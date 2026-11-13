@@ -472,7 +472,6 @@ export default function BillingClient({
   // 各パートナーへの請求書の発行依頼 (LINE などで送る文。コピーして使う)
   const partnerText = (name: string, list: LedgerRow[]) =>
     [
-      `${name} 様`,
       "請求書の発行をお願いいたします。",
       "",
       ...list.flatMap((r, i) => [
@@ -577,7 +576,7 @@ export default function BillingClient({
       {copyKey && text && count > 0 ? (
         <span className="ml-auto flex items-center gap-2">
           {copyKey === "company" || copyKey === "paList" ? slackButton(copyKey, text) : copyKey === "pay" ? slackButton("pay", text, toPay.map((r) => r.personId)) : null}
-          {copyButton(copyKey, text)}
+          {copyKey === "paList" ? null : copyButton(copyKey, text)}
         </span>
       ) : null}
     </div>

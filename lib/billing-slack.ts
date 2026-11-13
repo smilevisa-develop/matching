@@ -18,7 +18,7 @@ import { prisma } from "@/lib/prisma";
 import type { PersonBilling } from "@/generated/prisma/client";
 import { billingPatchForStep, stepDoneFromBilling, writeBillingToSheet, type LedgerStepKey } from "@/lib/billing-ledger";
 import { saveInvoicePdf, type InvoiceKind } from "@/lib/billing-invoice";
-import { billingChannelRole, downloadSlackFile, slackConfig, slackPost, slackUpdate, textSections, textWithButton } from "@/lib/slack";
+import { billingChannelRole, downloadSlackFile, slackApi, slackConfig, slackPost, slackUpdate, textSections, textWithButton } from "@/lib/slack";
 import { todayJst } from "@/lib/deal-stages";
 import { BILLING_TEST } from "@/lib/billing-test-mode";
 
@@ -141,7 +141,7 @@ const peopleLine = (people: Cand[]) => people.map((c) => `・${c.name}（請求I
 type SlackFile = { name?: string; filetype?: string; mimetype?: string; url_private_download?: string; url_private?: string };
 
 /** スレッド (チャンネル) に貼られたファイルを処理する */
-export async function handleSlackFiles(ev: { channel: string; ts: string; thread_ts?: string; text?: string; files?: SlackFile[] }) {
+export async function handleSlackFiles(ev: { channel: string; ts: string; thread_ts?: string; user?: string; text?: string; files?: SlackFile[] }) {
   const thread = ev.thread_ts ?? ev.ts;
   const pdfs = (ev.files ?? []).filter((f) => f.filetype === "pdf" || f.mimetype === "application/pdf" || /\.pdf$/i.test(f.name ?? ""));
   if (pdfs.length === 0) return;
@@ -152,7 +152,7 @@ export async function handleSlackFiles(ev: { channel: string; ts: string; thread
       const role = billingChannelRole(ev.channel);
       // パートナーのチャンネル: PA が作るファイル名はばらばらなので、今月の PA 請求から選んでもらう
       if (role === "partner") {
-        await askPartnerInvoice(ev.channel, thread, f, fileName, ev.text ?? "", cands);
+        await askPartnerInvoice(ev.channel, thread, f, fileName, ev.text ?? "", cands, ev.user, ev.thread_ts);
         continue;
       }
       const m = matchInvoice(cands, fileName, ev.text ?? "", role === "customer" ? "invoice" : undefined);
@@ -190,7 +190,9 @@ export async function handleSlackFiles(ev: { channel: string; ts: string; thread
 const cut = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1) + "…" : t);
 
 /** PA の請求書: だれの分かを選ぶメニューをスレッドに出す (選んで「保存する」で Drive に保存) */
-async function askPartnerInvoice(channel: string, thread: string, f: SlackFile, fileName: string, text: string, cands: Cand[]) {
+/** 貼った人だけに見えるメニュー (ポップのように、貼った直後にその場に出る)。
+ *  ファイルを貼っただけではモーダルは開けない (Slack の決まり) ので、本人だけに見えるメッセージで出す */
+async function askPartnerInvoice(channel: string, thread: string, f: SlackFile, fileName: string, text: string, cands: Cand[], user?: string, inThread?: string) {
   const fileUrl = f.url_private_download ?? f.url_private;
   if (!fileUrl) throw new Error("ファイルの URL がありません");
   // 今月の PA 請求 = パートナー経由で、企業への請求は済んでいて、PA の請求書がまだ届いていない人 (入社の新しい順)
@@ -216,17 +218,34 @@ async function askPartnerInvoice(channel: string, thread: string, f: SlackFile, 
     },
     { type: "section", text: { type: "mrkdwn", text: "② 保存する" }, accessory: { type: "button", text: { type: "plain_text", text: "保存する" }, style: "primary", action_id: "pa_save" } },
   ];
+  if (user) {
+    // 先に控えを作って、その番号を「保存する」に持たせる (本人だけのメッセージは後から ts で探せないため)
+    const post = await prisma.slackBillingPost.create({ data: { channel, ts: `eph-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, kind: "paPick", personIds: [], data: { fileUrl, fileName, thread } } });
+    const withId = blocks.map((b) => (b.accessory?.action_id === "pa_save" ? { ...b, accessory: { ...b.accessory, value: String(post.id) } } : b));
+    const r = await slackApi("chat.postEphemeral", { channel, user, text: `${fileName} はだれの請求書ですか？`, blocks: withId, ...(inThread ? { thread_ts: inThread } : {}) });
+    if (r.ok) return;
+    await prisma.slackBillingPost.delete({ where: { id: post.id } });
+  }
   const r = await slackPost(channel, `${fileName} はだれの請求書ですか？`, thread, blocks);
   if (r.ts) await prisma.slackBillingPost.create({ data: { channel, ts: r.ts, kind: "paPick", personIds: [], data: { fileUrl, fileName, thread } } });
 }
 
+/** 本人だけのメッセージを差し替える (ボタンの response_url) */
+async function respond(url: string, body: Record<string, unknown>) {
+  await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
+}
+
 /** PA の請求書のメニューで「保存する」が押された */
-export async function handlePartnerInvoicePick(p: { channel: string; ts: string; personIds: number[]; userName: string }) {
-  const post = await prisma.slackBillingPost.findUnique({ where: { channel_ts: { channel: p.channel, ts: p.ts } } });
-  if (!post || post.kind !== "paPick") return;
+export async function handlePartnerInvoicePick(p: { channel: string; ts: string; postId?: number; responseUrl?: string; personIds: number[]; userName: string }) {
+  const post = p.postId
+    ? await prisma.slackBillingPost.findUnique({ where: { id: p.postId } })
+    : await prisma.slackBillingPost.findUnique({ where: { channel_ts: { channel: p.channel, ts: p.ts } } });
+  if (!post || post.kind !== "paPick" || post.channel !== p.channel) return;
   const d = post.data as { fileUrl: string; fileName: string; thread: string };
+  const ephemeral = post.ts.startsWith("eph-") && !!p.responseUrl;
   if (p.personIds.length === 0) {
-    await slackPost(p.channel, "⚠️ 内定者を選んでから「保存する」を押してください", d.thread);
+    if (ephemeral) await respond(p.responseUrl!, { response_type: "ephemeral", replace_original: false, text: "⚠️ 内定者を選んでから「保存する」を押してください" });
+    else await slackPost(p.channel, "⚠️ 内定者を選んでから「保存する」を押してください", d.thread);
     return;
   }
   // 2 回押されても 1 回だけ保存する
@@ -243,7 +262,8 @@ export async function handlePartnerInvoicePick(p: { channel: string; ts: string;
       by: p.userName || BY,
     });
     const text = [`✅ パートナーの請求書を保存して「受領済」にしました`, peopleLine(people), "", linksBlock(saved.url)].join("\n");
-    await slackUpdate(p.channel, p.ts, text, textSections(text));
+    if (ephemeral) await respond(p.responseUrl!, { replace_original: true, text, blocks: textSections(text) });
+    else await slackUpdate(p.channel, p.ts, text, textSections(text));
     await prisma.slackBillingPost.update({ where: { id: post.id }, data: { kind: "paDone", personIds: people.map((c) => c.personId) } });
     await postTransferRequest(p.channel, d.thread, people.map((c) => c.personId));
   } catch (e) {

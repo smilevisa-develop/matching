@@ -25,7 +25,8 @@ export async function POST(req: Request) {
     const picked: { value: string }[] = payload.state?.values?.pa?.pa_pick?.selected_options ?? [];
     after(async () => {
       try {
-        await handlePartnerInvoicePick({ channel, ts, personIds: picked.map((o) => Number(o.value)), userName: payload.user?.name ?? "" });
+        const postId = Number(action.value) || undefined;
+        await handlePartnerInvoicePick({ channel, ts, postId, responseUrl: payload.response_url, personIds: picked.map((o) => Number(o.value)), userName: payload.user?.name ?? "" });
       } catch (e) {
         console.warn("PA の請求書の保存に失敗:", e);
         const { slackPost } = await import("@/lib/slack");
