@@ -65,9 +65,23 @@ export async function slackUpdate(channel: string, ts: string, text: string, blo
 }
 
 /** 文 + ボタン 1 つのメッセージ (Block Kit) */
+/** 長い文は Slack が「もっと表示」でたたむので、空行ごとに段を分けて常に全部見せる */
+export function textSections(text: string) {
+  return text
+    .split(/\n{2,}/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => ({ type: "section", text: { type: "mrkdwn", text: t } }));
+}
+
+/** ボタン付きの投稿から、元の文 (段を空行でつないだもの) を取り出す */
+export function textOfBlocks(blocks: { type: string; text?: { text?: string } }[] | undefined) {
+  return (blocks ?? []).filter((b) => b.type === "section" && b.text?.text).map((b) => b.text!.text!).join("\n\n");
+}
+
 export function textWithButton(text: string, button: { label: string; actionId: string; style?: "primary" | "danger" }, note?: string) {
   return [
-    { type: "section", text: { type: "mrkdwn", text } },
+    ...textSections(text),
     ...(note ? [{ type: "context", elements: [{ type: "mrkdwn", text: note }] }] : []),
     {
       type: "actions",

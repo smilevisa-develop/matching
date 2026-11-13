@@ -5,7 +5,7 @@
  */
 
 import { after } from "next/server";
-import { billingChannelRole, verifySlackRequest } from "@/lib/slack";
+import { billingChannelRole, textOfBlocks, verifySlackRequest } from "@/lib/slack";
 import { handlePartnerInvoicePick, handleSlackButton } from "@/lib/billing-slack";
 
 export const runtime = "nodejs";
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   }
   if (action.action_id !== "billing_done" && action.action_id !== "billing_undo") return new Response("");
   // 元の文 (ボタンの上の段) はそのまま残す
-  const text: string = payload.message?.blocks?.find((b: { type: string }) => b.type === "section")?.text?.text ?? payload.message?.text ?? "";
+  const text: string = textOfBlocks(payload.message?.blocks) || payload.message?.text || "";
   after(async () => {
     try {
       await handleSlackButton({ channel, ts, actionId: action.action_id, userId: payload.user?.id ?? "", userName: payload.user?.name ?? "", text });

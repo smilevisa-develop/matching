@@ -18,13 +18,15 @@ import { prisma } from "@/lib/prisma";
 import type { PersonBilling } from "@/generated/prisma/client";
 import { billingPatchForStep, stepDoneFromBilling, writeBillingToSheet, type LedgerStepKey } from "@/lib/billing-ledger";
 import { saveInvoicePdf, type InvoiceKind } from "@/lib/billing-invoice";
-import { billingChannelRole, downloadSlackFile, slackConfig, slackPost, slackUpdate, textWithButton } from "@/lib/slack";
+import { billingChannelRole, downloadSlackFile, slackConfig, slackPost, slackUpdate, textSections, textWithButton } from "@/lib/slack";
 import { todayJst } from "@/lib/deal-stages";
 
 const BY = "Slack";
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1S5wQF99n_-1nka8KNjrxKmrjCPQKIauRuDXjlSZi8hY/edit?gid=641093054#gid=641093054";
-const SHEET_LINK = `📊 <${SHEET_URL}|請求管理スプシ>`;
-const pdfLink = (url: string) => `📄 <${url}|請求書 PDF>`;
+const SHEET_LINK = `請求管理スプシ：<${SHEET_URL}|スプシを開く>`;
+const LINE = "ーーーーーーーーーーーー";
+/** 請求書：PDF を開く / 請求管理スプシ：スプシを開く / ーーー */
+const linksBlock = (pdfUrl: string) => [`請求書：<${pdfUrl}|PDF を開く>`, SHEET_LINK, LINE].join("\n");
 const CHECKS = new Set(["white_check_mark", "heavy_check_mark", "ballot_box_with_check", "o", "ok"]);
 
 type Cand = { personId: number; invoiceNo: string; name: string; company: string; partner: string; b: PersonBilling };
@@ -164,11 +166,12 @@ export async function handleSlackFiles(ev: { channel: string; ts: string; thread
       });
       if (m.kind === "invoice") {
         const company = m.people[0].company || "企業";
-        const text = [`✅ ${company} への請求書を保存して「請求済」にしました`, peopleLine(m.people), "", `${pdfLink(saved.url)}　${SHEET_LINK}`].join("\n");
+        const text = [`✅ ${company} への請求書を保存して「請求済」にしました`, peopleLine(m.people), "", linksBlock(saved.url)].join("\n");
         const r = await slackPost(ev.channel, text, thread, textWithButton(text, BUTTON.payment, "入金を確認したら押してください"));
         if (r.ts) await prisma.slackBillingPost.create({ data: { channel: ev.channel, ts: r.ts, kind: "invoice", personIds: m.people.map((c) => c.personId) } });
       } else {
-        await slackPost(ev.channel, [`✅ パートナーの請求書を保存して「受領済」にしました`, peopleLine(m.people), "", `${pdfLink(saved.url)}　${SHEET_LINK}`].join("\n"), thread);
+        const t = [`✅ パートナーの請求書を保存して「受領済」にしました`, peopleLine(m.people), "", linksBlock(saved.url)].join("\n");
+        await slackPost(ev.channel, t, thread, textSections(t));
         await postTransferRequest(ev.channel, thread, m.people.map((c) => c.personId));
       }
     } catch (e) {
@@ -196,15 +199,16 @@ async function askPartnerInvoice(channel: string, thread: string, f: SlackFile, 
   const opt = (c: Cand) => ({ text: { type: "plain_text", text: cut(`${c.name}｜${c.partner || "-"}｜${c.company || "-"}`, 75) }, value: String(c.personId) });
   const guess = matchInvoice(cands, fileName, text, "partnerInvoice");
   const pre = "error" in guess ? [] : guess.people.filter((p) => list.some((c) => c.personId === p.personId));
-  // 複数選択のメニューはボタンと同じ段に置けないので、文の段の右に置く
+  // メニューとボタンを右側にそろえる (複数選択のメニューはボタンの段に置けないので、どちらも段の右に置く)
   const blocks = [
+    { type: "section", text: { type: "mrkdwn", text: `📄 *${fileName}*\nだれの請求書ですか？（何人分でも選べます）` } },
     {
       type: "section",
       block_id: "pa",
-      text: { type: "mrkdwn", text: `📄 *${fileName}*\nだれの請求書ですか？ 選んで「保存する」を押してください（何人分でも選べます）` },
+      text: { type: "mrkdwn", text: "① 内定者を選ぶ" },
       accessory: { type: "multi_static_select", action_id: "pa_pick", placeholder: { type: "plain_text", text: "内定者を選ぶ" }, options: list.map(opt), ...(pre.length ? { initial_options: pre.map(opt) } : {}) },
     },
-    { type: "actions", elements: [{ type: "button", text: { type: "plain_text", text: "保存する" }, style: "primary", action_id: "pa_save" }] },
+    { type: "section", text: { type: "mrkdwn", text: "② 保存する" }, accessory: { type: "button", text: { type: "plain_text", text: "保存する" }, style: "primary", action_id: "pa_save" } },
   ];
   const r = await slackPost(channel, `${fileName} はだれの請求書ですか？`, thread, blocks);
   if (r.ts) await prisma.slackBillingPost.create({ data: { channel, ts: r.ts, kind: "paPick", personIds: [], data: { fileUrl, fileName, thread } } });
@@ -232,8 +236,8 @@ export async function handlePartnerInvoicePick(p: { channel: string; ts: string;
       fileName: d.fileName,
       by: p.userName || BY,
     });
-    const text = [`✅ パートナーの請求書を保存して「受領済」にしました`, peopleLine(people), "", `${pdfLink(saved.url)}　${SHEET_LINK}`].join("\n");
-    await slackUpdate(p.channel, p.ts, text, [{ type: "section", text: { type: "mrkdwn", text } }]);
+    const text = [`✅ パートナーの請求書を保存して「受領済」にしました`, peopleLine(people), "", linksBlock(saved.url)].join("\n");
+    await slackUpdate(p.channel, p.ts, text, textSections(text));
     await prisma.slackBillingPost.update({ where: { id: post.id }, data: { kind: "paDone", personIds: people.map((c) => c.personId) } });
     await postTransferRequest(p.channel, d.thread, people.map((c) => c.personId));
   } catch (e) {
@@ -257,9 +261,10 @@ async function postTransferRequest(channel: string, thread: string, personIds: n
       `手数料：${man(c.b.partnerCost)}`,
       `振込期日：${slash(c.b.partnerPaidDate)}`,
       ...(c.b.partnerInvoiceUrl ? [`請求書：<${c.b.partnerInvoiceUrl}|PDF を開く>`] : []),
-      "ーーーーーーーーーーーー",
+      SHEET_LINK,
+      LINE,
+      "",
     ]),
-    SHEET_LINK,
   ].join("\n");
   const r = await slackPost(channel, text, thread, textWithButton(text, BUTTON.partnerPayment, "振り込んだら押してください"));
   if (!r.ts) return;
@@ -323,7 +328,8 @@ export async function postBillingThread(text: string) {
   const { channel } = slackConfig();
   if (!channel) throw new Error("SLACK_BILLING_CHANNEL が未設定です");
   const body = text.replace(/^@kawamura cc @APRILIA CINDY MARANATHA ROHI/, mention("@kawamura cc @APRILIA CINDY MARANATHA ROHI"));
-  const r = await slackPost(channel, `${body}\n\n${SHEET_LINK}\n請求書の PDF はこのスレッドに貼ってください`);
+  const all = `${body}\n\n${SHEET_LINK}\n${LINE}\n請求書の PDF はこのスレッドに貼ってください`;
+  const r = await slackPost(channel, all, undefined, textSections(all));
   if (!r.ok || !r.ts) throw new Error(`Slack に投稿できませんでした: ${r.error ?? ""}`);
   await prisma.slackBillingPost.create({ data: { channel, ts: r.ts, kind: "thread", personIds: [] } });
   return { ts: r.ts };
