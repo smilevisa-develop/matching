@@ -52,7 +52,7 @@ export async function slackApi<T = Record<string, unknown>>(method: string, body
     body: JSON.stringify(body),
   });
   const json = (await res.json()) as T & { ok: boolean; error?: string };
-  if (!json.ok) console.warn(`Slack ${method} に失敗:`, json.error);
+  if (!json.ok) console.warn(`Slack ${method} に失敗:`, json.error, JSON.stringify((json as { response_metadata?: unknown }).response_metadata ?? ""));
   return json;
 }
 

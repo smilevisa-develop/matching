@@ -196,16 +196,15 @@ async function askPartnerInvoice(channel: string, thread: string, f: SlackFile, 
   const opt = (c: Cand) => ({ text: { type: "plain_text", text: cut(`${c.name}｜${c.partner || "-"}｜${c.company || "-"}`, 75) }, value: String(c.personId) });
   const guess = matchInvoice(cands, fileName, text, "partnerInvoice");
   const pre = "error" in guess ? [] : guess.people.filter((p) => list.some((c) => c.personId === p.personId));
+  // 複数選択のメニューはボタンと同じ段に置けないので、文の段の右に置く
   const blocks = [
-    { type: "section", text: { type: "mrkdwn", text: `📄 *${fileName}*\nだれの請求書ですか？ 選んで「保存する」を押してください（何人分でも選べます）` } },
     {
-      type: "actions",
+      type: "section",
       block_id: "pa",
-      elements: [
-        { type: "multi_static_select", action_id: "pa_pick", placeholder: { type: "plain_text", text: "内定者を選ぶ" }, options: list.map(opt), ...(pre.length ? { initial_options: pre.map(opt) } : {}) },
-        { type: "button", text: { type: "plain_text", text: "保存する" }, style: "primary", action_id: "pa_save" },
-      ],
+      text: { type: "mrkdwn", text: `📄 *${fileName}*\nだれの請求書ですか？ 選んで「保存する」を押してください（何人分でも選べます）` },
+      accessory: { type: "multi_static_select", action_id: "pa_pick", placeholder: { type: "plain_text", text: "内定者を選ぶ" }, options: list.map(opt), ...(pre.length ? { initial_options: pre.map(opt) } : {}) },
     },
+    { type: "actions", elements: [{ type: "button", text: { type: "plain_text", text: "保存する" }, style: "primary", action_id: "pa_save" }] },
   ];
   const r = await slackPost(channel, `${fileName} はだれの請求書ですか？`, thread, blocks);
   if (r.ts) await prisma.slackBillingPost.create({ data: { channel, ts: r.ts, kind: "paPick", personIds: [], data: { fileUrl, fileName, thread } } });
