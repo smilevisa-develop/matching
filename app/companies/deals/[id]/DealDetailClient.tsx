@@ -346,7 +346,6 @@ export default function DealDetailClient({
             ) : null}
           </div>
           <div className="flex gap-2">
-            {!editing ? <ShareListButton dealId={currentDeal.id} initialToken={currentDeal.shareToken} /> : null}
             {!editing ? (
               <button
                 type="button"
@@ -523,6 +522,14 @@ export default function DealDetailClient({
           >
             {adding ? "追加中..." : "候補者を追加"}
           </button>
+          <button
+            type="button"
+            onClick={() => setRecommendationOpen(true)}
+            className="rounded-lg border-2 border-[var(--color-primary)] bg-white px-5 py-1.5 text-sm font-bold text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+          >
+            推薦リスト作成
+          </button>
+          <ShareListButton dealId={currentDeal.id} initialToken={currentDeal.shareToken} />
         </div>
 
         <div className="mt-4">
@@ -794,14 +801,14 @@ function ShareListButton({ dealId, initialToken }: { dealId: number; initialToke
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="rounded-lg border border-[var(--color-primary)] bg-white px-4 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+        className="rounded-lg border-2 border-[var(--color-primary)] bg-white px-5 py-1.5 text-sm font-bold text-[var(--color-primary)] hover:bg-[var(--color-light)]"
       >
         企業に共有{token ? "中" : ""}
       </button>
       {open ? (
         <div className="absolute right-0 z-40 mt-2 w-[360px] rounded-xl border border-gray-200 bg-white p-4 text-sm shadow-xl">
           <p className="font-bold text-[var(--color-text-dark)]">推薦リストの共有 URL</p>
-          <p className="mt-1 text-xs font-medium text-gray-700">企業はログインなしで開けます。進捗・面接時間・備考を企業が書くと、このカンバンに反映されます。個人情報が載るので、渡す相手に注意してください。</p>
+          <p className="mt-1 text-xs font-medium text-gray-700">企業はログインなしで見られます (書き換えはできません)。このカンバンや候補者の情報を変えると、開くたびに最新の内容が出ます。個人情報が載るので、渡す相手に注意してください。</p>
           {token ? (
             <>
               <input readOnly value={url} onFocus={(e) => e.target.select()} className="mt-3 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-900" />

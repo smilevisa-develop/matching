@@ -86,9 +86,8 @@ export function proxy(request: NextRequest) {
     // SNS のプロフィールの相談リンク (押した数を数えて相談先へ飛ばす) と、相談を始めた人の記録 (Apps Script から呼ばれる)
     pathname.startsWith("/go/") ||
     pathname === "/api/sns/inquiry" ||
-    // 企業向けの推薦リスト (token 認証。企業は進捗・面接時間・メモを書ける)
-    pathname.startsWith("/list/") ||
-    pathname.startsWith("/api/list/")
+    // 企業向けの推薦リスト (見るだけ・token 認証)
+    pathname.startsWith("/list/")
   ) {
     return NextResponse.next();
   }

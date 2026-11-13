@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { sanitizeRecommendationColumns } from "@/lib/recommendation-columns";
 import { buildRecommendationCellValue, getRecommendationColumnLabel } from "@/lib/recommendation-row";
 import { resolveDriveNames } from "@/lib/recommendation-links";
-import { companyStageOptions } from "@/lib/share-list";
 import ShareListTable, { type ShareCell, type ShareRow } from "./ShareListTable";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +14,8 @@ const HIDDEN_STAGES = new Set(["書類NG", "面談NG"]);
 
 /**
  * 企業向けの推薦リスト。GET /list/{Deal.shareToken}。ログインなしで開ける。
- * 列は推薦リストのスプシと同じ (ID・進捗・設定の列・面接時間・備考)。開くたびにアプリの今の内容を出す。
- * 企業は 進捗・面接時間・備考 をこの画面で書け、アプリに反映される (/api/list/[token])。
+ * 列は推薦リストのスプシと同じ (ID・進捗・設定の列)。開くたびにアプリの今の内容を出す。
+ * 見るだけ (2026/11 土田さん: アプリを直せば自動で変わるので、企業の編集はなし)。
  * 見た目は表計算に近い表 (2026/11 土田さん: Google のまねはせず、Airtable のように見やすく親しみやすく)
  */
 export default async function ShareListPage({ params }: { params: Promise<{ token: string }> }) {
@@ -56,8 +55,6 @@ export default async function ShareListPage({ params }: { params: Promise<{ toke
     id: c.id,
     personId: String(c.person.id),
     stage: c.stage ?? "",
-    interviewTime: c.interviewTime ?? "",
-    companyNote: c.companyNote ?? "",
     cells: columns.map((k): ShareCell => {
       const v = buildRecommendationCellValue(c, k);
       if (typeof v === "string" && v.startsWith("http")) return { text: names.get(v) ?? "開く", href: v };
@@ -68,13 +65,11 @@ export default async function ShareListPage({ params }: { params: Promise<{ toke
 
   return (
     <ShareListTable
-      token={token}
       companyName={deal.company.name}
       dealTitle={deal.title}
       updated={updated}
       header={header}
       rows={rows}
-      stageOptions={companyStageOptions(deal.company.companyKind)}
     />
   );
 }
