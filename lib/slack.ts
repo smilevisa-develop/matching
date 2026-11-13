@@ -4,7 +4,8 @@
  * 環境変数 (Coolify に入れる。未設定なら何もしない):
  *   SLACK_BOT_TOKEN        … ボットのトークン (xoxb-)
  *   SLACK_SIGNING_SECRET   … Slack から届いたイベントの確認用
- *   SLACK_BILLING_CHANNEL  … 請求スレッドを立てるチャンネルの ID (C… / G…)。最初は土田さんだけのテスト用チャンネル
+ *   SLACK_BILLING_CHANNEL  … お客様 (企業への請求) のチャンネルの ID (C… / G…)。本番は「請求管理_to_お客様」。最初は土田さんだけのテスト用チャンネル
+ *   SLACK_PARTNER_CHANNEL  … パートナー (PA への支払い) のチャンネルの ID。本番は「請求管理_to_パートナー」。無ければお客様と同じチャンネル
  *   SLACK_BILLING_MENTION  … 依頼の先頭に付けるメンション (例 "<@U123> cc <@U456>")。無ければ文字のまま
  */
 
@@ -14,8 +15,19 @@ export const slackConfig = () => ({
   token: process.env.SLACK_BOT_TOKEN?.trim() || "",
   secret: process.env.SLACK_SIGNING_SECRET?.trim() || "",
   channel: process.env.SLACK_BILLING_CHANNEL?.trim() || "",
+  partnerChannel: process.env.SLACK_PARTNER_CHANNEL?.trim() || process.env.SLACK_BILLING_CHANNEL?.trim() || "",
   mention: process.env.SLACK_BILLING_MENTION?.trim() || "",
 });
+
+/** 請求で見るチャンネルか。お客様用 / パートナー用 / 両方 (同じチャンネルのとき) */
+export function billingChannelRole(channel: string | undefined): "customer" | "partner" | "both" | null {
+  const { channel: c, partnerChannel: p } = slackConfig();
+  if (!channel || !c) return null;
+  if (channel === c && channel === p) return "both";
+  if (channel === c) return "customer";
+  if (channel === p) return "partner";
+  return null;
+}
 
 /** Slack から届いたリクエストか確かめる (署名と 5 分以内の時刻) */
 export function verifySlackRequest(rawBody: string, headers: Headers): boolean {

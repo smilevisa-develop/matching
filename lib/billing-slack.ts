@@ -3,6 +3,8 @@
  * 川村さんは Slack だけ見ればよく、アプリ (/billing) は確認と修正に使う。
  *
  *   1. /billing の「Slack に投稿」で、川村さんへの請求書の発行依頼をチャンネルに投稿 (= その月の請求スレッド)
+ *      お客様とパートナーはチャンネルを分けられる (SLACK_BILLING_CHANNEL / SLACK_PARTNER_CHANNEL)。
+ *      お客様のチャンネルの PDF は企業への請求書、パートナーのチャンネルの PDF はパートナーの請求書として読む
  *   2. スレッド (チャンネル) に PDF が貼られたら、だれの請求書かを読んで Drive に保存し、段階を済にする
  *      - 企業への請求書: ファイル名の「〇〇御中」やメッセージの企業名・請求ID から。同じ企業の何人分かは全員に入れる
  *      - パートナーの請求書: 請求ID・候補者名・パートナー名から。保存したら川村さんへの振込依頼をスレッドに出す
@@ -16,7 +18,7 @@ import { prisma } from "@/lib/prisma";
 import type { PersonBilling } from "@/generated/prisma/client";
 import { billingPatchForStep, stepDoneFromBilling, writeBillingToSheet, type LedgerStepKey } from "@/lib/billing-ledger";
 import { saveInvoicePdf, type InvoiceKind } from "@/lib/billing-invoice";
-import { downloadSlackFile, slackConfig, slackPost, slackUpdate, textWithButton } from "@/lib/slack";
+import { billingChannelRole, downloadSlackFile, slackConfig, slackPost, slackUpdate, textWithButton } from "@/lib/slack";
 import { todayJst } from "@/lib/deal-stages";
 
 const BY = "Slack";
@@ -67,7 +69,8 @@ const hasPartner = (c: Cand) => c.b.route !== "自社" && !!c.partner;
 const recent = (ymd: string | null, days: number) => !!ymd && Date.now() - new Date(`${ymd}T00:00:00+09:00`).getTime() < days * 86400_000;
 
 /** 貼られた PDF がだれの、どちらの請求書かを決める */
-export function matchInvoice(cands: Cand[], fileName: string, text: string): { kind: InvoiceKind; people: Cand[] } | { error: string } {
+/** only = チャンネルで決まっているとき (お客様のチャンネル = 企業への請求書 / パートナーのチャンネル = パートナーの請求書) */
+export function matchInvoice(cands: Cand[], fileName: string, text: string, only?: InvoiceKind): { kind: InvoiceKind; people: Cand[] } | { error: string } {
   const base = fileName.replace(/\.pdf$/i, "");
   const all = `${text}\n${base}`;
   const nAll = norm(all);
@@ -85,17 +88,20 @@ export function matchInvoice(cands: Cand[], fileName: string, text: string): { k
     const people = cands.filter((c) => ids.includes(String(Number(c.invoiceNo))));
     if (people.length === 0) return { error: `請求ID ${ids.join("・")} の人が見つかりませんでした` };
     // 宛名がその人の企業 = 企業への請求書。そうでなく、パートナー経由で企業の請求が済んでいれば パートナーの請求書
+    if (only) return { kind: only, people };
     const toCompany = people.some(companyHit) || people.every((c) => !hasPartner(c) || !done(c, "invoice"));
     return { kind: toCompany ? "invoice" : "partnerInvoice", people };
   }
 
   // 2) 企業への請求書 (宛名・メッセージの企業名)。まだ請求していない人を優先、全員済なら最近の差し替え
-  const byCompany = cands.filter(companyHit);
+  const byCompany = only === "partnerInvoice" ? [] : cands.filter(companyHit);
   if (byCompany.length) {
     const open = byCompany.filter((c) => !done(c, "invoice"));
     const people = open.length ? open : byCompany.filter((c) => recent(c.b.invoiceDate, 60));
     if (people.length) return { kind: "invoice", people };
   }
+
+  if (only === "invoice") return { error: "どの企業の請求書か分かりませんでした" };
 
   // 3) パートナーの請求書 (候補者名、無ければパートナー名で 1 人に絞れたとき)
   const pending = cands.filter((c) => hasPartner(c) && !done(c, "partnerInvoice"));
@@ -135,7 +141,8 @@ export async function handleSlackFiles(ev: { channel: string; ts: string; thread
     const fileName = f.name ?? "請求書.pdf";
     try {
       const cands = await loadCandidates();
-      const m = matchInvoice(cands, fileName, ev.text ?? "");
+      const role = billingChannelRole(ev.channel);
+      const m = matchInvoice(cands, fileName, ev.text ?? "", role === "customer" ? "invoice" : role === "partner" ? "partnerInvoice" : undefined);
       if ("error" in m) {
         await slackPost(ev.channel, `⚠️ ${fileName}\n${m.error}。メッセージに「請求ID 85」のように書いて、もう一度貼ってください。`, thread);
         continue;

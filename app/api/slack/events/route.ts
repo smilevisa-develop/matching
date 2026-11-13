@@ -7,7 +7,7 @@
 
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { slackConfig, verifySlackRequest } from "@/lib/slack";
+import { billingChannelRole, verifySlackRequest } from "@/lib/slack";
 import { handleSlackFiles, handleSlackReaction } from "@/lib/billing-slack";
 
 export const runtime = "nodejs";
@@ -21,10 +21,9 @@ export async function POST(req: Request) {
   if (body.type !== "event_callback" || !body.event) return new Response("ok");
 
   const ev = body.event;
-  const { channel } = slackConfig();
-  // 決めたチャンネルだけ。ボット自身の投稿は見ない
+  // 請求のチャンネル (お客様 / パートナー) だけ。ボット自身の投稿は見ない
   const evChannel = ev.channel ?? ev.item?.channel;
-  if (!channel || evChannel !== channel || ev.bot_id) return new Response("ok");
+  if (!billingChannelRole(evChannel) || ev.bot_id) return new Response("ok");
   // 同じイベントを 2 回処理しない
   try {
     await prisma.slackEventSeen.create({ data: { id: String(body.event_id) } });
