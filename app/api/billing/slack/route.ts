@@ -13,20 +13,9 @@ export async function POST(req: Request) {
   try {
     await requireApiAccount();
     const { text, kind, personIds } = await req.json().catch(() => ({}));
-    if (typeof text !== "string" || !text.trim())
-      return Response.json(
-        { ok: false, error: "投稿する内容がありません" },
-        { status: 400 },
-      );
-    const r =
-      kind === "pay"
-        ? await postTransferList(
-            text,
-            (Array.isArray(personIds) ? personIds : [])
-              .map(Number)
-              .filter((n: number) => Number.isInteger(n) && n > 0),
-          )
-        : await postBillingThread(text);
+    if (typeof text !== "string" || !text.trim()) return Response.json({ ok: false, error: "投稿する内容がありません" }, { status: 400 });
+    const ids = (Array.isArray(personIds) ? personIds : []).map(Number).filter((n: number) => Number.isInteger(n) && n > 0);
+    const r = kind === "pay" ? await postTransferList(text, ids) : await postBillingThread(text);
     return Response.json({ ok: true, ...r });
   } catch (error) {
     return Response.json(
