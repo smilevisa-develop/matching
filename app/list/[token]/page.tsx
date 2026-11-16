@@ -7,7 +7,23 @@ import { resolveDriveNames } from "@/lib/recommendation-links";
 import ShareListTable, { type ShareCell, type ShareRow } from "./ShareListTable";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "推薦リスト", robots: { index: false, follow: false } };
+const SHARE_DESCRIPTION = "ご紹介する候補者の一覧です。";
+
+/** リンクのプレビュー (Slack・LINE など) に社内向けの説明が出ないよう、このページ用に上書きする */
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  const deal = token && token.length >= 16
+    ? await prisma.deal.findUnique({ where: { shareToken: token }, select: { company: { select: { name: true } } } })
+    : null;
+  const title = deal ? `${deal.company.name} 様 推薦リスト` : "推薦リスト";
+  return {
+    title,
+    description: SHARE_DESCRIPTION,
+    openGraph: { title, description: SHARE_DESCRIPTION, siteName: "SMILE MATCHING", type: "website" },
+    twitter: { card: "summary", title, description: SHARE_DESCRIPTION },
+    robots: { index: false, follow: false },
+  };
+}
 
 /** 社内だけの不合格 (推薦する前に外した人)。企業には見せない */
 const HIDDEN_STAGES = new Set(["書類NG", "面談NG"]);
@@ -55,6 +71,8 @@ export default async function ShareListPage({ params }: { params: Promise<{ toke
     id: c.id,
     personId: String(c.person.id),
     stage: c.stage ?? "",
+    interviewTime: c.interviewTime ?? "",
+    note: c.companyNote ?? "",
     cells: columns.map((k): ShareCell => {
       const v = buildRecommendationCellValue(c, k);
       if (typeof v === "string" && v.startsWith("http")) return { text: names.get(v) ?? "開く", href: v };

@@ -19,7 +19,7 @@ export type CandidateCard = {
   id: number;
   note: string | null;
   stage: string;
-  /** 企業が共有の推薦リストで書いた面接時間・メモ */
+  /** 企業に見せる推薦リストの「面接可能な時間帯」「備考」(社内で入れる) */
   interviewTime?: string | null;
   companyNote?: string | null;
   person: {
@@ -82,6 +82,7 @@ export default function CandidateKanban({
   candidates,
   onMove,
   onRemove,
+  onEditListInfo,
   companyKind = "通常",
   layout = "split",
 }: {
@@ -98,6 +99,8 @@ export default function CandidateKanban({
   onMove: (candidateId: number, stage: string, date: string | null) => void;
   /** カードの × を押したとき (このカンバンから外す。確認と保存は呼び出し側) */
   onRemove?: (candidate: CandidateCard) => void;
+  /** カードの ✎ を押したとき (推薦リストの面接可能な時間帯・備考を入れる) */
+  onEditListInfo?: (candidate: CandidateCard) => void;
 }) {
   const [draggingCandidateId, setDraggingCandidateId] = useState<number | null>(null);
   // いまカードを重ねている列 (ドロップ先を光らせる)
@@ -226,6 +229,21 @@ export default function CandidateKanban({
                     ✕
                   </button>
                 ) : null}
+                {onEditListInfo ? (
+                  <button
+                    type="button"
+                    aria-label="推薦リストの面接可能な時間帯・備考"
+                    title="推薦リストの面接可能な時間帯・備考"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onEditListInfo(candidate);
+                    }}
+                    className="absolute right-7 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] leading-none text-gray-600 shadow-sm hover:bg-[var(--color-light)] hover:text-[var(--color-primary)] group-hover:flex"
+                  >
+                    ✎
+                  </button>
+                ) : null}
                 <div className="flex items-start gap-1">
                   <PersonAvatar
                     photoUrl={candidate.person.photoUrl}
@@ -246,8 +264,8 @@ export default function CandidateKanban({
                   <p className="mt-1.5 text-[10px] text-gray-500 line-clamp-2">{candidate.note}</p>
                 ) : null}
                 {candidate.interviewTime || candidate.companyNote ? (
-                  <p className="mt-1.5 rounded bg-amber-50 px-1 py-0.5 text-[10px] font-medium text-amber-900 line-clamp-2">
-                    企業: {[candidate.interviewTime ? `面接 ${candidate.interviewTime}` : "", candidate.companyNote ?? ""].filter(Boolean).join(" / ")}
+                  <p className="mt-1.5 rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-medium text-emerald-900 line-clamp-2">
+                    リスト: {[candidate.interviewTime ? `面接可 ${candidate.interviewTime}` : "", candidate.companyNote ?? ""].filter(Boolean).join(" / ")}
                   </p>
                 ) : null}
               </Link>
@@ -379,13 +397,13 @@ function HoverCard({ candidate, rect }: { candidate: CandidateCard; rect: DOMRec
         ) : null}
         {candidate.interviewTime ? (
           <div className="flex gap-2">
-            <dt className="w-20 shrink-0 text-gray-500">面接時間</dt>
-            <dd className="text-gray-800">{candidate.interviewTime}（企業が入力）</dd>
+            <dt className="w-20 shrink-0 text-gray-500">面接可能</dt>
+            <dd className="text-gray-800">{candidate.interviewTime}</dd>
           </div>
         ) : null}
         {candidate.companyNote ? (
           <div className="flex gap-2">
-            <dt className="w-20 shrink-0 text-gray-500">企業メモ</dt>
+            <dt className="w-20 shrink-0 text-gray-500">リスト備考</dt>
             <dd className="whitespace-pre-wrap text-gray-800">{candidate.companyNote}</dd>
           </div>
         ) : null}
