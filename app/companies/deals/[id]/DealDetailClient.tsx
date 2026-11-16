@@ -75,6 +75,8 @@ export default function DealDetailClient({
   const [editing, setEditing] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [recommendationOpen, setRecommendationOpen] = useState(false);
+  // 企業向けの推薦リスト (共有 URL)。作ったら上と候補者欄の両方の表示が変わる
+  const [shareToken, setShareToken] = useState(deal.shareToken);
   // 編集中の企業の担当者 (空なら 1 行出しておく)
   const [contactsForm, setContactsForm] = useState<CompanyContact[]>([]);
   const [editForm, setEditForm] = useState({
@@ -347,13 +349,7 @@ export default function DealDetailClient({
           </div>
           <div className="flex gap-2">
             {!editing ? (
-              <button
-                type="button"
-                onClick={() => setRecommendationOpen(true)}
-                className="self-start rounded-lg bg-[var(--color-primary)] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[var(--color-primary-hover)]"
-              >
-                推薦リスト作成
-              </button>
+              <ShareListControl dealId={currentDeal.id} token={shareToken} onToken={setShareToken} onFile={() => setRecommendationOpen(true)} small />
             ) : null}
             {!editing ? (
               <button
@@ -522,14 +518,7 @@ export default function DealDetailClient({
           >
             {adding ? "追加中..." : "候補者を追加"}
           </button>
-          <button
-            type="button"
-            onClick={() => setRecommendationOpen(true)}
-            className="rounded-lg border-2 border-[var(--color-primary)] bg-white px-5 py-1.5 text-sm font-bold text-[var(--color-primary)] hover:bg-[var(--color-light)]"
-          >
-            推薦リスト作成
-          </button>
-          <ShareListButton dealId={currentDeal.id} initialToken={currentDeal.shareToken} />
+          <ShareListControl dealId={currentDeal.id} token={shareToken} onToken={setShareToken} onFile={() => setRecommendationOpen(true)} />
         </div>
 
         <div className="mt-4">
@@ -776,12 +765,26 @@ function CounterCell({
 }
 
 
-/** 企業向けの推薦リストの共有 URL (企業はログインなしで見て、進捗・面接時間・備考を書ける) */
-function ShareListButton({ dealId, initialToken }: { dealId: number; initialToken: string | null }) {
-  const [token, setToken] = useState(initialToken);
-  const [open, setOpen] = useState(false);
+/**
+ * 推薦リスト (企業向けの見るだけの URL)。
+ * まだ無い → 「推薦リスト作成」1 つだけ。作ったあと → 「企業に共有中」の印に「開く」「URL をコピー」と「…」(CSV・Drive / 共有をやめる)。
+ */
+function ShareListControl({
+  dealId,
+  token,
+  onToken,
+  onFile,
+  small = false,
+}: {
+  dealId: number;
+  token: string | null;
+  onToken: (t: string | null) => void;
+  onFile: () => void;
+  small?: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [menu, setMenu] = useState(false);
   const url = token && typeof window !== "undefined" ? `${window.location.origin}/list/${token}` : "";
   const call = async (method: "POST" | "DELETE") => {
     setBusy(true);
@@ -789,62 +792,86 @@ function ShareListButton({ dealId, initialToken }: { dealId: number; initialToke
       const res = await fetch(`/api/deals/${dealId}/share`, { method });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) throw new Error(json.error || String(res.status));
-      setToken(method === "POST" ? json.token : null);
+      onToken(method === "POST" ? json.token : null);
     } catch (e) {
       alert(`できませんでした: ${e instanceof Error ? e.message : ""}`);
     } finally {
       setBusy(false);
     }
   };
-  return (
-    <div className="relative self-start">
+  const size = small ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm";
+
+  if (!token) {
+    return (
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="rounded-lg border-2 border-[var(--color-primary)] bg-white px-5 py-1.5 text-sm font-bold text-[var(--color-primary)] hover:bg-[var(--color-light)]"
+        disabled={busy}
+        onClick={() => void call("POST")}
+        title="企業がログインなしで見られる推薦リストの URL を作ります"
+        className={`self-start rounded-lg bg-[var(--color-primary)] font-bold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50 ${size}`}
       >
-        企業に共有{token ? "中" : ""}
+        {busy ? "作成中…" : "推薦リスト作成"}
       </button>
-      {open ? (
-        <div className="absolute right-0 z-40 mt-2 w-[360px] rounded-xl border border-gray-200 bg-white p-4 text-sm shadow-xl">
-          <p className="font-bold text-[var(--color-text-dark)]">推薦リストの共有 URL</p>
-          <p className="mt-1 text-xs font-medium text-gray-700">企業はログインなしで見られます (書き換えはできません)。このカンバンや候補者の情報を変えると、開くたびに最新の内容が出ます。個人情報が載るので、渡す相手に注意してください。</p>
-          {token ? (
-            <>
-              <input readOnly value={url} onFocus={(e) => e.target.select()} className="mt-3 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-900" />
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(url).then(() => {
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1500);
-                    });
-                  }}
-                  className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-bold text-white"
-                >
-                  {copied ? "コピーしました" : "URL をコピー"}
-                </button>
-                <a href={url} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-800">
-                  開く
-                </a>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    if (confirm("共有をやめますか？ 企業はこの URL を開けなくなります")) void call("DELETE");
-                  }}
-                  className="ml-auto text-xs font-bold text-red-700 disabled:opacity-50"
-                >
-                  共有をやめる
-                </button>
-              </div>
-            </>
-          ) : (
-            <button type="button" disabled={busy} onClick={() => void call("POST")} className="mt-3 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">
-              {busy ? "作成中…" : "共有 URL を作る"}
-            </button>
-          )}
+    );
+  }
+
+  return (
+    <div className="relative flex items-center gap-1 self-start rounded-xl border-2 border-emerald-600 bg-emerald-50 p-1">
+      <span className={`flex items-center gap-1.5 font-bold text-emerald-900 ${small ? "px-2 text-xs" : "px-2.5 text-sm"}`}>
+        <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
+        企業に共有中
+      </span>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`rounded-lg bg-emerald-700 font-bold text-white hover:bg-emerald-800 ${small ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm"}`}
+      >
+        推薦リストを開く
+      </a>
+      <button
+        type="button"
+        onClick={() => {
+          void navigator.clipboard.writeText(url).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+        className={`rounded-lg border border-emerald-700 bg-white font-bold text-emerald-900 hover:bg-emerald-100 ${small ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm"}`}
+      >
+        {copied ? "コピーしました" : "URL をコピー"}
+      </button>
+      <button
+        type="button"
+        aria-label="ほかの操作"
+        onClick={() => setMenu((v) => !v)}
+        className={`rounded-lg font-bold text-emerald-900 hover:bg-emerald-100 ${small ? "px-2 py-1 text-xs" : "px-2.5 py-1.5 text-sm"}`}
+      >
+        …
+      </button>
+      {menu ? (
+        <div className="absolute right-0 top-full z-40 mt-1 w-56 rounded-xl border border-gray-200 bg-white py-1 text-sm shadow-xl">
+          <button
+            type="button"
+            onClick={() => {
+              setMenu(false);
+              onFile();
+            }}
+            className="block w-full px-4 py-2 text-left font-medium text-gray-900 hover:bg-gray-50"
+          >
+            CSV・Drive に保存
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setMenu(false);
+              if (confirm("共有をやめますか？ 企業はこの URL を開けなくなります")) void call("DELETE");
+            }}
+            className="block w-full px-4 py-2 text-left font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+          >
+            共有をやめる
+          </button>
         </div>
       ) : null}
     </div>
