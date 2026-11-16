@@ -808,7 +808,7 @@ function ShareListControl({
         disabled={busy}
         onClick={() => void call("POST")}
         title="企業がログインなしで見られる推薦リストの URL を作ります"
-        className={`self-start rounded-lg bg-[var(--color-primary)] font-bold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50 ${size}`}
+        className={`${small ? "self-start" : ""} rounded-lg bg-[var(--color-primary)] font-bold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50 ${size}`}
       >
         {busy ? "作成中…" : "推薦リスト作成"}
       </button>
@@ -816,7 +816,7 @@ function ShareListControl({
   }
 
   return (
-    <div className="relative flex items-center gap-1 self-start rounded-xl border-2 border-emerald-600 bg-emerald-50 p-1">
+    <div className={`relative flex items-center gap-1 rounded-xl border-2 ${small ? "self-start" : ""} border-emerald-600 bg-emerald-50 p-1`}>
       <span className={`flex items-center gap-1.5 font-bold text-emerald-900 ${small ? "px-2 text-xs" : "px-2.5 text-sm"}`}>
         <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
         企業に共有中
