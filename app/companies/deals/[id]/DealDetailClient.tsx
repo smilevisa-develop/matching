@@ -785,7 +785,8 @@ function ShareListControl({
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState(false);
-  const url = token && typeof window !== "undefined" ? `${window.location.origin}/list/${token}` : "";
+  // サーバーで描いたときに href が空になり、案件ページ自身が開いていた (2026-11-18)。リンクは相対パス、コピーだけ完全な URL
+  const path = token ? `/list/${token}` : "";
   const call = async (method: "POST" | "DELETE") => {
     setBusy(true);
     try {
@@ -822,7 +823,7 @@ function ShareListControl({
         企業に共有中
       </span>
       <a
-        href={url}
+        href={path}
         target="_blank"
         rel="noopener noreferrer"
         className={`rounded-lg bg-emerald-700 font-bold text-white hover:bg-emerald-800 ${small ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-sm"}`}
@@ -832,7 +833,7 @@ function ShareListControl({
       <button
         type="button"
         onClick={() => {
-          void navigator.clipboard.writeText(url).then(() => {
+          void navigator.clipboard.writeText(`${window.location.origin}${path}`).then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           });
