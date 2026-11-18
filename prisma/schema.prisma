@@ -1071,6 +1071,8 @@ model DealCandidate {
   /// 企業が共有の推薦リスト (/list/{token}) で書いた面接時間とメモ (2026/11)
   interviewTime    String?
   companyNote      String?
+  /// 共有の推薦リストで直した値 (列のキー → 文字)。候補者の元の情報は変えず、このリストの表示だけ変える
+  listOverrides    Json?
   companyEditedAt  DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

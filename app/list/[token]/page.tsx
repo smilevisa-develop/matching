@@ -31,7 +31,7 @@ const HIDDEN_STAGES = new Set(["書類NG", "面談NG"]);
 /**
  * 企業向けの推薦リスト。GET /list/{Deal.shareToken}。ログインなしで開ける。
  * 列は推薦リストのスプシと同じ (ID・進捗・設定の列)。開くたびにアプリの今の内容を出す。
- * 見るだけ (2026/11 土田さん: アプリを直せば自動で変わるので、企業の編集はなし)。
+ * ふだんは見るだけ。右上の鉛筆 → 暗証番号で、その画面の中だけ直せる (2026-11-18 土田さん。api/list/[token]/edit)。
  * 見た目は表計算に近い表 (2026/11 土田さん: Google のまねはせず、Airtable のように見やすく親しみやすく)
  */
 export default async function ShareListPage({ params }: { params: Promise<{ token: string }> }) {
@@ -75,8 +75,11 @@ export default async function ShareListPage({ params }: { params: Promise<{ toke
     note: c.companyNote ?? "",
     cells: columns.map((k): ShareCell => {
       const v = buildRecommendationCellValue(c, k);
-      if (typeof v === "string" && v.startsWith("http")) return { text: names.get(v) ?? "開く", href: v };
-      return { text: v === null || v === undefined ? "" : String(v) };
+      if (typeof v === "string" && v.startsWith("http")) return { key: k, text: names.get(v) ?? "開く", href: v };
+      const base = v === null || v === undefined ? "" : String(v);
+      // リストの上で直した値 (暗証番号で編集。候補者の元の情報は変えない)
+      const over = (c.listOverrides && typeof c.listOverrides === "object" ? (c.listOverrides as Record<string, unknown>)[k] : undefined);
+      return typeof over === "string" ? { key: k, text: over, base, edited: true } : { key: k, text: base, base };
     }),
   }));
   const updated = new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -86,6 +89,7 @@ export default async function ShareListPage({ params }: { params: Promise<{ toke
       companyName={deal.company.name}
       dealTitle={deal.title}
       updated={updated}
+      token={token}
       header={header}
       rows={rows}
     />
