@@ -82,7 +82,6 @@ export default function CandidateKanban({
   candidates,
   onMove,
   onRemove,
-  onEditListInfo,
   companyKind = "通常",
   layout = "split",
 }: {
@@ -99,9 +98,32 @@ export default function CandidateKanban({
   onMove: (candidateId: number, stage: string, date: string | null) => void;
   /** カードの × を押したとき (このカンバンから外す。確認と保存は呼び出し側) */
   onRemove?: (candidate: CandidateCard) => void;
-  /** カードの ✎ を押したとき (推薦リストの面接可能な時間帯・備考を入れる) */
-  onEditListInfo?: (candidate: CandidateCard) => void;
 }) {
+  // 推薦リストの「面接可能な時間帯」「備考」。カードの ✎ で入れる (企業詳細・進捗管理の両方)
+  const [listInfoSaved, setListInfoSaved] = useState<Record<number, { interviewTime: string | null; companyNote: string | null }>>({});
+  const [listInfo, setListInfo] = useState<{ id: number; label: string; interviewTime: string; companyNote: string } | null>(null);
+  const [savingListInfo, setSavingListInfo] = useState(false);
+  const saveListInfo = async () => {
+    if (!listInfo) return;
+    setSavingListInfo(true);
+    try {
+      const res = await fetch(`/api/deal-candidates/${listInfo.id}/list-info`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interviewTime: listInfo.interviewTime, companyNote: listInfo.companyNote }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) throw new Error(json.error || String(res.status));
+      setListInfoSaved((cur) => ({ ...cur, [listInfo.id]: { interviewTime: json.candidate.interviewTime, companyNote: json.candidate.companyNote } }));
+      setListInfo(null);
+    } catch (e) {
+      alert(`保存できませんでした: ${e instanceof Error ? e.message : ""}`);
+    } finally {
+      setSavingListInfo(false);
+    }
+  };
+  candidates = candidates.map((c) => (listInfoSaved[c.id] ? { ...c, ...listInfoSaved[c.id] } : c));
+
   const [draggingCandidateId, setDraggingCandidateId] = useState<number | null>(null);
   // いまカードを重ねている列 (ドロップ先を光らせる)
   const [overColumn, setOverColumn] = useState<string | null>(null);
@@ -229,7 +251,7 @@ export default function CandidateKanban({
                     ✕
                   </button>
                 ) : null}
-                {onEditListInfo ? (
+                {(
                   <button
                     type="button"
                     aria-label="推薦リストの面接可能な時間帯・備考"
@@ -237,13 +259,18 @@ export default function CandidateKanban({
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
-                      onEditListInfo(candidate);
+                      setListInfo({
+                        id: candidate.id,
+                        label: formatCandidateLabel(candidate.person),
+                        interviewTime: candidate.interviewTime ?? "",
+                        companyNote: candidate.companyNote ?? "",
+                      });
                     }}
                     className="absolute right-7 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] leading-none text-gray-600 shadow-sm hover:bg-[var(--color-light)] hover:text-[var(--color-primary)] group-hover:flex"
                   >
                     ✎
                   </button>
-                ) : null}
+                )}
                 <div className="flex items-start gap-1">
                   <PersonAvatar
                     photoUrl={candidate.person.photoUrl}
@@ -299,6 +326,53 @@ export default function CandidateKanban({
     })()}
 
     {hover && !draggingCandidateId ? <HoverCard candidate={hover.candidate} rect={hover.rect} /> : null}
+
+    {listInfo ? (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onClick={() => setListInfo(null)}>
+        <form
+          onClick={(e) => e.stopPropagation()}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void saveListInfo();
+          }}
+          className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+        >
+          <p className="text-base font-bold text-[var(--color-text-dark)]">{listInfo.label}</p>
+          <p className="mt-1 text-xs font-medium text-gray-700">企業に共有する推薦リストに、このまま出ます。</p>
+          <label className="mt-4 block text-sm font-bold text-gray-800">
+            面接可能な時間帯
+            <input
+              autoFocus
+              value={listInfo.interviewTime}
+              onChange={(e) => setListInfo((cur) => (cur ? { ...cur, interviewTime: e.target.value } : cur))}
+              placeholder="例: 平日 18時以降、土日いつでも"
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal text-gray-900 placeholder:text-gray-500 focus:border-[var(--color-primary)] focus:outline-none"
+            />
+          </label>
+          <label className="mt-3 block text-sm font-bold text-gray-800">
+            備考
+            <textarea
+              rows={3}
+              value={listInfo.companyNote}
+              onChange={(e) => setListInfo((cur) => (cur ? { ...cur, companyNote: e.target.value } : cur))}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal text-gray-900 focus:border-[var(--color-primary)] focus:outline-none"
+            />
+          </label>
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={() => setListInfo(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">
+              やめる
+            </button>
+            <button
+              type="submit"
+              disabled={savingListInfo}
+              className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
+            >
+              {savingListInfo ? "保存中…" : "保存"}
+            </button>
+          </div>
+        </form>
+      </div>
+    ) : null}
 
     {pending && pendingCandidate ? (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onClick={() => setPending(null)}>

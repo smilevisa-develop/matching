@@ -77,30 +77,6 @@ export default function DealDetailClient({
   const [recommendationOpen, setRecommendationOpen] = useState(false);
   // 企業向けの推薦リスト (共有 URL)。作ったら上と候補者欄の両方の表示が変わる
   const [shareToken, setShareToken] = useState(deal.shareToken);
-  // 推薦リストの「面接可能な時間帯」「備考」を入れている候補者
-  const [listInfo, setListInfo] = useState<{ id: number; label: string; interviewTime: string; companyNote: string } | null>(null);
-  const [savingListInfo, setSavingListInfo] = useState(false);
-  const saveListInfo = async () => {
-    if (!listInfo) return;
-    setSavingListInfo(true);
-    try {
-      const res = await fetch(`/api/deal-candidates/${listInfo.id}/list-info`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ interviewTime: listInfo.interviewTime, companyNote: listInfo.companyNote }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.ok) throw new Error(json.error || String(res.status));
-      setCandidates((cur) =>
-        cur.map((c) => (c.id === listInfo.id ? { ...c, interviewTime: json.candidate.interviewTime, companyNote: json.candidate.companyNote } : c))
-      );
-      setListInfo(null);
-    } catch (e) {
-      alert(`保存できませんでした: ${e instanceof Error ? e.message : ""}`);
-    } finally {
-      setSavingListInfo(false);
-    }
-  };
   // 編集中の企業の担当者 (空なら 1 行出しておく)
   const [contactsForm, setContactsForm] = useState<CompanyContact[]>([]);
   const [editForm, setEditForm] = useState({
@@ -353,23 +329,6 @@ export default function DealDetailClient({
                 {normalizeDealStatus(currentDeal.status)}
               </span>
             </div>
-            {!editing ? (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-                <InfoRow label="企業ID" value={currentDeal.company.externalId ?? "未設定"} />
-                <InfoRow label="企業" value={currentDeal.company.name} />
-                <InfoRow label="担当者" value={currentDeal.owner?.name ?? "未設定"} />
-                <InfoRow label="単価" value={formatUnitPrice(currentDeal.unitPrice)} />
-                <InfoRow label="受付日" value={currentDeal.acceptedAt ? new Date(currentDeal.acceptedAt).toLocaleDateString("ja-JP") : "未設定"} />
-                <InfoRow label="期限" value={currentDeal.deadline ? new Date(currentDeal.deadline).toLocaleDateString("ja-JP") : "未設定"} />
-                {currentDeal.company.companyKind === "人材紹介会社" ? null : (
-                  <InfoRow label="分野" value={normalizeSswIndustry(currentDeal.field) ?? "未設定"} />
-                )}
-                <InfoRow label="支援" value={currentDeal.company.supportType ?? "自社支援"} />
-                <InfoRow label="区分" value={currentDeal.company.companyKind ?? "通常"} />
-                <InfoRow label="支援方法" value={currentDeal.company.supportMethod ?? "未設定"} />
-                <ContactsRow contacts={currentDeal.company.contacts} />
-              </div>
-            ) : null}
           </div>
           <div className="flex gap-2">
             {!editing ? (
@@ -395,6 +354,23 @@ export default function DealDetailClient({
             ) : null}
           </div>
         </div>
+        {!editing ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+            <InfoRow label="企業ID" value={currentDeal.company.externalId ?? "未設定"} />
+            <InfoRow label="企業" value={currentDeal.company.name} />
+            <InfoRow label="担当者" value={currentDeal.owner?.name ?? "未設定"} />
+            <InfoRow label="単価" value={formatUnitPrice(currentDeal.unitPrice)} />
+            <InfoRow label="受付日" value={currentDeal.acceptedAt ? new Date(currentDeal.acceptedAt).toLocaleDateString("ja-JP") : "未設定"} />
+            <InfoRow label="期限" value={currentDeal.deadline ? new Date(currentDeal.deadline).toLocaleDateString("ja-JP") : "未設定"} />
+            {currentDeal.company.companyKind === "人材紹介会社" ? null : (
+              <InfoRow label="分野" value={normalizeSswIndustry(currentDeal.field) ?? "未設定"} />
+            )}
+            <InfoRow label="支援" value={currentDeal.company.supportType ?? "自社支援"} />
+            <InfoRow label="区分" value={currentDeal.company.companyKind ?? "通常"} />
+            <InfoRow label="支援方法" value={currentDeal.company.supportMethod ?? "未設定"} />
+            <ContactsRow contacts={currentDeal.company.contacts} />
+          </div>
+        ) : null}
 
         {!editing ? (
           sanitizeDealNotes(currentDeal.notes) ? (
@@ -551,64 +527,9 @@ export default function DealDetailClient({
             candidates={candidates}
             onMove={(id, stage, date) => void moveCandidate(id, stage, date)}
             onRemove={(candidate) => void removeCandidate(candidate)}
-            onEditListInfo={(c) =>
-              setListInfo({
-                id: c.id,
-                label: `${String(c.person.id).padStart(3, "0")} ${c.person.englishName?.trim() || c.person.name}`,
-                interviewTime: c.interviewTime ?? "",
-                companyNote: c.companyNote ?? "",
-              })
-            }
           />
         </div>
       </section>
-
-      {listInfo ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onClick={() => setListInfo(null)}>
-          <form
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void saveListInfo();
-            }}
-            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
-          >
-            <p className="text-base font-bold text-[var(--color-text-dark)]">{listInfo.label}</p>
-            <p className="mt-1 text-xs font-medium text-gray-700">企業に共有する推薦リストに、このまま出ます。</p>
-            <label className="mt-4 block text-sm font-bold text-gray-800">
-              面接可能な時間帯
-              <input
-                autoFocus
-                value={listInfo.interviewTime}
-                onChange={(e) => setListInfo((cur) => (cur ? { ...cur, interviewTime: e.target.value } : cur))}
-                placeholder="例: 平日 18時以降、土日いつでも"
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal text-gray-900 placeholder:text-gray-500 focus:border-[var(--color-primary)] focus:outline-none"
-              />
-            </label>
-            <label className="mt-3 block text-sm font-bold text-gray-800">
-              備考
-              <textarea
-                rows={3}
-                value={listInfo.companyNote}
-                onChange={(e) => setListInfo((cur) => (cur ? { ...cur, companyNote: e.target.value } : cur))}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal text-gray-900 focus:border-[var(--color-primary)] focus:outline-none"
-              />
-            </label>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setListInfo(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">
-                やめる
-              </button>
-              <button
-                type="submit"
-                disabled={savingListInfo}
-                className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50"
-              >
-                {savingListInfo ? "保存中…" : "保存"}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
 
       {recommendationOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
@@ -650,7 +571,7 @@ export default function DealDetailClient({
 /** 企業の担当者 (表示)。1 行に 名前 + 連絡手段 を並べる。押すとメール・リンクを開く */
 function ContactsRow({ contacts }: { contacts: CompanyContact[] }) {
   return (
-    <div className="flex items-start justify-between gap-3 rounded-xl bg-[var(--color-light)] px-3 py-2 sm:col-span-2 lg:col-span-3">
+    <div className="flex items-start justify-between gap-3 rounded-xl bg-[var(--color-light)] px-3 py-2 sm:col-span-2 lg:col-span-2">
       <span className="shrink-0 text-xs text-gray-500">企業の担当者</span>
       {contacts.length === 0 ? (
         <span className="text-sm font-semibold text-[var(--color-text-dark)]">未設定</span>

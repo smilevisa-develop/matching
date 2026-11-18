@@ -35,6 +35,8 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
       stage: true,
       stageDates: true,
       note: true,
+      interviewTime: true,
+      companyNote: true,
       createdAt: true,
       updatedAt: true,
       person: {
@@ -185,6 +187,8 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
         candidates: (d?.candidates ?? []).map((cand) => ({
           id: cand.id,
           note: cand.note,
+          interviewTime: cand.interviewTime,
+          companyNote: cand.companyNote,
           stage: cand.stage,
           // 今のステージに入った日 (月で表示を絞るのに使う。記録が無い古いデータは null)
           stageDate: readStageDates(cand.stageDates)[cand.stage] ?? null,
