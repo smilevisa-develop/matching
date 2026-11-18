@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { Suspense, useEffect } from "react";
 import Sidebar from "./Sidebar";
-import FeedbackWidget from "./FeedbackWidget";
 import KeepOnBack from "./KeepOnBack";
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
@@ -52,7 +51,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // チャットだけはスマホでも使う (LINE と同じ画面)。スマホではサイドバーと「修正依頼」を出さない
+  // チャットだけはスマホでも使う (LINE と同じ画面)。スマホではサイドバーを出さない
   const isChat = pathname === "/chat";
 
   return (
@@ -63,10 +62,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       <main className={`min-w-0 flex-1 overflow-y-auto ${isChat ? "" : "max-md:pt-row"}`}>
         <div className="mx-auto w-full max-w-[1440px]">{children}</div>
       </main>
-      {/* 右下の「修正依頼」ボタン (使いにくいところ・不具合をスクショ付きですぐ送れる) */}
-      <div className={isChat ? "hidden md:contents" : "contents"}>
-        <FeedbackWidget />
-      </div>
+      {/* 右下の「修正依頼」ボタンは外した (2026-11-18 土田さん。依頼は Slack で受けて「自動で修正」で直す) */}
       <Suspense fallback={null}>
         <KeepOnBack />
       </Suspense>
