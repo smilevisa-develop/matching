@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { slackApi, slackPost } from "@/lib/slack";
 
 /** 土田さんの Slack ID (CROSLAN-人材紹介)。環境変数 SLACK_FIX_USERS (カンマ区切り) で足せる */
-const FIX_ALLOWED_USERS: string[] = [];
+const FIX_ALLOWED_USERS: string[] = ["U07QRK48E81"];
 
 export function fixAllowed(userId: string) {
   const extra = (process.env.SLACK_FIX_USERS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
