@@ -14,7 +14,6 @@ import {
   ChevronUpDownIcon,
   CloseIcon,
   DocumentIcon,
-  FlagIcon,
   FormIcon,
   GlobeIcon,
   GroupIcon,
@@ -94,7 +93,6 @@ const SECTIONS: { heading?: string; items: NavItem[] }[] = [
   },
   {
     items: [
-      { label: "修正依頼", href: "/feedback", icon: FlagIcon },
       { label: "設定", href: "/settings", icon: SettingsIcon },
     ],
   },
@@ -114,8 +112,6 @@ export default function Sidebar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
-  // 修正依頼の未対応件数
-  const [openFeedbackCount, setOpenFeedbackCount] = useState(0);
   const [accountName, setAccountName] = useState("読み込み中...");
   const [syncing, setSyncing] = useState(false);
   const [syncReport, setSyncReport] = useState<{ ok: boolean; lines: SyncLine[] } | null>(null);
@@ -135,21 +131,13 @@ export default function Sidebar() {
     };
 
     void loadUnreadSummary();
-    const loadFeedback = () =>
-      fetch("/api/feedback?count=1", { cache: "no-store" })
-        .then((r) => r.json())
-        .then((d) => setOpenFeedbackCount(d.ok ? d.open ?? 0 : 0))
-        .catch(() => undefined);
-    void loadFeedback();
 
     const intervalId = window.setInterval(() => {
       void loadUnreadSummary();
     }, 8000);
-    const feedbackInterval = window.setInterval(() => void loadFeedback(), 60000);
 
     return () => {
       window.clearInterval(intervalId);
-      window.clearInterval(feedbackInterval);
     };
   }, []);
 
@@ -234,7 +222,7 @@ export default function Sidebar() {
   const renderItem = (item: NavItem) => {
     const active = current === item.href;
     const Icon = item.icon;
-    const badge = item.href === "/chat" ? unreadChatCount : item.href === "/feedback" ? openFeedbackCount : 0;
+    const badge = item.href === "/chat" ? unreadChatCount : 0;
     return (
       <Link
         key={item.href}
