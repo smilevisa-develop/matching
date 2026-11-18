@@ -30,6 +30,7 @@ export default function CreateResumeButton({
     documentUrl: string | null;
     driveFolderUrl: string | null;
     title: string;
+    photoMissing: boolean;
   }>(null);
 
   useEffect(() => {
@@ -69,6 +70,7 @@ export default function CreateResumeButton({
         documentUrl: data.resume?.documentUrl ?? null,
         driveFolderUrl: data.resume?.driveFolderUrl ?? null,
         title: data.resume?.title ?? title,
+        photoMissing: Boolean(data.photoMissing),
       });
       router.refresh();
     } catch (e) {
@@ -116,6 +118,11 @@ export default function CreateResumeButton({
                   <div className="rounded-xl border border-[#16A34A]/30 bg-[#F0FDF4] px-4 py-3 text-sm text-[#15803D]">
                     「{created.title}」を作成しました
                   </div>
+                  {created.photoMissing ? (
+                    <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                      顔写真を入れられませんでした。少し待ってもう一度作成するか、Docs で写真を入れてください。
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     {created.documentUrl ? (
                       <a

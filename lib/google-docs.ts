@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import type { docs_v1 } from "googleapis";
 import { Readable } from "node:stream";
+import { extractDriveFileId } from "@/lib/drive-url";
 
 const DOC_URL_RE = /\/document\/d\/([a-zA-Z0-9_-]+)/;
 const DRIVE_FOLDER_RE = /\/folders\/([a-zA-Z0-9_-]+)/;
@@ -232,18 +233,11 @@ export async function createResumeDocumentFromTemplate({
     console.warn("pruneEmptyRowGroups failed:", error);
   }
 
+  // 顔写真: 失敗しても履歴書作成は止めないが、入らなかったことは呼び出し元に返して画面に出す
+  // (以前は console.warn だけで、写真が無い履歴書に誰も気づけなかった)
+  let photoInserted: boolean | null = null;
   if (photoUrl && /^https?:\/\//.test(photoUrl)) {
-    try {
-      await insertInlineImageAtPlaceholder({
-        docs,
-        documentId,
-        placeholder: "{{顔写真}}",
-        photoUrl,
-      });
-    } catch (error) {
-      // 画像挿入の失敗は履歴書作成全体をブロックしない (テキスト置換で空文字になるだけ)
-      console.warn("insertInlineImageAtPlaceholder failed:", error);
-    }
+    photoInserted = await insertPhotoWithRetry({ docs, documentId, photoUrl });
   }
 
   const requests = Object.entries(replacements).map(([key, value]) => ({
@@ -270,6 +264,8 @@ export async function createResumeDocumentFromTemplate({
   return {
     documentId,
     documentUrl: copied.data.webViewLink ?? `https://docs.google.com/document/d/${documentId}/edit`,
+    /** 写真を入れようとして入らなかったら false。写真なしなら null */
+    photoInserted,
   };
 }
 
@@ -631,6 +627,52 @@ async function pruneEmptyRowGroups({
 }
 
 /**
+ * 顔写真を入れる。Google が画像を取りに行くのが一時的に失敗することがあるので、
+ * 同じ Drive の画像を別の URL でも試す。入ったかは Doc を読み直して確かめる。
+ */
+async function insertPhotoWithRetry({
+  docs,
+  documentId,
+  photoUrl,
+}: {
+  docs: DocsClient;
+  documentId: string;
+  photoUrl: string;
+}): Promise<boolean> {
+  const fileId = extractDriveFileId(photoUrl);
+  const urls = [
+    photoUrl,
+    ...(fileId
+      ? [
+          `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`,
+          `https://lh3.googleusercontent.com/d/${fileId}=w800`,
+        ]
+      : [photoUrl]),
+  ];
+  for (let i = 0; i < urls.length; i++) {
+    try {
+      const inserted = await insertInlineImageAtPlaceholder({
+        docs,
+        documentId,
+        placeholder: "{{顔写真}}",
+        photoUrl: urls[i],
+      });
+      // 置き場所 ({{顔写真}}) がテンプレに無いときは入れようがないので成功扱い
+      if (inserted === 0) return true;
+      const doc = await docs.documents.get({ documentId, fields: "inlineObjects" });
+      if (Object.keys(doc.data.inlineObjects ?? {}).length > 0) return true;
+    } catch (error) {
+      console.warn(
+        `[resume] 顔写真を入れられませんでした (${i + 1}/${urls.length}) doc=${documentId}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  return false;
+}
+
+/**
  * Google Docs 内で指定の placeholder 文字列を見つけ、そこに画像を挿入する。
  * placeholder テキストは削除してから画像が同じ位置に入る。
  */
@@ -647,7 +689,7 @@ async function insertInlineImageAtPlaceholder({
 }) {
   const doc = await docs.documents.get({ documentId });
   const body = doc.data.body;
-  if (!body?.content) return;
+  if (!body?.content) return 0;
 
   type Hit = { startIndex: number; endIndex: number };
   const hits: Hit[] = [];
@@ -688,7 +730,7 @@ async function insertInlineImageAtPlaceholder({
 
   walkTextRuns(body.content);
 
-  if (hits.length === 0) return;
+  if (hits.length === 0) return 0;
 
   // 後ろから処理しないと startIndex がずれる
   hits.sort((a, b) => b.startIndex - a.startIndex);
@@ -713,6 +755,7 @@ async function insertInlineImageAtPlaceholder({
     ];
     await docs.documents.batchUpdate({ documentId, requestBody: { requests } });
   }
+  return hits.length;
 }
 
 export function formatPersonIdPrefix(id: number) {

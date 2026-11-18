@@ -81,7 +81,11 @@ export default function ResumesClient({
         ...current,
         title: "",
       }));
-      alert("Google Docs で履歴書を作成し、候補者の Drive フォルダに保存しました");
+      alert(
+        data.photoMissing
+          ? "履歴書を作成しましたが、顔写真を入れられませんでした。少し待ってもう一度作成するか、Docs で写真を入れてください。"
+          : "Google Docs で履歴書を作成し、候補者の Drive フォルダに保存しました",
+      );
     } finally {
       setSavingResume(false);
     }

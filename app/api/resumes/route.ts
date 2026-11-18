@@ -154,6 +154,7 @@ export async function POST(req: Request) {
         templateName: resume.template.name,
         createdAt: resume.createdAt.toISOString(),
       },
+      photoMissing: generated.photoInserted === false,
     });
   } catch (error) {
     return Response.json(
