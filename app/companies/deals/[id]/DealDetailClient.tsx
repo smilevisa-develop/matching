@@ -12,6 +12,7 @@ import CandidateKanban, {
 import RecommendationsClient from "@/app/recommendations/RecommendationsClient";
 import CloseButton from "@/app/components/CloseButton";
 import { DEAL_STATUSES, normalizeDealStatus } from "@/lib/deal-stages";
+import { stageOnList } from "@/lib/list-stages";
 import { SUPPORT_METHODS } from "@/lib/company-options";
 import { CONTACT_METHODS, CONTACT_PLACEHOLDERS, contactHref, type CompanyContact, type ContactMethod } from "@/lib/company-contacts";
 
@@ -22,6 +23,8 @@ type DealDetail = {
   title: string;
   /** 企業向けの推薦リストの URL (/list/{shareToken})。共有していなければ null */
   shareToken: string | null;
+  /** 推薦リストに出す進捗。null なら既定 (lib/list-stages) */
+  listStages: string[] | null;
   field: string | null;
   company: {
     id: number;
@@ -77,6 +80,15 @@ export default function DealDetailClient({
   const [recommendationOpen, setRecommendationOpen] = useState(false);
   // 企業向けの推薦リスト (共有 URL)。作ったら上と候補者欄の両方の表示が変わる
   const [shareToken, setShareToken] = useState(deal.shareToken);
+  const [listStages, setListStages] = useState<string[] | null>(deal.listStages);
+  const toggleListStage = (stage: string, allStages: string[]) => {
+    const cur = listStages ?? allStages.filter((s) => stageOnList(s, null));
+    const next = cur.includes(stage) ? cur.filter((s) => s !== stage) : [...cur, stage];
+    setListStages(next);
+    void fetch(`/api/deals/${deal.id}/list-stages`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stages: next }) }).then((r) => {
+      if (!r.ok) alert("保存できませんでした");
+    });
+  };
   // 編集中の企業の担当者 (空なら 1 行出しておく)
   const [contactsForm, setContactsForm] = useState<CompanyContact[]>([]);
   const [editForm, setEditForm] = useState({
@@ -527,6 +539,8 @@ export default function DealDetailClient({
             candidates={candidates}
             onMove={(id, stage, date) => void moveCandidate(id, stage, date)}
             onRemove={(candidate) => void removeCandidate(candidate)}
+            listStages={shareToken ? listStages : undefined}
+            onToggleListStage={shareToken ? toggleListStage : undefined}
           />
         </div>
       </section>

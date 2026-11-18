@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { readListStages } from "@/lib/list-stages";
 import { readCompanyContacts } from "@/lib/company-contacts";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -128,6 +129,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
               id: deal.id,
               title: deal.title,
               shareToken: deal.shareToken,
+              listStages: readListStages(deal.listStages),
               field: deal.field,
               company: { ...deal.company, contacts: readCompanyContacts(deal.company.contacts) },
               owner: deal.owner,

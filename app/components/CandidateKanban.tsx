@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import PersonAvatar from "@/app/components/PersonAvatar";
+import { stageOnList } from "@/lib/list-stages";
 import { EXIT_STAGES, STAGE_DATE_LABELS, stagesForKind, todayJst } from "@/lib/deal-stages";
 
 /**
@@ -84,7 +85,12 @@ export default function CandidateKanban({
   onRemove,
   companyKind = "通常",
   layout = "split",
+  listStages,
+  onToggleListStage,
 }: {
+  /** 推薦リストに出す進捗 (共有中の案件だけ)。列の見出しのチェックで切り替える */
+  listStages?: string[] | null;
+  onToggleListStage?: (stage: string, allStages: string[]) => void;
   candidates: CandidateCard[];
   /**
    * 列の並べ方。
@@ -206,6 +212,17 @@ export default function CandidateKanban({
               <span className={`h-2 w-2 shrink-0 rounded-full ${STAGE_DOT[column] ?? "bg-gray-300"}`} />
               <span className="truncate">{column}</span>
             </h3>
+            {onToggleListStage ? (
+              <label title="推薦リストに出す" className="flex shrink-0 cursor-pointer items-center gap-0.5 text-[10px] font-bold text-emerald-800">
+                <input
+                  type="checkbox"
+                  checked={stageOnList(column, listStages ?? null)}
+                  onChange={() => onToggleListStage(column, [...stages])}
+                  className="h-3.5 w-3.5 accent-emerald-600"
+                />
+                リスト
+              </label>
+            ) : null}
             <span className="shrink-0 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-semibold">
               {columnCandidates.length}
             </span>

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { sanitizeRecommendationColumns } from "@/lib/recommendation-columns";
 import { buildRecommendationCellValue, getRecommendationColumnLabel } from "@/lib/recommendation-row";
 import { resolveDriveNames } from "@/lib/recommendation-links";
+import { readListStages, stageOnList } from "@/lib/list-stages";
 import ShareListTable, { type ShareCell, type ShareRow } from "./ShareListTable";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +26,6 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   };
 }
 
-/** 社内だけの不合格 (推薦する前に外した人)。企業には見せない */
-const HIDDEN_STAGES = new Set(["書類NG", "面談NG"]);
 
 /**
  * 企業向けの推薦リスト。GET /list/{Deal.shareToken}。ログインなしで開ける。
@@ -57,7 +56,8 @@ export default async function ShareListPage({ params }: { params: Promise<{ toke
     }),
     prisma.coreSettings.findUnique({ where: { id: 1 } }),
   ]);
-  const candidates = all.filter((c) => !HIDDEN_STAGES.has(c.stage));
+  const listStages = readListStages(deal.listStages);
+  const candidates = all.filter((c) => stageOnList(c.stage, listStages));
 
   const columns = sanitizeRecommendationColumns(settings?.recommendationColumns);
   const header = columns.map((k) => getRecommendationColumnLabel(k));

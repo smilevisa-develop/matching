@@ -780,6 +780,8 @@ model Deal {
   title            String
   /// 企業向けの推薦リスト (見るだけ) の URL /list/{shareToken}。作ったときだけ入る
   shareToken       String?       @unique
+  /// 推薦リストに出す進捗 (カンバンの列のチェック)。null なら書類NG・面談NG 以外ぜんぶ
+  listStages       Json?
   companyId        Int
   company          Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   partnerId        Int?
