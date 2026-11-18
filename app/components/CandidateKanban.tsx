@@ -266,12 +266,12 @@ export default function CandidateKanban({
                         companyNote: candidate.companyNote ?? "",
                       });
                     }}
-                    className="absolute right-7 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] leading-none text-gray-600 shadow-sm hover:bg-[var(--color-light)] hover:text-[var(--color-primary)] group-hover:flex"
+                    className="absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 bg-white text-[12px] font-bold leading-none text-[var(--color-primary)] hover:bg-[var(--color-light)] group-hover:right-7"
                   >
                     ✎
                   </button>
                 )}
-                <div className="flex items-start gap-1">
+                <div className="flex items-start gap-1 pr-5">
                   <PersonAvatar
                     photoUrl={candidate.person.photoUrl}
                     name={candidate.person.name}
