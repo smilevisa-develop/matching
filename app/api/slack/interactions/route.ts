@@ -1,12 +1,14 @@
 /**
  * Slack のボタンが押されたとき。Slack アプリの Interactivity & Shortcuts の Request URL にする。
  *   https://matching.smilereach.jp/api/slack/interactions
- * 「入金を確認した」「振り込んだ」「取り消す」(lib/billing-slack)。3 秒以内に返すため、処理はあとで行う。
+ * 「入金を確認した」「振り込んだ」「取り消す」(lib/billing-slack)。投稿の「…」メニュー「自動で修正」(lib/fix-request)。
+ * 3 秒以内に返すため、処理はあとで行う。
  */
 
 import { after } from "next/server";
 import { billingChannelRole, textOfBlocks, verifySlackRequest } from "@/lib/slack";
 import { handlePartnerInvoicePick, handleSlackButton } from "@/lib/billing-slack";
+import { handleFixShortcut } from "@/lib/fix-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +17,21 @@ export async function POST(req: Request) {
   const raw = await req.text();
   if (!verifySlackRequest(raw, req.headers)) return new Response("bad signature", { status: 401 });
   const payload = JSON.parse(new URLSearchParams(raw).get("payload") ?? "{}");
+  // 投稿の「…」メニュー →「自動で修正」(lib/fix-request)
+  if (payload.type === "message_action" && payload.callback_id === "auto_fix") {
+    const channel: string = payload.channel?.id ?? "";
+    const messageTs: string = payload.message?.ts ?? payload.message_ts ?? "";
+    if (channel && messageTs) {
+      after(async () => {
+        try {
+          await handleFixShortcut({ channel, messageTs, threadTs: payload.message?.thread_ts ?? messageTs, userId: payload.user?.id ?? "", responseUrl: payload.response_url });
+        } catch (e) {
+          console.warn("自動で修正の受付に失敗:", e);
+        }
+      });
+    }
+    return new Response("");
+  }
   if (payload.type !== "block_actions") return new Response("");
   const action = payload.actions?.[0];
   const channel = payload.channel?.id ?? payload.container?.channel_id;

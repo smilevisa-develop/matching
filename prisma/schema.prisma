@@ -1357,3 +1357,19 @@ model SlackEventSeen {
   id        String   @id
   createdAt DateTime @default(now())
 }
+
+/// Slack の投稿の「…」メニュー「自動で修正」で受けた依頼。土田さんの Mac (tools/fix-runner) が順に取り出して直し、スレッドに返信する
+model FixRequest {
+  id          Int       @id @default(autoincrement())
+  channel     String
+  messageTs   String
+  threadTs    String
+  requestedBy String
+  status      String    @default("queued") // queued / running / done / failed / rejected
+  result      String?
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  @@index([status])
+}
