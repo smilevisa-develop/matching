@@ -172,7 +172,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
               dealId={deal.id}
               initialConditions={(deal.conditions ?? {}) as ConditionsRecord}
               templates={jobPostingTemplates}
-              defaultJobPostingTitle={`${deal.company.name} ${deal.title} 求人票`}
+              defaultJobPostingTitle={`${deal.company.externalId ?? deal.company.id}_${deal.field ?? ""}`}
             />
             {/* 事前確認資料 (内定後に候補者へ母国語で確認してもらう) */}
             <CompanyDocumentsPanel companyId={deal.company.id} />

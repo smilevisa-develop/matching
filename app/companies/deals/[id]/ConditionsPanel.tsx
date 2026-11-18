@@ -365,9 +365,13 @@ function CreateJobPostingModal({
   onCreated: () => void;
 }) {
   const [templateId, setTemplateId] = useState<string>(templates[0]?.id ? String(templates[0].id) : "");
-  const [title, setTitle] = useState<string>(
-    typeof conditions.title === "string" && conditions.title.trim() ? conditions.title.trim() : defaultTitle
-  );
+  // 求人票名は「企業ID_分野」(例: 78sv_農業)。分野は条件タブで入力中の値を優先する
+  const [title, setTitle] = useState<string>(() => {
+    const field = typeof conditions.field === "string" ? conditions.field.trim() : "";
+    if (!field) return defaultTitle;
+    const id = defaultTitle.split("_")[0];
+    return `${id}_${field}`;
+  });
   const [stage, setStage] = useState<"input" | "creating">("input");
   const [error, setError] = useState<string | null>(null);
   const [createdInfo, setCreatedInfo] = useState<{ documentUrl: string | null; driveFolderUrl: string | null; driveWarning: string | null } | null>(

@@ -220,7 +220,9 @@ export async function POST(req: Request) {
     }
 
     const templateId = body?.templateId ? Number(body.templateId) : null;
-    const title = clean(body?.title) ?? `${deal.company.name} ${deal.title} 求人票`;
+    const title =
+      clean(body?.title) ??
+      `${deal.company.externalId ?? deal.company.id}_${clean(body?.field) ?? deal.field ?? ""}`;
 
     const fields: Record<string, string | null> = {};
     for (const key of STRING_FIELDS) {

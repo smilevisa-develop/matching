@@ -9,7 +9,7 @@ export default async function JobPostingsPage() {
   const [deals, templates, jobPostings] = await Promise.all([
     prisma.deal.findMany({
       orderBy: { updatedAt: "desc" },
-      include: { company: { select: { name: true } } },
+      include: { company: { select: { id: true, name: true, externalId: true } } },
     }),
     prisma.jobPostingTemplate.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.jobPosting.findMany({
@@ -36,6 +36,7 @@ export default async function JobPostingsPage() {
           id: deal.id,
           title: deal.title,
           companyName: deal.company.name,
+          defaultPostingTitle: `${deal.company.externalId ?? deal.company.id}_${deal.field ?? ""}`,
         }))}
         templates={templates.map((template) => ({
           id: template.id,

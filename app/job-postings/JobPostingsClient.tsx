@@ -10,6 +10,8 @@ type Deal = {
   id: number;
   title: string;
   companyName: string;
+  /** 求人票名の初期値「企業ID_分野」(例: 78sv_農業) */
+  defaultPostingTitle: string;
 };
 
 type JobPostingTemplate = {
@@ -128,7 +130,7 @@ export default function JobPostingsClient({
                   onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))}
                   placeholder={
                     selectedDeal
-                      ? `${selectedDeal.companyName} ${selectedDeal.title} 求人票`
+                      ? selectedDeal.defaultPostingTitle
                       : "求人票名"
                   }
                 />
@@ -215,7 +217,7 @@ export default function JobPostingsClient({
         <JobPostingUploadModal
           deal={selectedDeal}
           template={selectedTemplate}
-          title={form.title.trim() || `${selectedDeal.companyName} ${selectedDeal.title} 求人票`}
+          title={form.title.trim() || selectedDeal.defaultPostingTitle}
           onClose={() => setUploaderOpen(false)}
           onCreated={(jobPosting) => {
             setDocuments((prev) => [
