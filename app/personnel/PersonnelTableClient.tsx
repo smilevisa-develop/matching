@@ -74,7 +74,10 @@ export default function PersonnelTableClient({
   const filteredPersons = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return persons;
-    return persons.filter((person) => {
+    // 数字だけなら ID でも探す (481 でも 0481 でも)。ID が合う人を先頭に
+    const idQuery = /^\d+$/.test(q) ? Number(q) : null;
+    const hits = persons.filter((person) => {
+      if (idQuery !== null && person.id === idQuery) return true;
       const haystack = [
         person.name,
         person.englishName,
@@ -90,6 +93,7 @@ export default function PersonnelTableClient({
         .toLowerCase();
       return haystack.includes(q);
     });
+    return idQuery === null ? hits : [...hits.filter((p) => p.id === idQuery), ...hits.filter((p) => p.id !== idQuery)];
   }, [persons, searchTerm]);
 
   const orderedItems = useMemo(
@@ -133,7 +137,7 @@ export default function PersonnelTableClient({
         <SearchInput
           value={searchTerm}
           onChange={setSearchTerm}
-          placeholder="名前・英語名・国籍・パートナー・住所で検索"
+          placeholder="ID・名前・英語名・国籍・パートナー・住所で検索"
         />
         {searchTerm ? (
           <span className="text-xs text-gray-500">
