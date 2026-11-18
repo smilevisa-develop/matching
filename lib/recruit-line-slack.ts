@@ -2,12 +2,12 @@
  * recruit 公式 LINE (株式会社CROSLAN-人材事業部 @494mlwqg) に届いたものを Slack に転送する (2026/11)。
  *
  * - 1 対 1 のトークだけ。グループ・複数人トークは転送しない
- * - 新しい友だち追加 (follow) のときは担当者にメンションして知らせる
+ * - 新しい友だち追加 (follow) と 1 対 1 のメッセージは、担当者にメンションして知らせる (メッセージにも付ける: 2026-11-19 土田さん)
  * - LINE の再送 (isRedelivery) は二重に出ないよう転送しない
  *
  * 環境変数 (Coolify に入れる。チャンネルが未設定なら何もしない):
  *   RECRUIT_LINE_SLACK_CHANNEL … 転送先チャンネルの ID。CROSLAN-人材紹介 の #recruit-line は C0CHFL2LUV7。ボット (SLACK_BOT_TOKEN) をチャンネルに招待しておく
- *   RECRUIT_LINE_SLACK_MENTION … 友だち追加のときのメンション。トゥイ・チンディ・MOON は "<@U09RDDMV0TS> <@U0AKQD0A4MB> <@U0BS751AVBN>"
+ *   RECRUIT_LINE_SLACK_MENTION … 友だち追加・メッセージのときのメンション。トゥイ・チンディ・MOON は "<@U09RDDMV0TS> <@U0AKQD0A4MB> <@U0BS751AVBN>"
  */
 import { slackPost } from "@/lib/slack";
 
@@ -73,7 +73,7 @@ export function recruitSlackText(ev: LineEvent, name: string | null, mention: st
       .split("\n")
       .map((l) => `> ${l}`)
       .join("\n");
-    return `💬 ${who} からメッセージ\n${body}`;
+    return `${mention ? `${mention}\n` : ""}💬 ${who} からメッセージ\n${body}`;
   }
   return null;
 }
