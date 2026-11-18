@@ -223,6 +223,24 @@ export function planOfferInsert(rows: string[][], headerRow: number, dateCol: nu
 }
 
 /**
+ * 関数の中の「from 行」への相対参照 ($A125 / C125 など、行番号の前に $ が無いもの) を「to 行」に直す。
+ * "..." の中 (IMPORTRANGE のスプシ ID など) は触らない。
+ */
+export function moveFormulaRow(formula: string, from: number, to: number): string {
+  if (!formula.startsWith("=")) return formula;
+  return formula
+    .split(/("(?:[^"]|"")*")/)
+    .map((part, i) =>
+      i % 2 === 1 ? part : part.replace(/(\$?[A-Z]{1,3})(\d+)(?![\d(!])/g, (m, col: string, row: string, off: number, all: string) => {
+        const before = all[off - 1] ?? "";
+        if (/[A-Za-z0-9_]/.test(before)) return m; // 名前の途中 (LOG10 など)
+        return Number(row) === from ? `${col}${to}` : m;
+      }),
+    )
+    .join("");
+}
+
+/**
  * 内定者管理に候補者の行を差し込み、その行の index (0 始まり) を返す。
  * - 内定日の月の「N月」区切りがあれば、その区切りの最後のデータ行の次に入れる
  * - 無ければ、月の順で次に来る区切りの前に「N月」の区切り行と一緒に入れる (後ろの月が無ければ一番下)
@@ -254,7 +272,30 @@ async function insertOfferRow(args: {
   if (withHeader && headerSrc >= 0) {
     requests.push({ copyPaste: { source: grid(headerSrc), destination: grid(insertAt), pasteType: "PASTE_FORMAT" } });
   }
-  await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+  try {
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+  } catch (e) {
+    // 誰かが表をフィルタで絞っていると、行のコピーが
+    // 「This operation is not supported on a range with a filtered out row」で断られる
+    // (2026/11/17 請求管理に 0443・0444・0462 が足されなかった原因)。
+    // そのときはコピーを使わず、行を差し込んでから写し元の関数を行番号だけ直して書く。
+    if (!/filtered out row/i.test(e instanceof Error ? e.message : String(e))) throw e;
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: [requests[0]] } });
+    const src = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${quote(tab)}!A${template + 1}:BH${template + 1}`,
+      valueRenderOption: "FORMULA",
+    });
+    const formulas = (src.data.values?.[0] ?? []).map((v) => moveFormulaRow(String(v ?? ""), template + 1, dataRow + 1));
+    // A 列 (ID) はあとで入れる。値の入っていた列 (内定者管理の「未」など) はそのまま写す
+    formulas[0] = "";
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${quote(tab)}!A${dataRow + 1}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: [formulas] },
+    });
+  }
 
   const values = withHeader ? [[`${tm}月`], [id]] : [[id]];
   await sheets.spreadsheets.values.update({
