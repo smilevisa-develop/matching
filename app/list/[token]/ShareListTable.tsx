@@ -3,7 +3,7 @@
 /**
  * 企業向けの推薦リストの表 (Airtable のような表。2026/11 土田さん)。
  * 中身はアプリのカンバン・候補者の情報から、開くたびに作る (アプリを直せば自動で変わる)。
- * 右上の鉛筆 → 暗証番号で編集できる。編集できる状態はこの画面の中だけで、ページを閉じれば終わる (「編集を終える」でも戻せる)。
+ * 右上の鉛筆 → 暗証番号で編集できる。直した値は候補者の情報 (システム) にも入る。計算で出す列 (年齢など) だけはリストの表示だけ。編集できる状態はこの画面の中だけで、ページを閉じれば終わる (「編集を終える」でも戻せる)。
  * 備考は一番右の列 (2026-11-18 土田さん)。
  */
 
@@ -83,7 +83,8 @@ export default function ShareListTable(props: { companyName: string; dealTitle: 
           if (r.id !== rowId) return r;
           if (key === "interviewTime") return { ...r, interviewTime: v };
           if (key === "note") return { ...r, note: v };
-          return { ...r, cells: r.cells.map((c) => (c.key === key ? { ...c, text: v, edited: true } : c)) };
+          // システムにも書いた列は黄色にしない (リストだけの上書きではない)
+          return { ...r, cells: r.cells.map((c) => (c.key === key ? { ...c, text: typeof data.value === "string" ? data.value : v, edited: !data.synced } : c)) };
         }),
       );
       setEditing(null);
