@@ -39,6 +39,7 @@ if (!row) process.exit(0);
 const [id, channel, threadTs, messageTs] = row.split("\n")[0].split("\t");
 log("start", id, channel, threadTs);
 
+let requester = ""; // 依頼した人 (スレッドの最初の投稿の人)。直したらメンションで知らせる
 const finish = (status, text) => {
   try { app(`post ${channel} ${threadTs}`, text); } catch (e) { log("post failed", id, e.message); }
   sql(`UPDATE "FixRequest" SET status=${q(status)}, result=${q(text.slice(0, 20000))}, "finishedAt"=now() WHERE id=${Number(id)};`);
@@ -49,6 +50,8 @@ try {
   const dir = path.join(BASE, "jobs", id);
   fs.mkdirSync(dir, { recursive: true });
   const thread = JSON.parse(app(`thread ${channel} ${threadTs}`));
+  const first = thread.find((m) => !m.bot && m.user);
+  if (first) requester = first.user;
   const lines = [];
   let n = 0;
   for (const m of thread) {
@@ -108,7 +111,12 @@ ${lines.join("\n\n")}
   let isError = false;
   try { const j = JSON.parse(out); result = String(j.result ?? ""); isError = Boolean(j.is_error); } catch { result = out; }
   if (!result.trim()) throw new Error("返答が空でした");
-  finish(isError || result.startsWith("⚠️") ? "failed" : "done", result.trim());
+  const failed = isError || result.startsWith("⚠️");
+  let reply = result.trim();
+  // 直したら依頼した人にメンションで (2026-11-18 土田さん: 「@thuy 修正完了してますので確認をお願いいたします。」)
+  if (!failed && reply.startsWith("✅") && requester) reply = `<@${requester}> 修正完了してますので確認をお願いいたします。\n\n${reply}`;
+  else if (!failed && reply.startsWith("❓") && requester) reply = `<@${requester}> ${reply}`;
+  finish(failed ? "failed" : "done", reply);
 } catch (e) {
   log("error", id, String(e.message).slice(0, 2000));
   // 細かいエラーは記録だけ (スレッドには出さない)
