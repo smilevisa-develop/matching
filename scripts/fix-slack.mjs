@@ -12,7 +12,10 @@ const api = async (method, body) => {
   return j;
 };
 if (cmd === "thread") {
-  const j = await api("conversations.replies", { channel: a, ts: b, limit: 100 });
+  // conversations.replies は JSON の本文を受け付けない (invalid_arguments) ので GET で
+  const r = await fetch(`https://slack.com/api/conversations.replies?${new URLSearchParams({ channel: a, ts: b, limit: "100" })}`, { headers: { Authorization: `Bearer ${token}` } });
+  const j = await r.json();
+  if (!j.ok) throw new Error(`conversations.replies: ${j.error}`);
   const out = (j.messages ?? []).map((m) => ({
     ts: m.ts, user: m.user ?? m.bot_id ?? "", bot: Boolean(m.bot_id), text: m.text ?? "",
     files: (m.files ?? []).map((f) => ({ name: f.name, mimetype: f.mimetype, url: f.url_private_download ?? f.url_private })),

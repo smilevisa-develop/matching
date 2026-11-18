@@ -110,6 +110,7 @@ ${lines.join("\n\n")}
   if (!result.trim()) throw new Error("返答が空でした");
   finish(isError || result.startsWith("⚠️") ? "failed" : "done", result.trim());
 } catch (e) {
-  log("error", id, e.message);
-  finish("failed", `⚠️ 自動で直せませんでした (${e.message})。土田さんが確認します。`);
+  log("error", id, String(e.message).slice(0, 2000));
+  // 細かいエラーは記録だけ (スレッドには出さない)
+  finish("failed", "⚠️ 自動で直せませんでした。土田さんが確認します。");
 }
