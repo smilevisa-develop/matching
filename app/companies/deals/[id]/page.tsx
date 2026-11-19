@@ -9,6 +9,7 @@ import DealTabs from "./DealTabs";
 import JobPostingsPanel from "./JobPostingsPanel";
 import ConditionsPanel, { type ConditionsRecord } from "./ConditionsPanel";
 import CompanyDocumentsPanel from "./CompanyDocumentsPanel";
+import MeetingNotesPanel from "./MeetingNotesPanel";
 import RefreshOnFocus from "@/app/components/RefreshOnFocus";
 import { normalizeDealStatus } from "@/lib/deal-stages";
 
@@ -196,6 +197,7 @@ export default async function DealDetailPage({ params }: { params: Promise<{ id:
             }))}
           />
         }
+        meetingNotesContent={<MeetingNotesPanel companyId={deal.company.id} companyName={deal.company.name} />}
       />
     </div>
   );
