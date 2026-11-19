@@ -43,6 +43,8 @@ export type ManageRec = {
   note: string;
   status: string;
   statusNote: string;
+  /** 候補者に取り込んだあとの Person.id */
+  personId: number | null;
 };
 
 export type ManageQuestion = {
@@ -229,6 +231,21 @@ function DealEditor({ deal }: { deal: ManageDeal }) {
     }
   };
 
+  const notify = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const data = await send(`/api/board-manage/deals/${deal.id}/notify`, "POST", {});
+      if (window.confirm(`分野が合う登録済みパートナー ${data.count} 社の連絡グループを作りました。一斉連絡の画面で文面を確かめてから送ってください。開きますか？`)) {
+        window.location.href = data.url;
+      }
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "準備できませんでした" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const nameLeak = deal.companyName && `${f.boardTitle}${f.boardSummary}`.includes(deal.companyName);
 
   return (
@@ -305,9 +322,20 @@ function DealEditor({ deal }: { deal: ManageDeal }) {
             保存して公開する
           </button>
         ) : (
-          <button type="button" disabled={busy} onClick={() => save("closed")} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">
-            締め切る
-          </button>
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={notify}
+              className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              title="分野が合う登録済みパートナーの連絡グループを作り、一斉連絡の画面を開きます (送るのは画面で確かめてから)"
+            >
+              条件が合うパートナーにお知らせ
+            </button>
+            <button type="button" disabled={busy} onClick={() => save("closed")} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold">
+              締め切る
+            </button>
+          </>
         )}
         {deal.boardStatus !== "hidden" ? (
           <>
@@ -391,6 +419,7 @@ function RecRow({ rec }: { rec: ManageRec }) {
           </a>
         ) : null}
         {rec.note ? <p className="mt-1 whitespace-pre-wrap rounded bg-gray-50 p-2 text-gray-700">{rec.note}</p> : null}
+        <ImportBox rec={rec} />
       </div>
       <div className="space-y-2">
         <select className={INPUT} value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -416,6 +445,87 @@ function RecRow({ rec }: { rec: ManageRec }) {
           状況を更新（パートナーに見える）
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 推薦を候補者に取り込む (同じ名前の人がいれば、紐づけるか新しく作るかを選ぶ) */
+function ImportBox({ rec }: { rec: ManageRec }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [dups, setDups] = useState<{ id: number; name: string; englishName: string | null; birthDate: string | null }[] | null>(null);
+
+  if (rec.personId) {
+    return (
+      <p className="mt-2 text-sm">
+        候補者に取り込み済み:{" "}
+        <a href={`/personnel/${rec.personId}`} className="text-[var(--color-primary)] underline">
+          #{rec.personId} を開く
+        </a>
+      </p>
+    );
+  }
+
+  const run = async (body: Record<string, unknown>) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/board-manage/recommendations/${rec.id}/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({ ok: false, error: "通信に失敗しました" }));
+      if (data.duplicates) {
+        setDups(data.duplicates);
+        return;
+      }
+      if (!data.ok) throw new Error(data.error ?? "取り込めませんでした");
+      setDups(null);
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "取り込めませんでした");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-2">
+      {dups ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-sm">
+          <p className="font-semibold text-amber-900">同じ名前の候補者がいます。同じ人なら紐づけてください。</p>
+          <ul className="mt-1 space-y-1">
+            {dups.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center gap-2">
+                <a href={`/personnel/${d.id}`} target="_blank" rel="noreferrer" className="underline">
+                  #{d.id} {d.name}
+                  {d.englishName ? ` (${d.englishName})` : ""}
+                  {d.birthDate ? ` ・ ${d.birthDate}` : ""}
+                </a>
+                <button type="button" disabled={busy} onClick={() => run({ personId: d.id })} className="rounded border border-amber-400 px-2 py-0.5 text-xs">
+                  この人に紐づける
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button type="button" disabled={busy} onClick={() => run({ createNew: true })} className="mt-2 text-xs underline">
+            別人なので、新しい候補者として作る
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => run({})}
+          className="rounded-lg border border-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--color-primary)] disabled:opacity-50"
+          title="候補者一覧に追加し、この案件の候補者 (接続済み) にします。推薦の状況は「書類確認中」になります"
+        >
+          候補者に取り込む
+        </button>
+      )}
+      {err ? <p className="mt-1 text-xs text-red-600">{err}</p> : null}
     </div>
   );
 }

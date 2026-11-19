@@ -15,6 +15,7 @@ import { SURVEY_URL_VARIABLE } from "@/lib/partner-survey";
 import { ensureSurveyUrl } from "@/lib/partner-survey-server";
 import { incrementChannelUsage } from "@/lib/channel-usage";
 import { CHANNEL_TEXT_LIMITS, flattenForWhatsapp } from "@/lib/broadcast-message";
+import { boardEnterUrl } from "@/lib/board";
 
 /** LINE / メール 用に添付画像をまとめて事前ロード */
 type LoadedAttachment = {
@@ -296,6 +297,8 @@ export async function POST(req: Request) {
       messengerSubscriptionExpiresAt: Date | null;
       /** パートナーごとのアンケートのリンク (本文に {{アンケートURL}} があるときだけ作る) */
       surveyUrl: string | null;
+      /** 案件ボードの専用リンク (登録済みで鍵があるパートナーだけ) */
+      boardUrl: string | null;
     };
     // 明示指定された partnerIds の partner のみを取得 (フィルタ再評価せず)
     const partners = await prisma.partner.findMany({
@@ -344,6 +347,7 @@ export async function POST(req: Request) {
         messengerSubscriptionStatus: p.messengerSubscriptionStatus,
         messengerSubscriptionExpiresAt: p.messengerSubscriptionExpiresAt,
         surveyUrl: null,
+        boardUrl: p.boardEnabled && p.boardToken ? boardEnterUrl(p.boardToken) : null,
       };
     });
     // アンケートのリンクは、本文 (WhatsApp の変数も) で使うときだけ作る
@@ -376,6 +380,7 @@ export async function POST(req: Request) {
         country: t.country,
         introducibleFields: t.introducibleFields,
         surveyUrl: t.surveyUrl,
+        boardUrl: t.boardUrl,
       };
       return expandTemplate(message, { partner, openDeals, urgentDeals });
     };
@@ -388,6 +393,7 @@ export async function POST(req: Request) {
         country: t.country,
         introducibleFields: t.introducibleFields,
         surveyUrl: t.surveyUrl,
+        boardUrl: t.boardUrl,
       };
       return expandTemplate(emailMessage, { partner, openDeals, urgentDeals });
     };
@@ -435,6 +441,7 @@ export async function POST(req: Request) {
         country: t.country,
         introducibleFields: t.introducibleFields,
         surveyUrl: t.surveyUrl,
+        boardUrl: t.boardUrl,
       };
       // 各 {{n}} を値に解決する:
       //   { value } → テンプレに保存した固定値

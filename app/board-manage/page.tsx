@@ -150,6 +150,7 @@ export default async function BoardManagePage({
     note: r.note ?? "",
     status: r.status,
     statusNote: r.statusNote ?? "",
+    personId: r.personId,
   }));
 
   const manageQuestions: ManageQuestion[] = questions.map((q) => ({
