@@ -33,7 +33,6 @@ import {
   DECLINED_STAGE,
   HOLD_STAGE,
   OFFER_TO_APPLICATION_DAYS,
-  OFFER_TO_JOIN_DAYS,
   ONBOARDING_STAGES,
   readSupports,
   resolveStage,
@@ -229,7 +228,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ personI
           applicationType: typeof body.applicationType === "string" ? body.applicationType : placement.applicationType,
           applicationPlannedAt:
             placement.applicationPlannedAt ?? new Date(base.getTime() + OFFER_TO_APPLICATION_DAYS * 86_400_000),
-          joinPlannedAt: placement.joinPlannedAt ?? new Date(base.getTime() + OFFER_TO_JOIN_DAYS * 86_400_000),
         },
       });
       const person = placement.personId

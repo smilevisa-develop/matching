@@ -8,13 +8,12 @@
  *   - 実際に起きたトラブル 12 件 (条件の後出し・確認不足で再申請・住居未定で辞退 など)
  *
  * 川村さんの指示:
- *   申請予定日 = 内定受領から 10 日後 / 就業開始予定日 = 内定受領から 2 か月後
+ *   申請予定日 = 内定受領から 10 日後 (入社予定日は自動で入れない。2026-11-19)
  */
 
 import { MASTER_TASKS, TASK_PHASES, type MasterTask } from "./onboarding-task-master";
 
 export const OFFER_TO_APPLICATION_DAYS = 10;
-export const OFFER_TO_JOIN_DAYS = 60;
 /** 入管への退社・入社報告の期限 (退職日・入社日から) */
 export const IMMIGRATION_REPORT_DAYS = 14;
 

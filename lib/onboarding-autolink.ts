@@ -16,7 +16,7 @@
 
 import { prisma } from "./prisma";
 import { ensureBillingTasks } from "./billing-flow";
-import { buildFlowTasks, IMMIGRATION_REPORT_DAYS, OFFER_TO_APPLICATION_DAYS, OFFER_TO_JOIN_DAYS, PRE_OFFER_STAGE } from "./onboarding-flow";
+import { buildFlowTasks, IMMIGRATION_REPORT_DAYS, OFFER_TO_APPLICATION_DAYS, PRE_OFFER_STAGE } from "./onboarding-flow";
 import { ensurePlacementFolder } from "./placement-folder";
 
 export const OFFER_STAGE = "内定済み";
@@ -44,10 +44,10 @@ export async function ensureOnboardingCard(personId: number, baseDate: Date | nu
     stage: "offer",
     stageChangedAt: new Date(),
     offerAt: base,
-    // 川村さんの指示: 申請予定日 = 内定受領 +10日 / 入社予定日 = 内定受領 +2か月
+    // 川村さんの指示: 申請予定日 = 内定受領 +10日。入社予定日は自動で入れない (2026-11-19 土田さん。確定した日を手で入れる)
     applicationPlannedAt:
       existing?.applicationPlannedAt ?? (base ? new Date(base.getTime() + OFFER_TO_APPLICATION_DAYS * 86_400_000) : null),
-    joinPlannedAt: existing?.joinPlannedAt ?? (base ? new Date(base.getTime() + OFFER_TO_JOIN_DAYS * 86_400_000) : null),
+    joinPlannedAt: existing?.joinPlannedAt ?? null,
   };
   const placement = existing
     ? await prisma.personPlacement.update({ where: { id: existing.id }, data: card })
@@ -119,7 +119,6 @@ export async function onDealCandidateStageChanged(personId: number, stage: strin
         followUpOwnerId: current?.followUpOwnerId ?? owner?.id ?? null,
         applicationPlannedAt:
           current?.applicationPlannedAt ?? new Date(date.getTime() + OFFER_TO_APPLICATION_DAYS * 86_400_000),
-        joinPlannedAt: current?.joinPlannedAt ?? new Date(date.getTime() + OFFER_TO_JOIN_DAYS * 86_400_000),
       },
     });
 
