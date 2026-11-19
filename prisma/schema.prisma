@@ -111,6 +111,32 @@ model Company {
   deals               Deal[]
   checklistDeliveries JobChecklistDelivery[]
   documents           CompanyDocument[]
+  meetingNotes        MeetingNote[]
+}
+
+/// 企業との商談の議事録 (Notta)。
+/// Zapier (無料) が Notta の AI 要約を「Notta 議事録」スプシに1行ずつ書き足し、
+/// 企業の画面で「この会社の議事録を探す」を押したときに、タイトルに企業名を含む行だけを取り込む。
+model MeetingNote {
+  id            Int       @id @default(autoincrement())
+  companyId     Int
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// スプシの行を見分けるキー (Notta の録音ID。無ければ URL、それも無ければ タイトル+日時)。同じ企業に二重に保存しない
+  sourceKey     String
+  title         String
+  /// 商談の日時 (スプシの日時を読めたとき)
+  meetingAt     DateTime?
+  /// スプシの日時の文字のまま (読めなかったときの表示用)
+  meetingAtText String?
+  summary       String?
+  transcript    String?
+  url           String?
+  /// 「この会社のものではない」で外した日時。外したものは一覧に出さず、もう一度探しても入れ直さない
+  dismissedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([companyId, sourceKey])
+  @@index([companyId, meetingAt])
 }
 
 /// 母国語の求人票チェックリストを候補者へ送った記録。

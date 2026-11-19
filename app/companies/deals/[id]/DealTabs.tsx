@@ -7,12 +7,14 @@ export default function DealTabs({
   progressContent,
   conditionContent,
   jobPostingContent,
+  meetingNotesContent,
 }: {
   progressContent: ReactNode;
   conditionContent: ReactNode;
   jobPostingContent: ReactNode;
+  meetingNotesContent: ReactNode;
 }) {
-  const [tab, setTab] = useKeptState<"progress" | "condition" | "jobPosting">("dealTab", "progress");
+  const [tab, setTab] = useKeptState<"progress" | "condition" | "jobPosting" | "meetingNotes">("dealTab", "progress");
 
   return (
     <div className="space-y-4">
@@ -26,11 +28,15 @@ export default function DealTabs({
         <TabButton active={tab === "jobPosting"} onClick={() => setTab("jobPosting")}>
           求人票
         </TabButton>
+        <TabButton active={tab === "meetingNotes"} onClick={() => setTab("meetingNotes")}>
+          商談メモ
+        </TabButton>
       </div>
 
       {tab === "progress" ? progressContent : null}
       {tab === "condition" ? conditionContent : null}
       {tab === "jobPosting" ? jobPostingContent : null}
+      {tab === "meetingNotes" ? meetingNotesContent : null}
     </div>
   );
 }
