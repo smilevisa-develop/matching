@@ -1018,11 +1018,33 @@ export async function ensurePersonDriveFolder({
   }
 
   const { drive } = await getGoogleClients();
-  return getOrCreateFolder({
+  const created = await getOrCreateFolder({
     drive,
     parentFolderUrl,
     folderName: personName,
   });
+  await shareFolderWithLink(drive, created.folderId);
+  return created;
+}
+
+/**
+ * 候補者フォルダを「リンクを知っている人は閲覧可」にする。
+ * 親の「01_候補者」は閲覧不可 (2026-11-19 から)。推薦リストで企業に渡すリンクが開けるよう、候補者フォルダごとに付ける。
+ * 失敗してもフォルダ作成は止めない。
+ */
+async function shareFolderWithLink(
+  drive: Awaited<ReturnType<typeof getGoogleClients>>["drive"],
+  folderId: string,
+) {
+  try {
+    await drive.permissions.create({
+      fileId: folderId,
+      supportsAllDrives: true,
+      requestBody: { type: "anyone", role: "reader", allowFileDiscovery: false },
+    });
+  } catch (e) {
+    console.warn("候補者フォルダの閲覧可の設定に失敗:", folderId, e instanceof Error ? e.message : e);
+  }
 }
 
 // 企業フォルダ (externalId_会社名 で検索 or 新規作成)
