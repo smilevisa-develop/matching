@@ -8,6 +8,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { publicUrl } from "@/lib/public-url";
 import { getBoardPartner, notifyStaff } from "@/lib/board";
+import { ensureQuestionTranslations } from "@/lib/board-translate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +48,9 @@ export async function POST(req: Request) {
       `❓ 案件ボードに質問 #${q.id}\n${partner.name} → ${deal.boardTitle ?? `案件 ${dealId}`}\n${question}\n${publicUrl("/board-manage?tab=qa")}`,
     ),
   );
+
+  // 質問はパートナーの言語で来るので、日本語を含む 4 言語の訳を作る
+  after(() => ensureQuestionTranslations([q.id]));
 
   return Response.json({ ok: true, id: q.id });
 }

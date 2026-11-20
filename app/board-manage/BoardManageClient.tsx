@@ -54,6 +54,8 @@ export type ManageQuestion = {
   dealId: number;
   dealLabel: string;
   question: string;
+  /** 質問の日本語訳 (日本語以外で書かれたときだけ) */
+  questionJa: string;
   answer: string;
   isPublic: boolean;
   answeredAt: string;
@@ -573,6 +575,7 @@ function QuestionRow({ q }: { q: ManageQuestion }) {
         {q.answer ? ` ・ 回答 ${q.answeredAt}` : " ・ 未回答"}
       </p>
       <p className="mt-1 whitespace-pre-wrap font-medium">Q. {q.question}</p>
+      {q.questionJa ? <p className="mt-0.5 whitespace-pre-wrap text-sm">日本語訳: {q.questionJa}</p> : null}
       <textarea className={`${INPUT} mt-2`} rows={2} placeholder="回答" value={answer} onChange={(e) => setAnswer(e.target.value)} />
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-1.5">

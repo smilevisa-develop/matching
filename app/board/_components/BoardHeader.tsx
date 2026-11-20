@@ -1,40 +1,38 @@
 import Link from "next/link";
+import { bt, type BoardLang } from "@/lib/board-i18n";
+import LanguageSwitcher from "./LanguageSwitcher";
 
-/** 案件ボード (パートナー向け) の上の帯 */
-export default function BoardHeader({ partnerName }: { partnerName?: string }) {
+/** 案件ボード (パートナー向け) の上の帯。右に言語の切り替え */
+export default function BoardHeader({ lang, partnerName }: { lang: BoardLang; partnerName?: string }) {
   return (
     <header className="bg-[var(--color-brand)] text-white">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
-        <Link href="/board" className="flex items-center gap-2">
+        <Link href="/board" className="flex min-w-0 items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="" className="h-7 w-7 rounded bg-white" />
+          <img src="/logo.png" alt="" className="h-7 w-7 shrink-0 rounded bg-white" />
           <span className="text-sm font-bold text-white">
-            SMILE MATCHING <span className="font-normal">案件ボード / Job Board</span>
+            SMILE MATCHING <span className="font-normal">{bt(lang, "headerTitle")}</span>
           </span>
         </Link>
-        {partnerName ? <span className="truncate text-xs text-white">{partnerName}</span> : null}
+        <div className="flex min-w-0 items-center gap-3">
+          {partnerName ? <span className="hidden truncate text-xs text-white sm:inline">{partnerName}</span> : null}
+          <LanguageSwitcher lang={lang} />
+        </div>
       </div>
     </header>
   );
 }
 
 /** ボードに入れないときの案内 */
-export function BoardSignedOut({ invalid }: { invalid?: boolean }) {
+export function BoardSignedOut({ lang, invalid }: { lang: BoardLang; invalid?: boolean }) {
   return (
     <div className="min-h-screen bg-[var(--color-light)]">
-      <BoardHeader />
+      <BoardHeader lang={lang} />
       <main className="mx-auto max-w-xl px-4 py-16 text-center">
         <p className="text-lg font-bold text-[var(--color-text-dark)]">
-          {invalid ? "このリンクは使えません" : "専用リンクから開いてください"}
+          {bt(lang, invalid ? "signedOutInvalidTitle" : "signedOutTitle")}
         </p>
-        <p className="mt-2 text-sm text-gray-600">
-          {invalid ? "This link is no longer valid." : "Please open the board from your personal link."}
-        </p>
-        <p className="mt-6 text-sm text-gray-600">
-          案件ボードは、登録済みのパートナー様だけが見られます。リンクが分からない場合は、スマイルリンクの担当者にご連絡ください。
-          <br />
-          The board is for registered partners only. Please contact your SMILELINK representative for your link.
-        </p>
+        <p className="mt-6 text-sm text-gray-600">{bt(lang, "signedOutBody")}</p>
       </main>
     </div>
   );

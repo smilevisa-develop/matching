@@ -1,10 +1,13 @@
 /**
  * 案件ボードの管理: 質問に答える (要ログイン)。
  * PATCH { answer, isPublic }  isPublic = true なら全パートナーの案件ページに出る。
+ * 回答は英語・ベトナム語・インドネシア語にも訳して保存する (lib/board-translate.ts)。
  */
 
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
+import { ensureQuestionTranslations } from "@/lib/board-translate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +25,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       where: { id: Number(id) },
       data: { answer, isPublic: body?.isPublic !== false, answeredAt: current.answeredAt ?? new Date() },
     });
+    // 回答をパートナーの言語に訳す (応答のあと)
+    after(() => ensureQuestionTranslations([Number(id)]));
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json(

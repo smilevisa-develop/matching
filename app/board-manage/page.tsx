@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { pickQa } from "@/lib/board-translate";
 import { requireCurrentAccount } from "@/lib/auth";
 import {
   BOARD_REC_INACTIVE,
@@ -160,6 +161,11 @@ export default async function BoardManagePage({
     dealId: q.deal.id,
     dealLabel: q.deal.boardTitle || q.deal.title,
     question: q.question,
+    // パートナーが日本語以外で書いた質問は、日本語訳も出す (訳と原文が同じなら出さない)
+    questionJa: (() => {
+      const ja = pickQa(q.translations, q.question, null, "ja");
+      return ja.translated ? ja.question : "";
+    })(),
     answer: q.answer ?? "",
     isPublic: q.isPublic,
     answeredAt: ymd(q.answeredAt),

@@ -3,9 +3,27 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { BOARD_REC_STATUS_EN } from "@/lib/board-labels";
+import {
+  BOARD_CONDITION_GROUPS,
+  BOARD_CONDITION_LABELS,
+  bt,
+  recStatusLabel,
+  type BoardLang,
+} from "@/lib/board-i18n";
 
-type Condition = { group: string; ja: string; en: string; value: string };
+/** 条件。value は日本語の原文、text は選んだ言語 (訳が無ければ原文) */
+type Condition = { key: string; group: string; value: string; text: string };
+type Requirement = { ja: string; text: string };
+type Original = {
+  title: string;
+  field: string;
+  area: string;
+  summary: string;
+  fee: string;
+  jobChangeScope: string;
+  placeChangeScope: string;
+  renewalLimit: string;
+};
 
 type DealView = {
   id: number;
@@ -21,8 +39,9 @@ type DealView = {
   jobChangeScope: string;
   placeChangeScope: string;
   renewalLimit: string;
-  requirements: string[];
+  requirements: Requirement[];
   conditions: Condition[];
+  original: Original;
   myCount: number;
   myLimit: number;
   totalCount: number;
@@ -32,34 +51,51 @@ type DealView = {
 };
 
 type Rec = { id: number; candidateName: string; status: string; statusNote: string; createdAt: string };
-type Question = { id: number; question: string; answer: string; answeredAt: string; mine: boolean; isPublic: boolean };
+type Question = {
+  id: number;
+  question: string;
+  answer: string;
+  originalQuestion: string;
+  originalAnswer: string;
+  translated: boolean;
+  answeredAt: string;
+  mine: boolean;
+  isPublic: boolean;
+};
 
 const INPUT =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[var(--color-primary)] focus:outline-none";
 
 export default function DealBoardClient({
+  lang,
+  translating,
   deal,
   myRecs,
   questions,
   preview = false,
 }: {
+  lang: BoardLang;
+  translating: boolean;
   deal: DealView;
   myRecs: Rec[];
   questions: Question[];
   preview?: boolean;
 }) {
   const router = useRouter();
+  // 訳の画面で「日本語の原文を見る」を押したら、案件の中身を原文で出す
+  const [showOriginal, setShowOriginal] = useState(false);
+  const o = showOriginal ? deal.original : deal;
   const myFull = deal.myCount >= deal.myLimit;
   const canRecommend = !preview && !deal.closed && !deal.full && !myFull;
   const blockedReason = preview
-    ? "社員のプレビューです。推薦と質問はパートナーの画面からだけできます。"
+    ? bt(lang, "blockedPreview")
     : deal.closed
-    ? "この案件は締め切りました / This job is closed."
-    : deal.full
-      ? "推薦枠が埋まりました / All recommendation slots are filled."
-      : myFull
-        ? `貴社の推薦枠 (${deal.myLimit} 名) を使い切りました / You have used all ${deal.myLimit} slots.`
-        : "";
+      ? bt(lang, "blockedClosed")
+      : deal.full
+        ? bt(lang, "blockedFull")
+        : myFull
+          ? bt(lang, "blockedMine", { n: deal.myLimit })
+          : "";
 
   const groups = useMemo(() => {
     const map = new Map<string, Condition[]>();
@@ -71,94 +107,115 @@ export default function DealBoardClient({
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/board" className="text-sm text-[var(--color-primary)] underline">
-        ← 案件一覧 / All jobs
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link href="/board" className="text-sm text-[var(--color-primary)] underline">
+          {bt(lang, "back")}
+        </Link>
+        {lang !== "ja" ? (
+          <button
+            type="button"
+            onClick={() => setShowOriginal((v) => !v)}
+            className="rounded-lg border border-[var(--color-primary)] px-3 py-1 text-xs font-semibold text-[var(--color-primary)]"
+          >
+            {bt(lang, showOriginal ? "showTranslation" : "showOriginal")}
+          </button>
+        ) : null}
+      </div>
+      {lang !== "ja" ? (
+        <p className="mt-2 text-xs text-gray-600">
+          {bt(lang, "translatedNote")}
+          {translating ? ` ${bt(lang, "translating")}` : ""}
+        </p>
+      ) : null}
 
       <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_300px]">
         <div className="space-y-4">
           <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-center gap-1.5">
               {deal.closed ? (
-                <Badge muted>締切 / Closed</Badge>
+                <Badge muted>{bt(lang, "badgeClosed")}</Badge>
               ) : deal.full ? (
-                <Badge muted>満枠 / Full</Badge>
+                <Badge muted>{bt(lang, "badgeFull")}</Badge>
               ) : (
-                <Badge>募集中 / Open</Badge>
+                <Badge>{bt(lang, "badgeOpen")}</Badge>
               )}
-              {deal.field ? <span className="rounded-full bg-[var(--color-light)] px-2 py-0.5 text-xs">{deal.field}</span> : null}
+              {o.field ? <span className="rounded-full bg-[var(--color-light)] px-2 py-0.5 text-xs">{o.field}</span> : null}
             </div>
-            <h1 className="mt-2 text-xl font-bold text-[var(--color-text-dark)]">{deal.title}</h1>
+            <h1 className="mt-2 text-xl font-bold text-[var(--color-text-dark)]">{o.title}</h1>
             <p className="mt-1 text-xs text-gray-500">
-              案件番号 {deal.id}
-              {deal.publishedAt ? ` ・ 掲載 ${deal.publishedAt}` : ""} ・ 最終更新 {deal.updatedAt}
+              {bt(lang, "jobNo", { id: deal.id })}
+              {deal.publishedAt ? ` ・ ${bt(lang, "posted")} ${deal.publishedAt}` : ""} ・ {bt(lang, "lastUpdated")} {deal.updatedAt}
             </p>
-            {deal.summary ? <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-700">{deal.summary}</p> : null}
+            {o.summary ? <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-700">{o.summary}</p> : null}
           </section>
 
           <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-bold text-[var(--color-text-dark)]">条件 / Conditions</h2>
+            <h2 className="text-sm font-bold text-[var(--color-text-dark)]">{bt(lang, "conditions")}</h2>
             <dl className="mt-3 grid grid-cols-[minmax(110px,auto)_1fr] gap-x-4 gap-y-2 text-sm">
-              <Row ja="勤務地の地域" en="Area" value={deal.area} />
-              <Row ja="募集人数" en="Openings" value={deal.openings ? `${deal.openings} 名` : ""} />
-              <Row ja="業務の変更の範囲" en="Scope of job changes" value={deal.jobChangeScope} />
-              <Row ja="就業場所の変更の範囲" en="Scope of workplace changes" value={deal.placeChangeScope} />
-              <Row ja="契約更新の上限" en="Renewal limit" value={deal.renewalLimit} />
+              <Row label={bt(lang, "areaRegion")} value={o.area} />
+              <Row label={bt(lang, "openings")} value={deal.openings ? bt(lang, "openingsValue", { n: deal.openings }) : ""} />
+              <Row label={bt(lang, "jobChange")} value={o.jobChangeScope} />
+              <Row label={bt(lang, "placeChange")} value={o.placeChangeScope} />
+              <Row label={bt(lang, "renewal")} value={o.renewalLimit} />
             </dl>
             {groups.length === 0 ? (
-              <p className="mt-4 text-sm text-gray-500">詳しい条件は準備中です。質問からお問い合わせください。 / Details are being prepared.</p>
+              <p className="mt-4 text-sm text-gray-500">{bt(lang, "detailsPreparing")}</p>
             ) : (
               groups.map(([group, rows]) => (
                 <div key={group} className="mt-5">
-                  <h3 className="text-xs font-semibold text-gray-500">{group}</h3>
+                  <h3 className="text-xs font-semibold text-gray-500">{BOARD_CONDITION_GROUPS[group]?.[lang] ?? group}</h3>
                   <dl className="mt-2 grid grid-cols-[minmax(110px,auto)_1fr] gap-x-4 gap-y-2 text-sm">
                     {rows.map((c) => (
-                      <Row key={c.ja} ja={c.ja} en={c.en} value={c.value} />
+                      <Row
+                        key={c.key}
+                        label={BOARD_CONDITION_LABELS[c.key]?.[lang] ?? c.key}
+                        value={showOriginal ? c.value : c.text}
+                      />
                     ))}
                   </dl>
                 </div>
               ))
             )}
-            <p className="mt-5 text-xs text-gray-500">
-              会社名と所在地は、推薦をお受けしたあとにお伝えします。 / The employer&apos;s name and address are shared after we accept
-              your recommendation.
-            </p>
+            <p className="mt-5 text-xs text-gray-500">{bt(lang, "employerHidden")}</p>
           </section>
 
           {deal.requirements.length ? (
             <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="text-sm font-bold text-[var(--color-text-dark)]">推薦の必須条件 / Must-have requirements</h2>
+              <h2 className="text-sm font-bold text-[var(--color-text-dark)]">{bt(lang, "requirements")}</h2>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
                 {deal.requirements.map((r) => (
-                  <li key={r}>{r}</li>
+                  <li key={r.ja}>{showOriginal ? r.ja : r.text}</li>
                 ))}
               </ul>
             </section>
           ) : null}
 
-          <QaSection dealId={deal.id} questions={questions} disabled={preview} onPosted={() => router.refresh()} />
+          <QaSection
+            lang={lang}
+            showOriginal={showOriginal}
+            dealId={deal.id}
+            questions={questions}
+            disabled={preview}
+            onPosted={() => router.refresh()}
+          />
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
           <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            {deal.fee ? (
+            {o.fee ? (
               <div>
-                <p className="text-xs text-gray-500">紹介料 (貴社の取り分) / Your fee</p>
-                <p className="text-lg font-bold text-[var(--color-primary)]">{deal.fee}</p>
+                <p className="text-xs text-gray-500">{bt(lang, "feeLabel")}</p>
+                <p className="text-lg font-bold text-[var(--color-primary)]">{o.fee}</p>
               </div>
             ) : null}
             <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              <dt className="text-gray-500">貴社の推薦</dt>
-              <dd>
-                {deal.myCount} / {deal.myLimit} 名
-              </dd>
-              <dt className="text-gray-500">全体の推薦</dt>
-              <dd>
-                {deal.totalCount} / {deal.totalLimit} 名
-              </dd>
+              <dt className="text-gray-500">{bt(lang, "myRecs")}</dt>
+              <dd>{bt(lang, "people", { a: deal.myCount, b: deal.myLimit })}</dd>
+              <dt className="text-gray-500">{bt(lang, "allRecs")}</dt>
+              <dd>{bt(lang, "people", { a: deal.totalCount, b: deal.totalLimit })}</dd>
               {deal.deadline ? (
                 <>
-                  <dt className="text-gray-500">締切</dt>
+                  <dt className="text-gray-500">{bt(lang, "deadline")}</dt>
                   <dd>{deal.deadline}</dd>
                 </>
               ) : null}
@@ -169,7 +226,7 @@ export default function DealBoardClient({
                 onClick={() => setShowForm(true)}
                 className="mt-4 w-full rounded-lg bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--color-primary-hover)]"
               >
-                候補者を推薦する / Recommend
+                {bt(lang, "recommend")}
               </button>
             ) : (
               <p className="mt-4 rounded-lg bg-gray-100 p-3 text-sm text-gray-600">{blockedReason}</p>
@@ -178,20 +235,18 @@ export default function DealBoardClient({
 
           {myRecs.length ? (
             <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="text-sm font-bold text-[var(--color-text-dark)]">貴社の推薦 / Your candidates</h2>
+              <h2 className="text-sm font-bold text-[var(--color-text-dark)]">{bt(lang, "yourCandidates")}</h2>
               <ul className="mt-2 space-y-2 text-sm">
                 {myRecs.map((r) => (
                   <li key={r.id} className="rounded-lg bg-[var(--color-light)] p-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium">{r.candidateName}</span>
-                      <span className="text-xs">
-                        {r.status} / {BOARD_REC_STATUS_EN[r.status] ?? r.status}
-                      </span>
+                      <span className="text-xs">{recStatusLabel(lang, r.status)}</span>
                     </div>
                     {r.statusNote ? <p className="mt-1 text-xs text-gray-600">{r.statusNote}</p> : null}
                     <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
                       <span>{r.createdAt}</span>
-                      {r.status === "受付" ? <WithdrawButton id={r.id} onDone={() => router.refresh()} /> : null}
+                      {r.status === "受付" ? <WithdrawButton lang={lang} id={r.id} onDone={() => router.refresh()} /> : null}
                     </div>
                   </li>
                 ))}
@@ -203,6 +258,7 @@ export default function DealBoardClient({
 
       {showForm ? (
         <RecommendForm
+          lang={lang}
           dealId={deal.id}
           requirements={deal.requirements}
           onClose={() => setShowForm(false)}
@@ -216,14 +272,11 @@ export default function DealBoardClient({
   );
 }
 
-function Row({ ja, en, value }: { ja: string; en: string; value: string }) {
+function Row({ label, value }: { label: string; value: string }) {
   if (!value) return null;
   return (
     <>
-      <dt className="text-gray-500">
-        {ja}
-        <span className="block text-[11px] text-gray-400">{en}</span>
-      </dt>
+      <dt className="text-gray-500">{label}</dt>
       <dd className="whitespace-pre-wrap">{value}</dd>
     </>
   );
@@ -238,11 +291,15 @@ function Badge({ children, muted }: { children: React.ReactNode; muted?: boolean
 }
 
 function QaSection({
+  lang,
+  showOriginal,
   dealId,
   questions,
   disabled,
   onPosted,
 }: {
+  lang: BoardLang;
+  showOriginal: boolean;
   dealId: number;
   questions: Question[];
   disabled?: boolean;
@@ -255,7 +312,9 @@ function QaSection({
   const [sent, setSent] = useState(false);
 
   const shown = questions.filter(
-    (x) => !search.trim() || `${x.question} ${x.answer}`.toLowerCase().includes(search.trim().toLowerCase()),
+    (x) =>
+      !search.trim() ||
+      `${x.question} ${x.answer} ${x.originalQuestion} ${x.originalAnswer}`.toLowerCase().includes(search.trim().toLowerCase()),
   );
 
   const submit = async (e: React.FormEvent) => {
@@ -270,12 +329,12 @@ function QaSection({
         body: JSON.stringify({ dealId, question: q }),
       });
       const data = await res.json();
-      if (!data.ok) throw new Error(data.error ?? "送信できませんでした");
+      if (!data.ok) throw new Error(data.error ?? bt(lang, "sendFailed"));
       setQ("");
       setSent(true);
       onPosted();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "送信できませんでした");
+      setError(err instanceof Error ? err.message : bt(lang, "sendFailed"));
     } finally {
       setSending(false);
     }
@@ -283,15 +342,12 @@ function QaSection({
 
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-bold text-[var(--color-text-dark)]">質問と回答 / Q&amp;A</h2>
-      <p className="mt-1 text-xs text-gray-500">
-        回答は、この案件を見る全パートナーに公開します。質問する前に、同じ質問がないか確かめてください。 / Answers are shared with all
-        partners. Please check existing answers first.
-      </p>
+      <h2 className="text-sm font-bold text-[var(--color-text-dark)]">{bt(lang, "qa")}</h2>
+      <p className="mt-1 text-xs text-gray-500">{bt(lang, "qaNote")}</p>
       {questions.length > 3 ? (
         <input
           className={`${INPUT} mt-3`}
-          placeholder="Q&A を探す / Search Q&A"
+          placeholder={bt(lang, "qaSearch")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -300,21 +356,21 @@ function QaSection({
         <ul className="mt-3 space-y-3">
           {shown.map((x) => (
             <li key={x.id} className="rounded-lg border border-gray-100 p-3 text-sm">
-              <p className="font-medium">Q. {x.question}</p>
+              <p className="whitespace-pre-wrap font-medium">Q. {showOriginal ? x.originalQuestion : x.question}</p>
               {x.answer ? (
                 <p className="mt-1 whitespace-pre-wrap text-gray-700">
-                  A. {x.answer}
+                  A. {showOriginal ? x.originalAnswer : x.answer}
                   <span className="ml-2 text-xs text-gray-400">{x.answeredAt}</span>
-                  {x.mine && !x.isPublic ? <span className="ml-2 text-xs text-gray-400">(貴社だけに回答 / private)</span> : null}
+                  {x.mine && !x.isPublic ? <span className="ml-2 text-xs text-gray-400">{bt(lang, "privateAnswer")}</span> : null}
                 </p>
               ) : (
-                <p className="mt-1 text-xs text-gray-500">回答を準備中です / Waiting for an answer</p>
+                <p className="mt-1 text-xs text-gray-500">{bt(lang, "waitingAnswer")}</p>
               )}
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-3 text-sm text-gray-500">まだ質問はありません / No questions yet.</p>
+        <p className="mt-3 text-sm text-gray-500">{bt(lang, "noQuestions")}</p>
       )}
       {disabled ? null : (
       <form onSubmit={submit} className="mt-4 space-y-2">
@@ -322,7 +378,7 @@ function QaSection({
           className={INPUT}
           rows={3}
           maxLength={1000}
-          placeholder="条件について質問する (日本語・英語) / Ask about this job (Japanese or English)"
+          placeholder={bt(lang, "askPlaceholder")}
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
@@ -330,13 +386,13 @@ function QaSection({
           }}
         />
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        {sent ? <p className="text-sm text-[var(--color-primary)]">送信しました。回答はこのページに出ます。 / Sent. The answer will appear here.</p> : null}
+        {sent ? <p className="text-sm text-[var(--color-primary)]">{bt(lang, "sentQ")}</p> : null}
         <button
           type="submit"
           disabled={sending || !q.trim()}
           className="rounded-lg border border-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-primary)] disabled:opacity-50"
         >
-          {sending ? "送信中…" : "質問を送る / Send question"}
+          {sending ? bt(lang, "sending") : bt(lang, "sendQ")}
         </button>
       </form>
       )}
@@ -344,7 +400,7 @@ function QaSection({
   );
 }
 
-function WithdrawButton({ id, onDone }: { id: number; onDone: () => void }) {
+function WithdrawButton({ lang, id, onDone }: { lang: BoardLang; id: number; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   return (
     <button
@@ -352,26 +408,28 @@ function WithdrawButton({ id, onDone }: { id: number; onDone: () => void }) {
       disabled={busy}
       className="text-xs text-gray-500 underline"
       onClick={async () => {
-        if (!window.confirm("この推薦を取り下げますか？ / Withdraw this recommendation?")) return;
+        if (!window.confirm(bt(lang, "withdrawConfirm"))) return;
         setBusy(true);
         await fetch(`/api/board/recommendations/${id}`, { method: "DELETE" }).catch(() => undefined);
         setBusy(false);
         onDone();
       }}
     >
-      取り下げ / Withdraw
+      {bt(lang, "withdraw")}
     </button>
   );
 }
 
 function RecommendForm({
+  lang,
   dealId,
   requirements,
   onClose,
   onDone,
 }: {
+  lang: BoardLang;
   dealId: number;
-  requirements: string[];
+  requirements: Requirement[];
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -393,7 +451,8 @@ function RecommendForm({
   const [error, setError] = useState<string | null>(null);
 
   const set = <K extends keyof typeof form>(k: K, v: string) => setForm((c) => ({ ...c, [k]: v }));
-  const allChecked = requirements.every((r) => checks[r]);
+  // チェックは日本語の原文で送る (サーバーは原文で照らし合わせる)
+  const allChecked = requirements.every((r) => checks[r.ja]);
   const ready = form.candidateName.trim() && allChecked && consent;
 
   const submit = async (e: React.FormEvent) => {
@@ -408,10 +467,10 @@ function RecommendForm({
         body: JSON.stringify({ dealId, ...form, checks, consent }),
       });
       const data = await res.json();
-      if (!data.ok) throw new Error(data.error ?? "送信できませんでした");
+      if (!data.ok) throw new Error(data.error ?? bt(lang, "sendFailed"));
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "送信できませんでした");
+      setError(err instanceof Error ? err.message : bt(lang, "sendFailed"));
     } finally {
       setSending(false);
     }
@@ -421,27 +480,25 @@ function RecommendForm({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" role="dialog" aria-modal="true">
       <form onSubmit={submit} className="my-8 w-full max-w-lg space-y-4 rounded-2xl bg-white p-5 shadow-xl">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-[var(--color-text-dark)]">候補者を推薦する / Recommend a candidate</h2>
+          <h2 className="text-base font-bold text-[var(--color-text-dark)]">{bt(lang, "recommend")}</h2>
           <button type="button" onClick={onClose} className="text-sm text-gray-500">
-            閉じる / Close
+            {bt(lang, "close")}
           </button>
         </div>
 
         {requirements.length ? (
           <fieldset className="rounded-lg bg-[var(--color-light)] p-3">
-            <legend className="px-1 text-xs font-semibold text-gray-600">
-              必須条件をすべて満たしていますか？ / Does the candidate meet every requirement?
-            </legend>
+            <legend className="px-1 text-xs font-semibold text-gray-600">{bt(lang, "reqCheck")}</legend>
             <div className="mt-1 space-y-1.5">
               {requirements.map((r) => (
-                <label key={r} className="flex items-start gap-2 text-sm">
+                <label key={r.ja} className="flex items-start gap-2 text-sm">
                   <input
                     type="checkbox"
                     className="mt-1"
-                    checked={!!checks[r]}
-                    onChange={(e) => setChecks((c) => ({ ...c, [r]: e.target.checked }))}
+                    checked={!!checks[r.ja]}
+                    onChange={(e) => setChecks((c) => ({ ...c, [r.ja]: e.target.checked }))}
                   />
-                  <span>{r}</span>
+                  <span>{r.text}</span>
                 </label>
               ))}
             </div>
@@ -449,69 +506,66 @@ function RecommendForm({
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="氏名 * / Name">
+          <Field label={bt(lang, "fName")}>
             <input className={INPUT} value={form.candidateName} onChange={(e) => set("candidateName", e.target.value)} required />
           </Field>
-          <Field label="国籍 / Nationality">
+          <Field label={bt(lang, "fNationality")}>
             <input className={INPUT} value={form.nationality} onChange={(e) => set("nationality", e.target.value)} />
           </Field>
-          <Field label="年齢 / Age">
+          <Field label={bt(lang, "fAge")}>
             <input className={INPUT} inputMode="numeric" value={form.age} onChange={(e) => set("age", e.target.value.replace(/\D/g, ""))} />
           </Field>
-          <Field label="性別 / Gender">
+          <Field label={bt(lang, "fGender")}>
             <select className={INPUT} value={form.gender} onChange={(e) => set("gender", e.target.value)}>
               <option value="">—</option>
-              <option value="男性">男性 / Male</option>
-              <option value="女性">女性 / Female</option>
+              <option value="男性">{bt(lang, "male")}</option>
+              <option value="女性">{bt(lang, "female")}</option>
             </select>
           </Field>
-          <Field label="いまいる場所 / Location">
+          <Field label={bt(lang, "fLocation")}>
             <select className={INPUT} value={form.residence} onChange={(e) => set("residence", e.target.value)}>
               <option value="">—</option>
-              <option value="国内">日本国内 / In Japan</option>
-              <option value="国外">海外 / Overseas</option>
+              <option value="国内">{bt(lang, "inJapan")}</option>
+              <option value="国外">{bt(lang, "overseas")}</option>
             </select>
           </Field>
-          <Field label="在留資格 / Visa status">
+          <Field label={bt(lang, "fVisa")}>
             <input
               className={INPUT}
-              placeholder="例: 特定技能1号 / SSW (i)"
+              placeholder={bt(lang, "fVisaPh")}
               value={form.residenceStatus}
               onChange={(e) => set("residenceStatus", e.target.value)}
             />
           </Field>
-          <Field label="日本語 / Japanese">
-            <input className={INPUT} placeholder="例: N3" value={form.japaneseLevel} onChange={(e) => set("japaneseLevel", e.target.value)} />
+          <Field label={bt(lang, "fJapanese")}>
+            <input className={INPUT} placeholder={bt(lang, "fJapanesePh")} value={form.japaneseLevel} onChange={(e) => set("japaneseLevel", e.target.value)} />
           </Field>
-          <Field label="経験 / Experience">
+          <Field label={bt(lang, "fExperience")}>
             <input className={INPUT} value={form.experience} onChange={(e) => set("experience", e.target.value)} />
           </Field>
         </div>
-        <Field label="履歴書のリンク / Resume link">
+        <Field label={bt(lang, "fResume")}>
           <input className={INPUT} type="url" placeholder="https://" value={form.resumeUrl} onChange={(e) => set("resumeUrl", e.target.value)} />
         </Field>
-        <Field label="推薦の理由・補足 / Notes">
+        <Field label={bt(lang, "fNotes")}>
           <textarea className={INPUT} rows={3} maxLength={2000} value={form.note} onChange={(e) => set("note", e.target.value)} />
         </Field>
 
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-1" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-          <span>
-            候補者本人から、この情報をスマイルリンクと求人企業に提供することの同意を得ています。 / The candidate has agreed to share this
-            information with SMILELINK and the employer.
-          </span>
+          <span>{bt(lang, "consent")}</span>
         </label>
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         {!allChecked ? (
-          <p className="text-xs text-gray-500">必須条件にすべてチェックすると送れます。 / Check every requirement to continue.</p>
+          <p className="text-xs text-gray-500">{bt(lang, "checkAll")}</p>
         ) : null}
         <button
           type="submit"
           disabled={!ready || sending}
           className="w-full rounded-lg bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {sending ? "送信中…" : "推薦を送る / Send recommendation"}
+          {sending ? bt(lang, "sending") : bt(lang, "sendRec")}
         </button>
       </form>
     </div>

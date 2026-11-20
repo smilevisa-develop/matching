@@ -12,6 +12,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getCurrentAccount } from "@/lib/auth";
 import { publicUrl } from "@/lib/public-url";
+import { BOARD_LANG_COOKIE, isBoardLang, langForCountry, type BoardLang } from "@/lib/board-i18n";
 
 export const BOARD_COOKIE = "board_partner";
 export const BOARD_COOKIE_MAX_AGE = 60 * 60 * 24 * 90;
@@ -23,6 +24,7 @@ export type BoardPartner = {
   name: string;
   introducibleFields: string | null;
   introducibleNationalities: string | null;
+  country: string | null;
 };
 
 /** cookie の鍵から、ボードを見られるパートナーを引く。見られなければ null */
@@ -32,7 +34,7 @@ export async function getBoardPartner(): Promise<BoardPartner | null> {
   if (!token || token.length < 16) return null;
   const partner = await prisma.partner.findUnique({
     where: { boardToken: token },
-    select: { id: true, name: true, boardEnabled: true, introducibleFields: true, introducibleNationalities: true },
+    select: { id: true, name: true, boardEnabled: true, introducibleFields: true, introducibleNationalities: true, country: true },
   });
   if (!partner || !partner.boardEnabled) return null;
   return {
@@ -40,6 +42,7 @@ export async function getBoardPartner(): Promise<BoardPartner | null> {
     name: partner.name,
     introducibleFields: partner.introducibleFields,
     introducibleNationalities: partner.introducibleNationalities,
+    country: partner.country,
   };
 }
 
@@ -52,9 +55,24 @@ export async function getBoardViewer(): Promise<(BoardPartner & { preview: boole
   if (partner) return { ...partner, preview: false };
   const staff = await getCurrentAccount();
   if (staff) {
-    return { id: 0, name: `社員のプレビュー（${staff.name}）`, introducibleFields: null, introducibleNationalities: null, preview: true };
+    return {
+      id: 0,
+      name: `社員のプレビュー（${staff.name}）`,
+      introducibleFields: null,
+      introducibleNationalities: null,
+      country: "日本",
+      preview: true,
+    };
   }
   return null;
+}
+
+/** 画面の言語: 切り替えで選んだもの (cookie)、なければパートナーの国から */
+export async function getBoardLang(viewer: { country: string | null } | null): Promise<BoardLang> {
+  const store = await cookies();
+  const chosen = store.get(BOARD_LANG_COOKIE)?.value;
+  if (isBoardLang(chosen)) return chosen;
+  return langForCountry(viewer?.country);
 }
 
 export function boardEnterUrl(token: string): string {
@@ -100,51 +118,51 @@ export function isPastDeadline(deadline: Date | null): boolean {
 
 /**
  * 求人票から、ボードに出してよい条件だけを取り出す (会社名・住所・最寄り駅は出さない)。
- * 値が空の項目は出さない。
+ * 値が空の項目は出さない。見出しの言葉は lib/board-i18n.ts の BOARD_CONDITION_LABELS / BOARD_CONDITION_GROUPS。
  */
-export const BOARD_CONDITION_FIELDS: { key: string; ja: string; en: string; group: string }[] = [
-  { key: "jobDescription", ja: "仕事内容", en: "Job description", group: "仕事 / Job" },
-  { key: "headcount", ja: "募集人数", en: "Openings", group: "仕事 / Job" },
-  { key: "gender", ja: "性別", en: "Gender", group: "仕事 / Job" },
-  { key: "nationality", ja: "国籍", en: "Nationality", group: "仕事 / Job" },
-  { key: "monthlyGross", ja: "月の総支給", en: "Monthly gross pay", group: "給与 / Pay" },
-  { key: "basicSalary", ja: "基本給", en: "Base salary", group: "給与 / Pay" },
-  { key: "salaryCalcMethod", ja: "計算方法", en: "Pay basis", group: "給与 / Pay" },
-  { key: "housingAllowance", ja: "住宅手当", en: "Housing allowance", group: "給与 / Pay" },
-  { key: "nightShiftAllowance", ja: "夜勤手当", en: "Night allowance", group: "給与 / Pay" },
-  { key: "commuteAllowance", ja: "通勤手当", en: "Commute allowance", group: "給与 / Pay" },
-  { key: "fixedOvertimePay", ja: "固定残業代", en: "Fixed overtime pay", group: "給与 / Pay" },
-  { key: "salaryIncrease", ja: "昇給", en: "Raises", group: "給与 / Pay" },
-  { key: "bonus", ja: "賞与", en: "Bonus", group: "給与 / Pay" },
-  { key: "monthlyDeduction", ja: "月の控除の目安", en: "Monthly deductions", group: "控除 / Deductions" },
-  { key: "socialInsurance", ja: "社会保険", en: "Social insurance", group: "控除 / Deductions" },
-  { key: "incomeTax", ja: "所得税", en: "Income tax", group: "控除 / Deductions" },
-  { key: "residentTax", ja: "住民税", en: "Resident tax", group: "控除 / Deductions" },
-  { key: "otherDeductions", ja: "その他の控除", en: "Other deductions", group: "控除 / Deductions" },
-  { key: "workTime", ja: "勤務時間", en: "Working hours", group: "勤務 / Work" },
-  { key: "avgMonthlyOvertime", ja: "月の平均残業", en: "Average overtime", group: "勤務 / Work" },
-  { key: "holidays", ja: "休日", en: "Days off", group: "勤務 / Work" },
-  { key: "holidayCategory", ja: "休日の区分", en: "Holiday type", group: "勤務 / Work" },
-  { key: "trialPeriodDetails", ja: "試用期間", en: "Probation", group: "勤務 / Work" },
-  { key: "dormProvision", ja: "寮", en: "Dormitory", group: "住まい / Housing" },
-  { key: "dormAmount", ja: "寮費", en: "Dorm fee", group: "住まい / Housing" },
-  { key: "dormOccupants", ja: "寮の人数", en: "People per dorm", group: "住まい / Housing" },
-  { key: "bedroomShared", ja: "寝室の共有", en: "Shared bedroom", group: "住まい / Housing" },
-  { key: "dormCommuteTime", ja: "寮からの通勤", en: "Commute from dorm", group: "住まい / Housing" },
-  { key: "utilitiesAmount", ja: "水道光熱費", en: "Utilities", group: "住まい / Housing" },
-  { key: "mealProvision", ja: "食事", en: "Meals", group: "住まい / Housing" },
-  { key: "movingSupportDetails", ja: "引越の補助", en: "Moving support", group: "住まい / Housing" },
-  { key: "japaneseLevel", ja: "日本語", en: "Japanese level", group: "応募条件 / Requirements" },
-  { key: "experienceYears", ja: "経験", en: "Experience", group: "応募条件 / Requirements" },
-  { key: "requiredQualifications", ja: "必要な資格", en: "Qualifications", group: "応募条件 / Requirements" },
-  { key: "overseasApplication", ja: "海外からの応募", en: "Applicants abroad", group: "応募条件 / Requirements" },
-  { key: "foreignWorkers", ja: "外国人の同僚", en: "Foreign coworkers", group: "応募条件 / Requirements" },
-  { key: "selectionFlow", ja: "選考の流れ", en: "Selection steps", group: "選考 / Selection" },
-  { key: "preferredInterviewDate", ja: "面接の時期", en: "Interview timing", group: "選考 / Selection" },
-  { key: "preferredEntryDate", ja: "入社・入国の時期", en: "Start / entry timing", group: "選考 / Selection" },
+export const BOARD_CONDITION_FIELDS: { key: string; group: string }[] = [
+  { key: "jobDescription", group: "job" },
+  { key: "headcount", group: "job" },
+  { key: "gender", group: "job" },
+  { key: "nationality", group: "job" },
+  { key: "monthlyGross", group: "pay" },
+  { key: "basicSalary", group: "pay" },
+  { key: "salaryCalcMethod", group: "pay" },
+  { key: "housingAllowance", group: "pay" },
+  { key: "nightShiftAllowance", group: "pay" },
+  { key: "commuteAllowance", group: "pay" },
+  { key: "fixedOvertimePay", group: "pay" },
+  { key: "salaryIncrease", group: "pay" },
+  { key: "bonus", group: "pay" },
+  { key: "monthlyDeduction", group: "deductions" },
+  { key: "socialInsurance", group: "deductions" },
+  { key: "incomeTax", group: "deductions" },
+  { key: "residentTax", group: "deductions" },
+  { key: "otherDeductions", group: "deductions" },
+  { key: "workTime", group: "work" },
+  { key: "avgMonthlyOvertime", group: "work" },
+  { key: "holidays", group: "work" },
+  { key: "holidayCategory", group: "work" },
+  { key: "trialPeriodDetails", group: "work" },
+  { key: "dormProvision", group: "housing" },
+  { key: "dormAmount", group: "housing" },
+  { key: "dormOccupants", group: "housing" },
+  { key: "bedroomShared", group: "housing" },
+  { key: "dormCommuteTime", group: "housing" },
+  { key: "utilitiesAmount", group: "housing" },
+  { key: "mealProvision", group: "housing" },
+  { key: "movingSupportDetails", group: "housing" },
+  { key: "japaneseLevel", group: "requirements" },
+  { key: "experienceYears", group: "requirements" },
+  { key: "requiredQualifications", group: "requirements" },
+  { key: "overseasApplication", group: "requirements" },
+  { key: "foreignWorkers", group: "requirements" },
+  { key: "selectionFlow", group: "selection" },
+  { key: "preferredInterviewDate", group: "selection" },
+  { key: "preferredEntryDate", group: "selection" },
 ];
 
-export type BoardCondition = { group: string; ja: string; en: string; value: string };
+export type BoardCondition = { key: string; group: string; value: string };
 
 /** 求人票の行から、ボードに出す条件の一覧を作る */
 export function conditionsFromPosting(posting: Record<string, unknown> | null): BoardCondition[] {
@@ -163,7 +181,7 @@ export function conditionsFromPosting(posting: Record<string, unknown> | null): 
     } else {
       value = str(f.key);
     }
-    if (value) out.push({ group: f.group, ja: f.ja, en: f.en, value });
+    if (value) out.push({ key: f.key, group: f.group, value });
   }
   return out;
 }

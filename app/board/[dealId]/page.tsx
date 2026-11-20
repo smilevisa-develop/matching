@@ -1,14 +1,17 @@
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   BOARD_REC_INACTIVE,
   conditionsFromPosting,
+  getBoardLang,
   getBoardViewer,
   isPastDeadline,
   requirementsOf,
   totalLimitOf,
   ymd,
 } from "@/lib/board";
+import { dealSourceTexts, ensureDealTranslations, ensureQuestionTranslations, pickQa, pickTexts } from "@/lib/board-translate";
 import BoardHeader, { BoardSignedOut } from "../_components/BoardHeader";
 import DealBoardClient from "./DealBoardClient";
 
@@ -22,7 +25,8 @@ export const metadata = {
 /** パートナー向けの案件ページ (会社名・住所は出さない) */
 export default async function BoardDealPage({ params }: { params: Promise<{ dealId: string }> }) {
   const partner = await getBoardViewer();
-  if (!partner) return <BoardSignedOut />;
+  const lang = await getBoardLang(partner);
+  if (!partner) return <BoardSignedOut lang={lang} />;
 
   const { dealId } = await params;
   const id = Number(dealId);
@@ -48,6 +52,7 @@ export default async function BoardDealPage({ params }: { params: Promise<{ deal
       boardPerPartnerLimit: true,
       boardTotalLimit: true,
       boardPublishedAt: true,
+      boardTranslations: true,
       jobPostings: { orderBy: { updatedAt: "desc" }, take: 1 },
       boardRecommendations: {
         select: { id: true, partnerId: true, status: true, statusNote: true, candidateName: true, createdAt: true },
@@ -56,7 +61,7 @@ export default async function BoardDealPage({ params }: { params: Promise<{ deal
       boardQuestions: {
         where: { OR: [{ isPublic: true, answer: { not: null } }, { partnerId: partner.id }] },
         orderBy: { createdAt: "desc" },
-        select: { id: true, partnerId: true, question: true, answer: true, answeredAt: true, isPublic: true, createdAt: true },
+        select: { id: true, partnerId: true, question: true, answer: true, answeredAt: true, isPublic: true, createdAt: true, translations: true },
       },
     },
   });
@@ -67,29 +72,51 @@ export default async function BoardDealPage({ params }: { params: Promise<{ deal
   const totalLimit = totalLimitOf(deal);
   const closed = deal.boardStatus === "closed" || isPastDeadline(deal.deadline);
   const full = active.length >= totalLimit;
-  const posting = deal.jobPostings[0] ?? null;
+  const posting = (deal.jobPostings[0] ?? null) as unknown as Record<string, unknown> | null;
+
+  // 選んだ言語の訳。無い・古い項目は日本語のまま出し、応答のあとに訳しておく
+  const ja = dealSourceTexts(deal, posting);
+  const { texts: tr, missing } = pickTexts(deal.boardTranslations, ja, lang);
+  const qa = deal.boardQuestions.map((q) => ({ q, picked: pickQa(q.translations, q.question, q.answer, lang) }));
+  const qaMissing = qa.filter((x) => x.picked.missing).map((x) => x.q.id);
+  if (missing) after(() => ensureDealTranslations(deal.id));
+  if (qaMissing.length) after(() => ensureQuestionTranslations(qaMissing));
+  const requirements = requirementsOf(deal.boardRequirements);
+  const conditions = conditionsFromPosting(posting);
 
   return (
     <div className="min-h-screen bg-[var(--color-light)]">
-      <BoardHeader partnerName={partner.name} />
+      <BoardHeader lang={lang} partnerName={partner.name} />
       <DealBoardClient
+        lang={lang}
+        translating={lang !== "ja" && (missing || qaMissing.length > 0)}
         preview={partner.preview}
         deal={{
           id: deal.id,
-          title: deal.boardTitle ?? `案件 ${deal.id}`,
-          field: deal.field ?? "",
-          area: deal.boardArea ?? "",
-          summary: deal.boardSummary ?? "",
-          fee: deal.boardPartnerFee ?? "",
+          title: tr.title ?? `#${deal.id}`,
+          field: tr.field ?? "",
+          area: tr.area ?? "",
+          summary: tr.summary ?? "",
+          fee: tr.fee ?? "",
           openings: deal.requiredCount,
           deadline: ymd(deal.deadline),
           publishedAt: ymd(deal.boardPublishedAt),
           updatedAt: ymd(deal.updatedAt),
-          jobChangeScope: deal.boardJobChangeScope ?? "",
-          placeChangeScope: deal.boardPlaceChangeScope ?? "",
-          renewalLimit: deal.boardRenewalLimit ?? "",
-          requirements: requirementsOf(deal.boardRequirements),
-          conditions: conditionsFromPosting(posting as unknown as Record<string, unknown> | null),
+          jobChangeScope: tr.jobChange ?? "",
+          placeChangeScope: tr.placeChange ?? "",
+          renewalLimit: tr.renewal ?? "",
+          requirements: requirements.map((r, i) => ({ ja: r, text: tr[`req.${i}`] ?? r })),
+          conditions: conditions.map((c) => ({ ...c, text: tr[`c.${c.key}`] ?? c.value })),
+          original: {
+            title: ja.title ?? "",
+            field: ja.field ?? "",
+            area: ja.area ?? "",
+            summary: ja.summary ?? "",
+            fee: ja.fee ?? "",
+            jobChangeScope: ja.jobChange ?? "",
+            placeChangeScope: ja.placeChange ?? "",
+            renewalLimit: ja.renewal ?? "",
+          },
           myCount: myActive,
           myLimit: deal.boardPerPartnerLimit,
           totalCount: active.length,
@@ -106,10 +133,13 @@ export default async function BoardDealPage({ params }: { params: Promise<{ deal
             statusNote: r.statusNote ?? "",
             createdAt: ymd(r.createdAt),
           }))}
-        questions={deal.boardQuestions.map((q) => ({
+        questions={qa.map(({ q, picked }) => ({
           id: q.id,
-          question: q.question,
-          answer: q.answer ?? "",
+          question: picked.question,
+          answer: picked.answer,
+          originalQuestion: q.question,
+          originalAnswer: q.answer ?? "",
+          translated: picked.translated,
           answeredAt: ymd(q.answeredAt),
           mine: q.partnerId === partner.id,
           isPublic: q.isPublic,

@@ -874,6 +874,8 @@ model Deal {
   boardTotalLimit       Int?
   /// 初めて公開した日時
   boardPublishedAt      DateTime?
+  /// 案件ボードの訳 (英語・ベトナム語・インドネシア語)。{ src: {項目: 日本語}, langs: { en: {項目: 訳}, vi, id } }。lib/board-translate.ts
+  boardTranslations     Json?
 
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -1490,6 +1492,8 @@ model BoardQuestion {
   answeredAt DateTime?
   /// 回答を全パートナーに見せるか (個別の事情の質問は false)
   isPublic   Boolean   @default(true)
+  /// 質問と回答の訳。{ src: { q, a }, langs: { ja, en, vi, id } }。lib/board-translate.ts
+  translations Json?
   createdAt  DateTime  @default(now())
 
   @@index([dealId])

@@ -2,11 +2,14 @@
  * 案件ボードの管理: 案件をボードに出す項目を保存する / 公開・締切・外す (要ログイン)。
  * PATCH { boardTitle, boardArea, ..., boardStatus? }
  * 公開 (open) にするには、案件名・地域と、職業安定法で募集時に示す 3 項目が必要。
+ * 保存したら、ボードに出ている案件は英語・ベトナム語・インドネシア語の訳を作り直す (応答のあと)。
  */
 
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireApiAccount } from "@/lib/auth";
 import { missingForOpen } from "@/lib/board";
+import { ensureDealTranslations } from "@/lib/board-translate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +28,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const dealId = Number(id);
     const body = await req.json().catch(() => ({}));
+    // ボードに出ている案件なら、訳を作り直す (訳の要らない保存では何もしない)
+    if (Number.isInteger(dealId) && dealId > 0) after(() => ensureDealTranslations(dealId));
 
     const current = await prisma.deal.findUnique({
       where: { id: dealId },
