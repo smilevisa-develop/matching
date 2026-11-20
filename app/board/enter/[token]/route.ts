@@ -10,11 +10,17 @@ import { BOARD_COOKIE, BOARD_COOKIE_MAX_AGE } from "@/lib/board";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
+/**
+ * 転送先は自分のサイトの /board だけ (外部への転送には使わせない)。
+ * Location は相対パスにする。本番はプロキシの後ろで動くので、req.url から組み立てると
+ * 内部のアドレス (localhost:3000 など) に飛ぶことがある。
+ */
+function redirectToBoard(invalid: boolean) {
+  return new NextResponse(null, { status: 307, headers: { Location: invalid ? "/board?invalid=1" : "/board" } });
+}
+
+export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const url = new URL(req.url);
-  // 転送先は自分のサイトの /board だけ (外部への転送には使わせない)
-  const target = new URL("/board", url);
 
   const partner =
     token && token.length >= 16
@@ -22,13 +28,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
       : null;
 
   if (!partner || !partner.boardEnabled) {
-    target.searchParams.set("invalid", "1");
-    const res = NextResponse.redirect(target);
+    const res = redirectToBoard(true);
     res.cookies.set(BOARD_COOKIE, "", { path: "/", maxAge: 0 });
     return res;
   }
 
-  const res = NextResponse.redirect(target);
+  const res = redirectToBoard(false);
   res.cookies.set(BOARD_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
