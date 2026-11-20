@@ -39,7 +39,7 @@ export default function OfferTab({ rows }: { rows: OfferRow[] }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
       <table className="w-full min-w-[1100px] text-sm">
-        <thead className="bg-gray-50 text-left text-xs font-bold text-[var(--color-text-dark)]">
+        <thead className="whitespace-nowrap bg-gray-50 text-left text-xs font-bold text-[var(--color-text-dark)]">
           <tr>
             <th className="px-3 py-2.5">内定者 ・ 企業</th>
             <th className="px-3 py-2.5">パートナー</th>
@@ -135,7 +135,7 @@ function Row({ row }: { row: OfferRow }) {
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold tabular-nums text-gray-700">{row.displayId}</span>
-          <Link href={`/personnel/${row.personId}/edit`} className="font-bold text-[var(--color-text-dark)] hover:text-[var(--color-primary)] hover:underline">
+          <Link href={`/personnel/${row.personId}/edit`} className="whitespace-nowrap font-bold text-[var(--color-text-dark)] hover:text-[var(--color-primary)] hover:underline">
             {row.personName}
           </Link>
           {state === "saving" ? <span className="text-xs text-gray-700">保存中…</span> : null}
@@ -145,7 +145,7 @@ function Row({ row }: { row: OfferRow }) {
         <p className="text-xs font-medium text-gray-700">{row.companyName}</p>
       </td>
       <td className="px-3 py-2.5 text-[var(--color-text-dark)]">{row.viaPartner ? row.partnerName : "自社"}</td>
-      <td className="px-3 py-2.5 tabular-nums text-[var(--color-text-dark)]">
+      <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-[var(--color-text-dark)]">
         {slash(row.acceptedAt) || "—"} / {slash(row.joinPlannedAt) || "—"}
       </td>
       <td className="px-3 py-2.5">{money("unitPrice")}</td>
