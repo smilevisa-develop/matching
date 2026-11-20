@@ -26,6 +26,8 @@ import {
   DEFAULT_COMPANY_ROOT_FOLDER_URL,
   DEFAULT_PERSON_ROOT_FOLDER_URL,
   findFolderByPrefix,
+  getGoogleClients,
+  shareFolderWithLink,
   formatPersonIdPrefix,
 } from "@/lib/google-docs";
 
@@ -63,6 +65,8 @@ async function syncDriveFolders(): Promise<DriveFolderSyncResult> {
     try {
       const found = await findFolderByPrefix({ parentFolderUrl: personRoot, namePrefix: `${formatPersonIdPrefix(p.id)}_` });
       if (!found) continue;
+      // Drive で手で作った候補者フォルダには閲覧可が付いていないので、つなぐときに付ける
+      if (found.folderId) await shareFolderWithLink((await getGoogleClients()).drive, found.folderId);
       await prisma.person.update({ where: { id: p.id }, data: { driveFolderUrl: found.folderUrl } });
       result.persons++;
     } catch (e) {

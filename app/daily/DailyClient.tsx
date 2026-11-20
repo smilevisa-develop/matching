@@ -291,7 +291,7 @@ export default function DailyClient({
             <MiniStat label="接続" value={stats.connected} />
             <MiniStat label="面接待ち" value={stats.waitingInterview} title="今 推薦済みの人数" />
             <MiniStat label="結果待ち" value={stats.waitingResult} title="今 面接済みの人数" />
-            <MiniStat label="募集中" value={counted.length} unit="社" />
+            <MiniStat label="募集中" value={new Set(counted.map((d) => d.companyId)).size} unit="社" title="募集中・至急募集の求人がある企業の数 (1 社に求人が複数あっても 1)" />
           </div>
         </div>
       </div>
