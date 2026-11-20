@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { parseDeliveryItems } from "@/lib/company-document";
 import DocumentCheckView from "./DocumentCheckView";
+import { isDevPreview } from "@/lib/dev-preview";
+import { SAMPLE_COMPANY_NAME, SAMPLE_DOCUMENT_ITEMS, SAMPLE_DOCUMENT_TITLE } from "@/lib/dev-preview-samples";
+import DevPreviewBanner from "@/app/components/DevPreviewBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +18,23 @@ export default async function DocumentCheckPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+  if (await isDevPreview(token)) {
+    return (
+      <>
+        <DevPreviewBanner />
+        <DocumentCheckView
+          preview
+          token={token}
+          language="vi"
+          documentTitle={SAMPLE_DOCUMENT_TITLE}
+          companyName={SAMPLE_COMPANY_NAME}
+          items={SAMPLE_DOCUMENT_ITEMS}
+          initialChecked={{}}
+          initialUnclear={{}}
+        />
+      </>
+    );
+  }
   if (!token || token.length < 8) notFound();
 
   const delivery = await prisma.companyDocumentDelivery.findUnique({

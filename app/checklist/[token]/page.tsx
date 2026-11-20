@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import ChecklistView, { type ChecklistItemView } from "./ChecklistView";
+import { isDevPreview } from "@/lib/dev-preview";
+import { SAMPLE_CHECKLIST_ITEMS, SAMPLE_COMPANY_NAME } from "@/lib/dev-preview-samples";
+import DevPreviewBanner from "@/app/components/DevPreviewBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +13,14 @@ export default async function ChecklistPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+  if (await isDevPreview(token)) {
+    return (
+      <>
+        <DevPreviewBanner />
+        <ChecklistView preview token={token} companyName={SAMPLE_COMPANY_NAME} items={SAMPLE_CHECKLIST_ITEMS} initialChecked={{}} />
+      </>
+    );
+  }
   if (!token || token.length < 8) notFound();
 
   const delivery = await prisma.jobChecklistDelivery.findUnique({

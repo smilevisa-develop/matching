@@ -102,7 +102,10 @@ export default function DocumentCheckView({
   items,
   initialChecked,
   initialUnclear,
+  preview = false,
 }: {
+  /** 開発者用のプレビュー (通信しない) */
+  preview?: boolean;
   token: string;
   language: string;
   documentTitle: string;
@@ -124,12 +127,13 @@ export default function DocumentCheckView({
 
   // 開封を記録
   useEffect(() => {
+    if (preview) return;
     void fetch(`/api/document-check/${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "open" }),
     }).catch(() => {});
-  }, [token]);
+  }, [token, preview]);
 
   // チェック対象は kind: "check" のみ。会社の考え方は読むだけ
   const checkTargets = useMemo(() => items.filter((i) => i.kind === "check"), [items]);
@@ -141,6 +145,11 @@ export default function DocumentCheckView({
   const scheduleSave = () => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      if (preview) {
+        setSavedNote("プレビューのため保存しません");
+        setTimeout(() => setSavedNote(null), 1800);
+        return;
+      }
       setSaving(true);
       try {
         await fetch(`/api/document-check/${token}`, {

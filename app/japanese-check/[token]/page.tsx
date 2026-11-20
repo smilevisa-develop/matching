@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import JapaneseCheckClient from "./JapaneseCheckClient";
+import { isDevPreview } from "@/lib/dev-preview";
+import { SAMPLE_PERSON } from "@/lib/dev-preview-samples";
+import DevPreviewBanner from "@/app/components/DevPreviewBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +18,14 @@ export default async function JapaneseCheckPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+  if (await isDevPreview(token)) {
+    return (
+      <>
+        <DevPreviewBanner />
+        <JapaneseCheckClient preview token={token} personName={SAMPLE_PERSON.name} englishName={SAMPLE_PERSON.englishName} attempt="ready" />
+      </>
+    );
+  }
   if (!token || token.length < 8) notFound();
 
   const person = await prisma.person.findUnique({

@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import IntakeClient, { type WorkRow } from "./IntakeClient";
-import { intakeLang } from "@/lib/intake-i18n";
+import { INTAKE_LANG_LABELS, intakeLang, type IntakeLang } from "@/lib/intake-i18n";
+import { isDevPreview } from "@/lib/dev-preview";
+import { SAMPLE_INTAKE_CUSTOM_QUESTIONS, SAMPLE_PERSON } from "@/lib/dev-preview-samples";
+import DevPreviewBanner from "@/app/components/DevPreviewBanner";
 import { normalizeWorkHistories } from "@/lib/candidate-profile";
 import { withTakeHomeSummary } from "@/lib/interview-questions";
 
@@ -9,10 +12,35 @@ export const dynamic = "force-dynamic";
 
 export default async function IntakePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ lang?: string }>;
 }) {
   const { token } = await params;
+  if (await isDevPreview(token)) {
+    const { lang: q } = await searchParams;
+    const lang: IntakeLang = q && q in INTAKE_LANG_LABELS ? (q as IntakeLang) : "vi";
+    return (
+      <>
+        <DevPreviewBanner langs={INTAKE_LANG_LABELS} current={lang} basePath={`/intake/${token}`} />
+        <IntakeClient
+          key={lang}
+          preview
+          token={token}
+          lang={lang}
+          personName={SAMPLE_PERSON.name}
+          englishName={SAMPLE_PERSON.englishName}
+          residenceStatus={SAMPLE_PERSON.residenceStatus}
+          excludedKeys={[]}
+          customQuestions={SAMPLE_INTAKE_CUSTOM_QUESTIONS}
+          basic={{ englishName: SAMPLE_PERSON.englishName }}
+          initialWork={[]}
+          initial={{ motivation: "", selfIntroduction: "", japanPurpose: "", currentJob: "", retirementReason: "", interviewAnswers: {} }}
+        />
+      </>
+    );
+  }
   if (!token || token.length < 8) notFound();
 
   const person = await prisma.person.findUnique({

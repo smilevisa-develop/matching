@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import PartnerIntakeClient from "./PartnerIntakeClient";
+import { isDevPreview } from "@/lib/dev-preview";
+import DevPreviewBanner from "@/app/components/DevPreviewBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,14 @@ export const dynamic = "force-dynamic";
  */
 export default async function PartnerIntakePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  if (await isDevPreview(token)) {
+    return (
+      <>
+        <DevPreviewBanner />
+        <PartnerIntakeClient preview token={token} />
+      </>
+    );
+  }
   if (!token || token.length < 8) notFound();
   const settings = await prisma.coreSettings.findUnique({ where: { id: 1 }, select: { partnerIntakeToken: true } });
   if (!settings?.partnerIntakeToken || settings.partnerIntakeToken !== token) notFound();

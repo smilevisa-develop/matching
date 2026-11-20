@@ -14,6 +14,7 @@ import {
   ChevronUpDownIcon,
   CloseIcon,
   DocumentIcon,
+  FlagIcon,
   FormIcon,
   GlobeIcon,
   GroupIcon,
@@ -40,6 +41,8 @@ type NavItem = {
   label: string;
   href: string;
   icon: (props: { size?: number }) => React.ReactNode;
+  /** 開発者 (lib/dev-preview.ts) にだけ出す */
+  devOnly?: boolean;
 };
 
 type SyncLine = { label: string; value: string; failed?: boolean };
@@ -94,6 +97,7 @@ const SECTIONS: { heading?: string; items: NavItem[] }[] = [
   },
   {
     items: [
+      { label: "開発中の画面", href: "/dev", icon: FlagIcon, devOnly: true },
       { label: "設定", href: "/settings", icon: SettingsIcon },
     ],
   },
@@ -114,6 +118,7 @@ export default function Sidebar() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [accountName, setAccountName] = useState("読み込み中...");
+  const [developer, setDeveloper] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncReport, setSyncReport] = useState<{ ok: boolean; lines: SyncLine[] } | null>(null);
   const current = activeHref(pathname);
@@ -149,6 +154,7 @@ export default function Sidebar() {
         const data = await res.json();
         if (data.ok && data.account) {
           setAccountName(data.account.name);
+          setDeveloper(data.developer === true);
         } else {
           setAccountName("未ログイン");
         }
@@ -281,7 +287,7 @@ export default function Sidebar() {
           {SECTIONS.map((section, index) => (
             <div key={section.heading ?? "other"} className={index === 0 ? "pt-2" : "mt-4 border-t border-side-line pt-4"}>
               {section.heading && <p className="px-2 pb-2 text-body font-bold text-white">{section.heading}</p>}
-              <div className="flex flex-col">{section.items.map(renderItem)}</div>
+              <div className="flex flex-col">{section.items.filter((item) => !item.devOnly || developer).map(renderItem)}</div>
             </div>
           ))}
         </nav>
