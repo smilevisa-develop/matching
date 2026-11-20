@@ -165,6 +165,18 @@ export async function POST(req: Request) {
       fields: "id,webViewLink,name,mimeType",
     });
     const spreadsheetId = created.data.id;
+    // 企業にはリンクで渡すので「リンクを知っている人は閲覧可」にする (2026-11-20 土田さん)
+    if (spreadsheetId) {
+      try {
+        await drive.permissions.create({
+          fileId: spreadsheetId,
+          supportsAllDrives: true,
+          requestBody: { type: "anyone", role: "reader", allowFileDiscovery: false },
+        });
+      } catch (e) {
+        console.warn("推薦リストの閲覧可の設定に失敗:", e instanceof Error ? e.message : e);
+      }
+    }
     const webViewLink = created.data.webViewLink;
     const progressColumnIndex = 1; // ID(0), 進捗(1)
     const dataStartRow = 1; // ヘッダーは row 0、データは row 1 から
