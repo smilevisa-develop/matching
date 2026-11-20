@@ -106,13 +106,13 @@ export default function ChecklistView({
               type="button"
               onClick={() => toggle(item.key)}
               className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
-                on ? "border-[#BBF7D0] bg-[#F0FDF4]" : "border-gray-200 bg-white"
+                on ? "border-[var(--color-secondary)] bg-[var(--color-light)]" : "border-gray-200 bg-white"
               }`}
             >
               <div className="flex items-start gap-3">
                 <span
                   className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
-                    on ? "border-[#16A34A] bg-[#16A34A] text-white" : "border-gray-300 bg-white"
+                    on ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white" : "border-gray-300 bg-white"
                   }`}
                   aria-hidden
                 >
@@ -139,7 +139,7 @@ export default function ChecklistView({
 
         <div className="rounded-2xl bg-white p-5 text-center shadow-md">
           {allChecked ? (
-            <p className="text-sm font-semibold text-[#15803D]">
+            <p className="text-sm font-semibold text-[var(--color-primary)]">
               すべて確認できました。ありがとうございました。<br />
               All checked. Thank you!
             </p>
@@ -149,7 +149,7 @@ export default function ChecklistView({
             </p>
           )}
           {saving ? <p className="mt-1 text-[11px] text-gray-400">保存中…</p> : null}
-          {savedNote ? <p className="mt-1 text-[11px] text-[#15803D]">{savedNote}</p> : null}
+          {savedNote ? <p className="mt-1 text-[11px] text-[var(--color-primary)]">{savedNote}</p> : null}
         </div>
       </div>
     </div>

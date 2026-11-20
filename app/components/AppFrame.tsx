@@ -47,7 +47,10 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
 
   if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck || isDocumentCheck || isInterviewPractice || isShareList || isBoard) {
     return (
-      <body className={`min-h-full ${isAuth ? "bg-[var(--color-text-dark)] text-white" : "bg-[var(--color-light)] text-[var(--color-text-dark)]"}`}>
+      // 社外の人が見るページは SMILE MATCHING のサイトの色 (globals.css の .brand-external)。ログイン画面とポータルは社内向けなので緑のまま
+      <body
+        className={`min-h-full ${isAuth ? "bg-[var(--color-text-dark)] text-white" : "bg-[var(--color-light)] text-[var(--color-text-dark)]"} ${isAuth || isPortal ? "" : "brand-external"}`}
+      >
         {children}
       </body>
     );

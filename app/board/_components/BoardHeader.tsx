@@ -3,16 +3,16 @@ import Link from "next/link";
 /** 案件ボード (パートナー向け) の上の帯 */
 export default function BoardHeader({ partnerName }: { partnerName?: string }) {
   return (
-    <header className="border-b border-gray-200 bg-white">
+    <header className="bg-[var(--color-brand)] text-white">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
         <Link href="/board" className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="" className="h-7 w-7 rounded" />
-          <span className="text-sm font-bold text-[var(--color-text-dark)]">
-            SMILE MATCHING <span className="font-normal text-gray-500">案件ボード / Job Board</span>
+          <img src="/logo.png" alt="" className="h-7 w-7 rounded bg-white" />
+          <span className="text-sm font-bold text-white">
+            SMILE MATCHING <span className="font-normal">案件ボード / Job Board</span>
           </span>
         </Link>
-        {partnerName ? <span className="truncate text-xs text-gray-500">{partnerName}</span> : null}
+        {partnerName ? <span className="truncate text-xs text-white">{partnerName}</span> : null}
       </div>
     </header>
   );

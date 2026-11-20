@@ -217,7 +217,7 @@ export default function JapaneseCheckClient({
   if (phase === "done") {
     return (
       <CenterCard>
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#DCFCE7] text-[#16A34A]">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-light)] text-[var(--color-primary)]">
           <CheckIcon />
         </div>
         <h1 className="text-xl font-bold text-[var(--color-text-dark)]">送信完了 / Thank you!</h1>
