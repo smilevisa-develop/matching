@@ -13,6 +13,7 @@ import DriveActionsPanel from "./DriveActionsPanel";
 import PhotoPanel from "./PhotoPanel";
 import CreateResumeButton from "./CreateResumeButton";
 import IntakeLinkButton from "./IntakeLinkButton";
+import ZoomMeetingButton from "./ZoomMeetingButton";
 import JapaneseCheckLinkButton from "./JapaneseCheckLinkButton";
 import DocumentCheckPanel from "./DocumentCheckPanel";
 import { PanelActionsProvider } from "./PanelActions";
@@ -382,6 +383,7 @@ export default async function EditPersonPage({ params }: { params: Promise<{ id:
                         : {},
                   }}
                 />
+                <ZoomMeetingButton personId={person.id} />
                 <IconActionDivider />
                 {/* 本人の SNS の連絡先 (グループ LINE / Messenger / WhatsApp などの URL) へ飛ぶ。メールにはしない */}
                 {(() => {

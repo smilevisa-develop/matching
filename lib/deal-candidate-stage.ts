@@ -55,6 +55,11 @@ export async function changeCandidateStage(id: number, stage: string, date: stri
               filled: readFilledStages(candidate.stageDates),
             });
             if (!r.created) console.info(`請求管理の行は足さない (${candidate.personId}):`, r.reason);
+            // 行を足す前にアプリで請求 (単価など) を入れていたら、空の行で上書きされないよう先に書く
+            else {
+              const { writeBillingToSheet } = await import("@/lib/billing-ledger");
+              await writeBillingToSheet([candidate.personId]);
+            }
           } catch (e) {
             console.warn("請求管理の行の追加に失敗:", e instanceof Error ? e.message : e);
           }

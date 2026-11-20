@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import OfferTab, { type OfferRow } from "./OfferTab";
 
 export type LedgerStep = {
   due: string;
@@ -139,6 +140,7 @@ function monthEnd(month: string, n: number) {
 
 export default function BillingClient({
   rows: initial,
+  offers = [],
   me,
   month,
   partners,
@@ -147,6 +149,8 @@ export default function BillingClient({
   header,
 }: {
   rows: LedgerRow[];
+  /** 内定者タブ (入社前で、まだ請求の行が無い人) */
+  offers?: OfferRow[];
   me: string;
   /** 表示している月 (YYYY-MM)。この月に請求するのは前の月に入社した人 */
   month: string;
@@ -160,7 +164,7 @@ export default function BillingClient({
   const [uploading, setUploading] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   type Sub = "invoice" | "payment" | "paInvoice" | "transfer";
-  const [tab, setTab] = useState<"company" | "pa" | "summary">("company");
+  const [tab, setTab] = useState<"company" | "pa" | "summary" | "offers">("company");
   const [sub, setSub] = useState<Sub>("invoice");
   // 上に固定した部分 (タイトル・タブ・数字の帯) の高さ。表の見出しをそのすぐ下に固定する
   const stickyRef = useRef<HTMLDivElement>(null);
@@ -923,6 +927,7 @@ export default function BillingClient({
     { key: "company", label: "企業", icon: ICON.building, count: toInvoice.length + toConfirmPayment.length },
     { key: "pa", label: "PA", icon: ICON.handshake, count: toRequest.length + toPay.length },
     { key: "summary", label: "まとめ", icon: ICON.list, count: openRows.length, alert: summary.overdue > 0 },
+    { key: "offers", label: "内定者", icon: ICON.edit, count: offers.length },
   ] as const;
   const subs: { key: Sub; label: string; count: number }[] =
     tab === "company"
@@ -1042,6 +1047,14 @@ export default function BillingClient({
         </div>
       )}
       {tab === "summary" && <div className="space-y-3">{ledger(openRows, "終わっていない請求はありません", "all")}</div>}
+      {tab === "offers" && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-[var(--color-text-dark)]">
+            入社前の内定者です。分かった金額・日付を先に入れておくと、入社後の請求にそのまま使います (欄を離れると保存)。
+          </p>
+          <OfferTab rows={offers} />
+        </div>
+      )}
     </div>
   );
 }

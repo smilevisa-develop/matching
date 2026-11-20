@@ -9,6 +9,7 @@ import { isTestCompany } from "@/lib/test-companies";
 import { BILLING_TEST } from "@/lib/billing-test-mode";
 import { readStageDates } from "@/lib/deal-stages";
 import BillingClient, { type LedgerRow, type LedgerStep } from "./BillingClient";
+import type { OfferRow } from "./OfferTab";
 
 export const dynamic = "force-dynamic";
 
@@ -212,6 +213,63 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       person.placement?.id ?? null,
     );
   }
+  // 3) 内定者タブ: 入社前で、まだ請求の行 (タスク) が無い人。請求の項目を先に入れておく
+  const offerPlacements = await prisma.personPlacement.findMany({
+    where: {
+      personId: { not: null },
+      documentsOnly: false,
+      joinAt: null,
+      stage: { notIn: ["card_cancelled", "declined"] },
+      tasks: { none: { billingStep: { not: null } } },
+    },
+    select: {
+      id: true,
+      offerAcceptedAt: true,
+      joinPlannedAt: true,
+      externalCompanyName: true,
+      person: {
+        select: {
+          id: true,
+          name: true,
+          onboarding: { select: { englishName: true } },
+          partner: { select: { name: true } },
+          billing: true,
+          dealCandidates: {
+            orderBy: { updatedAt: "desc" as const },
+            take: 1,
+            select: { stageDates: true, deal: { select: { unitPrice: true, company: { select: { name: true, externalId: true } } } } },
+          },
+        },
+      },
+    },
+  });
+  const offers: OfferRow[] = [];
+  for (const p of offerPlacements) {
+    const person = p.person!;
+    const deal = person.dealCandidates[0]?.deal;
+    if (BILLING_TEST.on ? !BILLING_TEST.personIds.includes(person.id) : isTestCompany(deal?.company.externalId)) continue;
+    const b = person.billing;
+    const partnerName = b?.partnerName ?? person.partner?.name ?? "";
+    offers.push({
+      personId: person.id,
+      displayId: String(person.id).padStart(4, "0"),
+      personName: person.onboarding?.englishName?.trim() || person.name,
+      companyName: deal?.company.name ?? p.externalCompanyName ?? "",
+      partnerName,
+      viaPartner: b?.route !== "自社" && !!partnerName,
+      acceptedAt: ymd(p.offerAcceptedAt) || (readStageDates(person.dealCandidates[0]?.stageDates)["内定承諾"] ?? ""),
+      joinPlannedAt: ymd(p.joinPlannedAt) || (b?.joinDate ?? ""),
+      placementId: p.id,
+      unitPrice: b?.unitPrice ?? yen(deal?.unitPrice),
+      invoiceAmount: b?.invoiceAmount ?? null,
+      partnerCost: b?.partnerCost ?? null,
+      invoiceDate: b?.invoiceDate ?? "",
+      dueDate: b?.dueDate ?? "",
+      note: b?.note ?? "",
+    });
+  }
+  offers.sort((x, y) => ((x.joinPlannedAt || "9999") < (y.joinPlannedAt || "9999") ? -1 : 1));
+
   rows.sort((x, y) => (x.joinAt || "9999") < (y.joinAt || "9999") ? -1 : (x.joinAt || "9999") > (y.joinAt || "9999") ? 1 : 0);
 
   const prev = shiftMonth(month, -1);
@@ -223,6 +281,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       <BillingClient
         key={month}
         rows={rows}
+        offers={offers}
         me={account.name ?? ""}
         month={month}
         partners={partners}
@@ -231,12 +290,16 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         header={
       <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="text-2xl font-bold text-[var(--color-text-dark)]">請求管理</h1>
+          {/* この月に請求するのは前の月に入社した人 (例: 11月請求分 = 10月入社) */}
           <span className="text-2xl font-bold text-[var(--color-primary)]">
-            {month.slice(0, 4)}年{Number(month.slice(5))}月
+            {month.slice(0, 4)}年{Number(month.slice(5))}月請求分
+          </span>
+          <span className="text-sm font-semibold text-[var(--color-text-dark)]">
+            ({prev.slice(0, 4)}年{Number(prev.slice(5))}月に入社した人)
           </span>
           <nav className="flex items-center gap-1 text-sm">
             <Link href={`/billing?month=${prev}`} className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-[var(--color-text-dark)] hover:text-[var(--color-primary)]">
-              ← {Number(prev.slice(5))}月
+              ← {Number(prev.slice(5))}月請求分
             </Link>
             {month !== thisMonth ? (
               <Link href="/billing" className="px-2 py-1 text-[var(--color-text-dark)] underline decoration-dotted">
@@ -244,7 +307,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
               </Link>
             ) : null}
             <Link href={`/billing?month=${next}`} className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-[var(--color-text-dark)] hover:text-[var(--color-primary)]">
-              {Number(next.slice(5))}月 →
+              {Number(next.slice(5))}月請求分 →
             </Link>
           </nav>
         </div>

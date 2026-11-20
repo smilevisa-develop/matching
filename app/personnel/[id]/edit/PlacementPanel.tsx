@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import OfferBillingFields, { type OfferBillingSave } from "@/app/components/OfferBillingFields";
 import SearchableSelect from "@/app/components/SearchableSelect";
 import { APPLICATION_TYPES } from "@/lib/onboarding-flow";
 
@@ -211,7 +212,7 @@ export default function PlacementPanel({
           <h3 className="text-base font-semibold text-[var(--color-text-dark)]">進捗 / 日程</h3>
           <p className="mt-1 text-xs text-gray-500">列を押す (カードを動かす) と、その日付を入れます。すべての段階に日付を入れてください。</p>
         </div>
-        <StageTrack personName={personName} placement={placement} kanbanDates={kanbanDates} onSave={saveStage} />
+        <StageTrack personId={demo ? null : personId} personName={personName} placement={placement} kanbanDates={kanbanDates} onSave={saveStage} />
         <AfterReturnSummary placement={placement} cardId={demo ? null : cardId} />
         <div className="grid gap-3 md:grid-cols-2">
           <TextareaField
@@ -427,11 +428,13 @@ const todayYmd = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0
  * 列を押す・カードを列に落とすと、その段階の日付を入れるポップが出る。
  */
 function StageTrack({
+  personId,
   personName,
   placement,
   kanbanDates,
   onSave,
 }: {
+  personId: number | null;
   personName: string;
   placement: PlacementData;
   kanbanDates: Partial<Record<string, string>>;
@@ -499,6 +502,7 @@ function StageTrack({
       </div>
       {target !== null ? (
         <StageDateModal
+          personId={personId}
           index={target}
           placement={placement}
           kanbanDates={hints}
@@ -520,7 +524,10 @@ export function StageDateModal({
   kanbanDates,
   onClose,
   onSave,
+  personId,
 }: {
+  /** 内定承諾のとき、パートナー経由なら請求の欄も出す */
+  personId?: number | null;
   index: number;
   placement: PlacementData;
   kanbanDates: Partial<Record<string, string>>;
@@ -541,6 +548,7 @@ export function StageDateModal({
   const [applicationType, setApplicationType] = useState(placement.applicationType ?? "");
   const [applicantName, setApplicantName] = useState(placement.applicantName ?? "");
   const [saving, setSaving] = useState(false);
+  const billingSave = useRef<OfferBillingSave | null>(null);
 
   const complete =
     [...skipped, stage].every((st) => /^\d{4}-\d{2}-\d{2}$/.test(dates[st.field] ?? "")) &&
@@ -554,6 +562,8 @@ export function StageDateModal({
       patch.applicationType = applicationType.trim();
       patch.applicantName = applicantName.trim();
     }
+    // 請求の欄は任意。入れた分だけ保存する (失敗しても日付の保存は止めない)
+    await billingSave.current?.().catch(() => undefined);
     await onSave(patch);
   };
 
@@ -604,6 +614,9 @@ export function StageDateModal({
         ) : null}
         {stage.field === "offerAcceptedAt" ? (
           <p className="text-xs text-gray-500">内定承諾を入れると、内定者管理にカードができます (担当: グェット)。</p>
+        ) : null}
+        {stage.field === "offerAcceptedAt" && personId ? (
+          <OfferBillingFields personId={personId} register={(fn) => (billingSave.current = fn)} />
         ) : null}
         <div className="flex items-center gap-2 pt-1">
           {existing ? (

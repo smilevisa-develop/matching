@@ -202,6 +202,7 @@ export default function ProgressBoard({ initialCards, me, demo = false }: { init
 
       {pending && pendingCard ? (
         <StageDateModal
+          personId={pendingCard.personId}
           index={pending.index}
           placement={pendingCard.placement}
           kanbanDates={usableHints(pendingCard.placement, pendingCard.kanbanDates)}

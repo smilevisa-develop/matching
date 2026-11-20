@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import PersonAvatar from "@/app/components/PersonAvatar";
+import OfferBillingFields, { type OfferBillingSave } from "@/app/components/OfferBillingFields";
 import { stageOnList } from "@/lib/list-stages";
 import { EXIT_STAGES, STAGE_DATE_LABELS, stagesForKind, todayJst } from "@/lib/deal-stages";
 
@@ -137,6 +138,7 @@ export default function CandidateKanban({
   const [justMovedId, setJustMovedId] = useState<number | null>(null);
   // 日付の入力待ち (ドロップした直後。保存は日付を入れてから)
   const [pending, setPending] = useState<{ candidateId: number; stage: string; date: string } | null>(null);
+  const billingSave = useRef<OfferBillingSave | null>(null);
   const dragging = candidates.find((c) => c.id === draggingCandidateId) ?? null;
 
   const endDrag = () => {
@@ -398,6 +400,8 @@ export default function CandidateKanban({
           onSubmit={(e) => {
             e.preventDefault();
             if (!pending.date) return;
+            // 請求の欄は任意。入れた分だけ保存する (待たずにカードは動かす)
+            void billingSave.current?.().catch(() => undefined);
             commitMove(pending.candidateId, pending.stage, pending.date);
             setPending(null);
           }}
@@ -420,6 +424,11 @@ export default function CandidateKanban({
           <p className="mt-2 text-[11px] text-gray-400">
             この日付で進捗管理の月の数字と、企業データベース (請求管理 / 内定者管理) に反映します。
           </p>
+          {pending.stage === "内定承諾" && pendingCandidate.person.partner ? (
+            <div className="mt-3">
+              <OfferBillingFields personId={pendingCandidate.person.id} register={(fn) => (billingSave.current = fn)} />
+            </div>
+          ) : null}
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"

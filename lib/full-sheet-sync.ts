@@ -21,7 +21,7 @@ import {
 import { requestCompanyDatabaseSync } from "@/lib/company-db-sync";
 import { requestOnboardingSheetSync } from "@/lib/onboarding-sheet-sync";
 import { ensureMissingBillingRows } from "@/lib/candidate-date-sheet";
-import { refreshBillingFromSheet } from "@/lib/billing-ledger";
+import { refreshBillingFromSheet, writeBillingToSheet } from "@/lib/billing-ledger";
 import {
   DEFAULT_COMPANY_ROOT_FOLDER_URL,
   DEFAULT_PERSON_ROOT_FOLDER_URL,
@@ -182,6 +182,8 @@ export async function runFullSheetSync(): Promise<Response> {
     const onboarding = await requestOnboardingSheetSync();
     // 請求管理に行が無い内定者の行を足す (内定にしたときにも足すが、取りこぼしの保険)
     const billingRows = await ensureMissingBillingRows();
+    // 足した行に、アプリで先に入れた請求 (内定者タブ・内定承諾のポップ) を書いてから読み込む
+    if (billingRows.added.length > 0) await writeBillingToSheet(billingRows.added).catch(() => undefined);
     // 請求管理 (スプシが最新) をアプリの請求に読み込む
     const billing = await refreshBillingFromSheet().catch((e) => ({ updated: 0, created: 0, error: String(e) }));
 

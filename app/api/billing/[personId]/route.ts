@@ -29,6 +29,45 @@ const YEN_FIELDS = ["unitPrice", "invoiceAmount", "partnerCost"] as const;
 const DATE_FIELDS = ["invoiceDate", "dueDate", "partnerPaidDate", "joinDate"] as const;
 const TEXT_FIELDS = ["route", "partnerName", "invoiceUrl", "partnerInvoiceUrl", "note"] as const;
 
+/**
+ * GET /api/billing/{personId}
+ *   請求の今の値 (内定承諾のポップと内定者タブで、入力欄の初期値に使う)。
+ *   paRoute = パートナー経由か (請求で「自社」にしていなくて、パートナーが分かる)
+ */
+export async function GET(_req: Request, { params }: { params: Promise<{ personId: string }> }) {
+  try {
+    await requireApiAccount();
+    const personId = Number((await params).personId);
+    const person = await prisma.person.findUnique({
+      where: { id: personId },
+      select: {
+        billing: true,
+        partner: { select: { name: true } },
+        dealCandidates: { orderBy: { updatedAt: "desc" }, take: 1, select: { deal: { select: { unitPrice: true } } } },
+      },
+    });
+    if (!person) return Response.json({ ok: false, error: "候補者が見つかりません" }, { status: 404 });
+    const b = person.billing;
+    const partnerName = b?.partnerName ?? person.partner?.name ?? "";
+    const dealPrice = Number(String(person.dealCandidates[0]?.deal.unitPrice ?? "").replace(/[^0-9]/g, "")) || null;
+    return Response.json({
+      ok: true,
+      paRoute: b?.route !== "自社" && !!partnerName,
+      partnerName,
+      unitPrice: b?.unitPrice ?? dealPrice,
+      invoiceAmount: b?.invoiceAmount ?? null,
+      partnerCost: b?.partnerCost ?? null,
+      joinDate: b?.joinDate ?? "",
+      note: b?.note ?? "",
+    });
+  } catch (error) {
+    return Response.json(
+      { ok: false, error: error instanceof Error ? error.message : "error" },
+      { status: error instanceof AuthError ? error.status : 500 },
+    );
+  }
+}
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ personId: string }> }) {
   try {
     const account = await requireApiAccount();
