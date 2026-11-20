@@ -1014,7 +1014,11 @@ export async function ensurePersonDriveFolder({
   if (personId !== undefined) {
     const prefix = formatPersonIdPrefix(personId) + "_";
     const found = await findFolderByPrefix({ parentFolderUrl, namePrefix: prefix });
-    if (found) return found;
+    if (found) {
+      // Drive で手で作ったフォルダには閲覧可が付いていないので、ここで付ける
+      if (found.folderId) await shareFolderWithLink((await getGoogleClients()).drive, found.folderId);
+      return found;
+    }
   }
 
   const { drive } = await getGoogleClients();
@@ -1032,7 +1036,7 @@ export async function ensurePersonDriveFolder({
  * 親の「01_候補者」は閲覧不可 (2026-11-19 から)。推薦リストで企業に渡すリンクが開けるよう、候補者フォルダごとに付ける。
  * 失敗してもフォルダ作成は止めない。
  */
-async function shareFolderWithLink(
+export async function shareFolderWithLink(
   drive: Awaited<ReturnType<typeof getGoogleClients>>["drive"],
   folderId: string,
 ) {
