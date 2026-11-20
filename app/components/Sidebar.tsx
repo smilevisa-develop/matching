@@ -76,6 +76,7 @@ const SECTIONS: { heading?: string; items: NavItem[] }[] = [
     heading: "パートナー",
     items: [
       { label: "パートナーリスト", href: "/partners", icon: GlobeIcon },
+      { label: "案件ボード（パートナー公開）", href: "/board-manage", icon: BoardIcon },
       { label: "パートナーアンケート", href: "/partners/survey", icon: ClipboardIcon },
       { label: "連絡先紐づけ", href: "/partners/link", icon: LinkIcon },
       { label: "一斉連絡", href: "/broadcast", icon: MegaphoneIcon },

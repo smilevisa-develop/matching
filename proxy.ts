@@ -86,6 +86,11 @@ export function proxy(request: NextRequest) {
     // SNS のプロフィールの相談リンク (押した数を数えて相談先へ飛ばす) と、相談を始めた人の記録 (Apps Script から呼ばれる)
     pathname.startsWith("/go/") ||
     pathname === "/api/sns/inquiry" ||
+    // 案件ボード (パートナー向け。パートナーごとの専用リンクの鍵 = cookie で動く)。
+    // 社員用の管理画面 /board-manage と /api/board-manage はここに含めない (ログインが必要)
+    pathname === "/board" ||
+    pathname.startsWith("/board/") ||
+    pathname.startsWith("/api/board/") ||
     // 企業向けの推薦リスト (token 認証)。編集は暗証番号 (api/list/[token]/edit)
     pathname.startsWith("/list/") ||
     pathname.startsWith("/api/list/")

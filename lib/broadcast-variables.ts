@@ -45,6 +45,12 @@ export const BROADCAST_VARIABLES: BroadcastVariable[] = [
     category: "受信者",
   },
   {
+    key: "案件ボードURL",
+    label: "{{案件ボードURL}}",
+    description: "受信パートナーごとの案件ボードの専用リンク (登録済みのパートナーだけ。未登録なら空)",
+    category: "受信者",
+  },
+  {
     key: "急ぎ案件一覧",
     label: "{{急ぎ案件一覧}}",
     description: "ステージが「至急募集」の案件を箇条書きで挿入",
@@ -81,6 +87,8 @@ export type PartnerForBroadcast = {
   introducibleFields: string | null; // CSV
   /** パートナーごとのアンケートのリンク ({{アンケートURL}})。送るときにサーバーで入れる */
   surveyUrl?: string | null;
+  /** パートナーごとの案件ボードの専用リンク ({{案件ボードURL}})。登録済みのパートナーだけ */
+  boardUrl?: string | null;
 };
 
 /** Deal 1 件を 1 行にフォーマット: 案件ID / 分野 / 勤務地 / 基本給 / 〆締切 */
@@ -140,6 +148,7 @@ export function expandTemplate(
     担当者名: partner.contactName?.trim() || "ご担当者",
     拠点国: partner.country ?? "",
     アンケートURL: partner.surveyUrl ?? "",
+    案件ボードURL: partner.boardUrl ?? "",
     急ぎ案件一覧: formatDealList(filteredUrgent),
     募集中案件一覧: formatDealList(filteredOpen),
   };

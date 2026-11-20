@@ -12,6 +12,27 @@
   --color-accent: #C89F5B;           /* 温かみのアンバー (任意のアクセント) */
 }
 
+/*
+ * 社外の人が見るページ (案件ボード・推薦リスト・候補者フォーム・パートナーアンケート等) は
+ * SMILE MATCHING のサイト (smilematching.jp) の色に合わせる。社内の画面は上の緑のまま。
+ * サイトの色: メイン #30a4be / 濃い色 #247b8f (rgba(36,123,143)) / フッター #136686 / ボタンの黄 #f4e143。
+ * 白い文字を載せるボタン・リンクはメインの #30a4be だと読みにくい (コントラスト 2.9) ので、
+ * サイトの濃い色 #247b8f (4.9) を使う。メインの #30a4be は上の帯など文字を載せない所に使う。
+ * AppFrame が社外向けのページの body にこのクラスを付ける。
+ */
+.brand-external {
+  --color-brand: #30a4be;            /* サイトのメイン色 (帯・飾り) */
+  --color-primary: #247b8f;          /* ボタン・リンク・選択 */
+  --color-primary-hover: #136686;    /* ホバー時 (サイトのフッターの色) */
+  --color-secondary: #b9e1ea;        /* 薄い青緑 (枠線・ピル) */
+  --color-light: #eef8fb;            /* ページの背景 (ごく薄い水色) */
+  --color-text-dark: #333333;        /* 本文 (サイトの本文と同じ) */
+  --background: #eef8fb;
+  --foreground: #333333;
+  --color-accent: #f4e143;           /* サイトのボタンの黄 */
+  border-top: 4px solid var(--color-brand);
+}
+
 /* サイドバーの作りと大きさは SmileReach と同じ。色はこのシステムの元の色 (:root のパレット) を使う */
 @theme {
   --color-side: var(--color-text-dark);

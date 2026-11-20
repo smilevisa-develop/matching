@@ -202,6 +202,22 @@ export default function BroadcastClient({
     );
   };
 
+  // 案件ボードの「条件が合うパートナーにお知らせ」から開いたとき: 連絡グループとお知らせの本文を入れておく
+  // (/broadcast?group={id}&notice={本文})。送るのは社員がここで確かめてから
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const group = q.get("group");
+    const notice = q.get("notice");
+    if (group) {
+      setMode("group");
+      setSelectedGroup(group);
+    }
+    if (notice) {
+      setKind("notice");
+      setNoticeBody(notice);
+    }
+  }, []);
+
   useEffect(() => {
     fetch("/api/whatsapp/templates")
       .then((r) => r.json())

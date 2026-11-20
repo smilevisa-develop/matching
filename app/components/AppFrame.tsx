@@ -24,9 +24,11 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const isInterviewPractice = pathname === "/interview-practice";
   // 企業向けの推薦リスト (公開・token 認証。見るだけ)
   const isShareList = pathname.startsWith("/list/");
+  // 案件ボード (パートナー向け・専用リンク)。社員用の /board-manage は対象外
+  const isBoard = pathname === "/board" || pathname.startsWith("/board/");
 
   useEffect(() => {
-    if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck || isDocumentCheck || isInterviewPractice || isShareList) return;
+    if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck || isDocumentCheck || isInterviewPractice || isShareList || isBoard) return;
 
     const checkSession = async () => {
       try {
@@ -41,11 +43,14 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
     };
 
     void checkSession();
-  }, [isAuth, isPortal, isIntake, isLegal, isChecklist, isJapaneseCheck, isDocumentCheck, isInterviewPractice, isShareList]);
+  }, [isAuth, isPortal, isIntake, isLegal, isChecklist, isJapaneseCheck, isDocumentCheck, isInterviewPractice, isShareList, isBoard]);
 
-  if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck || isDocumentCheck || isInterviewPractice || isShareList) {
+  if (isPortal || isAuth || isIntake || isLegal || isChecklist || isJapaneseCheck || isDocumentCheck || isInterviewPractice || isShareList || isBoard) {
     return (
-      <body className={`min-h-full ${isAuth ? "bg-[var(--color-text-dark)] text-white" : "bg-[var(--color-light)] text-[var(--color-text-dark)]"}`}>
+      // 社外の人が見るページは SMILE MATCHING のサイトの色 (globals.css の .brand-external)。ログイン画面とポータルは社内向けなので緑のまま
+      <body
+        className={`min-h-full ${isAuth ? "bg-[var(--color-text-dark)] text-white" : "bg-[var(--color-light)] text-[var(--color-text-dark)]"} ${isAuth || isPortal ? "" : "brand-external"}`}
+      >
         {children}
       </body>
     );

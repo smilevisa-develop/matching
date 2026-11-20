@@ -306,9 +306,19 @@ model Partner {
   /// 購読トピック (例: 求人情報)
   messengerSubscriptionTopic     String?
 
+  // ── 案件ボード (パートナー向け公開ページ /board) ──
+  /// ボードを見られるか (登録済みパートナー = 許可番号と提携契約を確認済み)
+  boardEnabled  Boolean @default(false)
+  /// ボードに入る専用リンクの鍵 (/board/enter/{token})。作り直すと古いリンクは使えなくなる
+  boardToken    String? @unique
+  /// 職業紹介の許可番号 (海外のパートナーは、取次機関として申告済みであることのメモ)
+  licenseNumber String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  boardRecommendations BoardRecommendation[]
+  boardQuestions       BoardQuestion[]
   deals           Deal[]
   persons         Person[]
   groupMembers    GroupMember[]
@@ -837,9 +847,41 @@ model Deal {
   /// AI 取り込み / ChatGPT 貼り付け / 手動入力のいずれかで埋め、
   /// ここから 求人票 (JobPosting) を生成する
   conditions       Json?
+
+  // ── 案件ボード (パートナー向け公開ページ /board) ──
+  // 会社名・住所は出さない。ボードに出すのは下の項目と、最新の求人票の条件だけ。
+  /// "hidden" (出さない) / "open" (募集中) / "closed" (締切)
+  boardStatus           String    @default("hidden")
+  /// ボードに出す案件名 (会社名を含めない)
+  boardTitle            String?
+  /// 勤務地の地域 (都道府県・市区まで。番地は書かない)
+  boardArea             String?
+  /// この案件のポイント・向いている人
+  boardSummary          String?
+  /// パートナーの取り分 (登録済みパートナーにだけ見せる)
+  boardPartnerFee       String?
+  /// 推薦の前にパートナーが 1 つずつ確認する必須条件 (文字列の配列)
+  boardRequirements     Json?
+  /// 職業安定法 (2024/4〜) で募集時に示す: 業務の変更の範囲
+  boardJobChangeScope   String?
+  /// 同: 就業場所の変更の範囲
+  boardPlaceChangeScope String?
+  /// 同: 有期契約の更新の上限 (無期なら「無期雇用」)
+  boardRenewalLimit     String?
+  /// パートナー 1 社が推薦できる人数
+  boardPerPartnerLimit  Int       @default(2)
+  /// 案件全体で受け付ける推薦の人数 (null = 募集人数の 3 倍)
+  boardTotalLimit       Int?
+  /// 初めて公開した日時
+  boardPublishedAt      DateTime?
+  /// 案件ボードの訳 (英語・ベトナム語・インドネシア語)。{ src: {項目: 日本語}, langs: { en: {項目: 訳}, vi, id } }。lib/board-translate.ts
+  boardTranslations     Json?
+
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
+  boardRecommendations BoardRecommendation[]
+  boardQuestions       BoardQuestion[]
   candidates  DealCandidate[]
   invoices    Invoice[]
   jobPostings JobPosting[]
@@ -1402,4 +1444,57 @@ model FixRequest {
   finishedAt  DateTime?
 
   @@index([status])
+}
+
+/// 案件ボードでパートナーが送った推薦 (社員が確認してから候補者に取り込む)
+model BoardRecommendation {
+  id              Int      @id @default(autoincrement())
+  dealId          Int
+  deal            Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  partnerId       Int
+  partner         Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  candidateName   String
+  nationality     String?
+  age             Int?
+  gender          String?
+  /// "国内" / "国外"
+  residence       String?
+  residenceStatus String?
+  japaneseLevel   String?
+  experience      String?
+  /// 履歴書などのリンク
+  resumeUrl       String?
+  note            String?
+  /// 必須条件ごとの確認 (条件の文字列 → true)
+  checks          Json?
+  /// 受付 / 書類確認中 / 企業に推薦 / 面接 / 内定 / 見送り / 取り下げ
+  status          String   @default("受付")
+  /// パートナーに見せる一言 (見送りの理由など)
+  statusNote      String?
+  /// 候補者に取り込んだあとの Person.id
+  personId        Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([dealId])
+  @@index([partnerId])
+}
+
+/// 案件ボードの質問と回答。回答して公開すると、全パートナーが案件ページで見られる
+model BoardQuestion {
+  id         Int       @id @default(autoincrement())
+  dealId     Int
+  deal       Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  partnerId  Int?
+  partner    Partner?  @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  question   String
+  answer     String?
+  answeredAt DateTime?
+  /// 回答を全パートナーに見せるか (個別の事情の質問は false)
+  isPublic   Boolean   @default(true)
+  /// 質問と回答の訳。{ src: { q, a }, langs: { ja, en, vi, id } }。lib/board-translate.ts
+  translations Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([dealId])
 }

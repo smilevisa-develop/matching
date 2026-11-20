@@ -6,10 +6,11 @@ import { SURVEY_CHOICES, type SurveyAnswers, type SurveyChoiceKey } from "@/lib/
 
 /*
  * 見た目は Google フォームに合わせる (企業に送るので、見慣れた形にする)。
- * 紫 #673ab7 のアクセント、薄紫の背景、白いカードに 1 問ずつ。文字は黒 (#202124) で薄くしない。
- * アプリの緑 (--color-primary) はここでは使わない
+ * 色は SMILE MATCHING (smilematching.jp) に合わせる: 上の帯は #30a4be、ボタンと選択は濃い青緑 #247b8f、背景は薄い水色。
+ * 白いカードに 1 問ずつ。文字は黒 (#202124) で薄くしない
  */
-const ACCENT = "#673ab7";
+const ACCENT = "#247b8f";
+const BAND = "#30a4be";
 const TEXT = "#202124";
 const BORDER = "#dadce0";
 
@@ -293,7 +294,7 @@ export default function PartnerSurveyClient({
 
 function Page({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#f0ebf8" }}>
+    <div className="min-h-screen" style={{ backgroundColor: "#eef8fb" }}>
       <main className="mx-auto w-full max-w-[640px] px-3 py-3 sm:py-4">{children}</main>
     </div>
   );
@@ -306,7 +307,7 @@ function Card({ top = false, error = false, children }: { top?: boolean; error?:
       className="relative overflow-hidden rounded-lg bg-white px-6 pb-6 pt-5"
       style={{ border: `1px solid ${error ? "#d93025" : BORDER}`, paddingTop: top ? 22 + 10 : undefined }}
     >
-      {top ? <div className="absolute inset-x-0 top-0 h-[10px]" style={{ backgroundColor: ACCENT }} /> : null}
+      {top ? <div className="absolute inset-x-0 top-0 h-[10px]" style={{ backgroundColor: BAND }} /> : null}
       {children}
     </section>
   );

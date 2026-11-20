@@ -294,7 +294,7 @@ export default function IntakeClient({
     return (
       <div className="min-h-screen bg-[var(--color-light)] flex items-center justify-center p-6">
         <div className="max-w-md w-full rounded-2xl bg-white p-8 shadow-md text-center space-y-4">
-          <div className="mx-auto h-14 w-14 rounded-full bg-[#DCFCE7] flex items-center justify-center text-[#16A34A]">
+          <div className="mx-auto h-14 w-14 rounded-full bg-[var(--color-light)] flex items-center justify-center text-[var(--color-primary)]">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12" />
             </svg>
@@ -664,8 +664,8 @@ function CustomFileField({
     <div>
       <FieldLabel label={label} />
       {file ? (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-[#BBF7D0] bg-[#F0FDF4] px-3 py-2">
-          <span className="truncate text-sm text-[#166534]">📎 {file.fileName}</span>
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-[var(--color-secondary)] bg-[var(--color-light)] px-3 py-2">
+          <span className="truncate text-sm text-[var(--color-primary)]">📎 {file.fileName}</span>
           <button type="button" onClick={() => onPick(null)} className="shrink-0 text-xs font-medium text-gray-500 underline">
             {texts.change}
           </button>

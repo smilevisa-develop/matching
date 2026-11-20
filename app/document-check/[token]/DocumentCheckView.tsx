@@ -230,7 +230,7 @@ export default function DocumentCheckView({
                 ng
                   ? "border-amber-300 bg-amber-50"
                   : on
-                    ? "border-[#BBF7D0] bg-[#F0FDF4]"
+                    ? "border-[var(--color-secondary)] bg-[var(--color-light)]"
                     : "border-gray-200 bg-white"
               }`}
             >
@@ -269,8 +269,8 @@ export default function DocumentCheckView({
                     onClick={() => toggleChecked(item.key)}
                     className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition ${
                       on
-                        ? "bg-[#16A34A] text-white"
-                        : "border border-[#16A34A] bg-white text-[#16A34A]"
+                        ? "bg-[var(--color-primary)] text-white"
+                        : "border border-[var(--color-primary)] bg-white text-[var(--color-primary)]"
                     }`}
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -299,7 +299,7 @@ export default function DocumentCheckView({
         <div className="rounded-2xl bg-white p-5 text-center shadow-md">
           {allChecked ? (
             <>
-              <p className="text-sm font-semibold text-[#15803D]">{t.done}</p>
+              <p className="text-sm font-semibold text-[var(--color-primary)]">{t.done}</p>
               {t !== JA_TEXT ? (
                 <p className="mt-0.5 text-[11px] text-gray-500">{JA_TEXT.done}</p>
               ) : null}
@@ -329,7 +329,7 @@ export default function DocumentCheckView({
             </>
           ) : null}
           {saving ? <p className="mt-1 text-[11px] text-gray-400">保存中…</p> : null}
-          {savedNote ? <p className="mt-1 text-[11px] text-[#15803D]">{savedNote}</p> : null}
+          {savedNote ? <p className="mt-1 text-[11px] text-[var(--color-primary)]">{savedNote}</p> : null}
         </div>
       </div>
     </div>
