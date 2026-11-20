@@ -14,7 +14,7 @@ const ROLE_OPTIONS = ["送り出し機関", "学校", "求職", "その他"] as 
 const INPUT =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-[var(--color-primary)] focus:outline-none";
 
-export default function PartnerIntakeClient({ token }: { token: string }) {
+export default function PartnerIntakeClient({ token, preview = false }: { token: string; /** 開発者用のプレビュー (送信しない) */ preview?: boolean }) {
   const [form, setForm] = useState({
     name: "",
     contactName: "",
@@ -53,6 +53,10 @@ export default function PartnerIntakeClient({ token }: { token: string }) {
     }
     if (!form.email.trim() && !form.lineContact.trim() && !qr) {
       setError("メールか LINE (ID または QR 画像) のどちらかを入力してください / Email or LINE is required");
+      return;
+    }
+    if (preview) {
+      setDone(true);
       return;
     }
     setSending(true);

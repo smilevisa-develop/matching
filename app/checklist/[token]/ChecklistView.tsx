@@ -20,11 +20,14 @@ export default function ChecklistView({
   companyName,
   items,
   initialChecked,
+  preview = false,
 }: {
   token: string;
   companyName: string;
   items: ChecklistItemView[];
   initialChecked: Record<string, boolean>;
+  /** 開発者用のプレビュー (通信しない) */
+  preview?: boolean;
 }) {
   const [checked, setChecked] = useState<Record<string, boolean>>(initialChecked);
   const [saving, setSaving] = useState(false);
@@ -33,18 +36,23 @@ export default function ChecklistView({
 
   // 開封を記録 (初回のみ)
   useEffect(() => {
-    if (openedRef.current) return;
+    if (openedRef.current || preview) return;
     openedRef.current = true;
     void fetch(`/api/checklist/${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "open" }),
     }).catch(() => {});
-  }, [token]);
+  }, [token, preview]);
 
   const allChecked = items.length > 0 && items.every((i) => checked[i.key]);
 
   const save = async (next: Record<string, boolean>) => {
+    if (preview) {
+      setSavedNote("プレビューのため保存しません");
+      setTimeout(() => setSavedNote(null), 2000);
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`/api/checklist/${token}`, {

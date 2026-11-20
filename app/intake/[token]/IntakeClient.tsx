@@ -87,7 +87,10 @@ export default function IntakeClient({
   basic,
   initialWork,
   initial,
+  preview = false,
 }: {
+  /** 開発者用のプレビュー (送信しない) */
+  preview?: boolean;
   token: string;
   /** 表示言語 (国籍から決める) */
   lang: IntakeLang;
@@ -237,6 +240,10 @@ export default function IntakeClient({
   const submit = async () => {
     if (currentPageInvalid) {
       alert(`${t("required")}${ja("required") ? ` / ${ja("required")}` : ""}`);
+      return;
+    }
+    if (preview) {
+      setSubmitted(true);
       return;
     }
     setSubmitting(true);

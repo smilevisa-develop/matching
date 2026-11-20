@@ -54,7 +54,10 @@ export default function JapaneseCheckClient({
   personName,
   englishName,
   attempt,
+  preview = false,
 }: {
+  /** 開発者用のプレビュー (開始の記録も送信もしない) */
+  preview?: boolean;
   token: string;
   personName: string;
   englishName: string | null;
@@ -143,7 +146,9 @@ export default function JapaneseCheckClient({
       }
 
       // 2. サーバーに開始を記録 (受験は 1 回のみ)
-      const res = await fetch(`/api/japanese-check/${token}/start`, { method: "POST" });
+      const res = preview
+        ? new Response(JSON.stringify({ ok: true }))
+        : await fetch(`/api/japanese-check/${token}/start`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         releaseMic();
@@ -170,6 +175,11 @@ export default function JapaneseCheckClient({
   const submit = async () => {
     setPhase("sending");
     setError(null);
+    if (preview) {
+      releaseMic();
+      setPhase("done");
+      return;
+    }
     try {
       const res = await fetch(`/api/japanese-check/${token}`, {
         method: "POST",
